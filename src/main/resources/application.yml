@@ -1,14 +1,51 @@
 spring:
   application:
-    name: langgraph4j-agent-project
-  
+    name: interview-agent
+
+  # 数据源配置
+  datasource:
+    url: jdbc:postgresql://localhost:5432/interview_agent
+    username: interview
+    password: interview123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+
+  # Spring AI 配置
   ai:
     openai:
-      api-key: ${OPENAI_API_KEY:your-api-key-here}
+      # 通义千问 API（兼容 OpenAI 规范）
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${DASHSCOPE_API_KEY:your-dashscope-api-key}
       chat:
         options:
-          model: gpt-4-turbo-preview
+          model: qwen-plus
           temperature: 0.7
+      # 通义千问视觉模型配置
+      image:
+        options:
+          model: qwen-vl-max
+      # 通义千问音频模型配置
+      audio:
+        options:
+          model: qwen-audio-turbo
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.zunff.agent.model.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 
 server:
   port: 8080
@@ -27,8 +64,29 @@ logging:
     root: INFO
     org.bsc.langgraph4j: DEBUG
     org.springframework.ai: DEBUG
+    com.zunff.agent: DEBUG
 
+# LangGraph4j Studio 配置
 langgraph4j:
   studio:
     enabled: true
     path: /studio
+
+# 面试系统配置
+interview:
+  video:
+    analysis-interval: 5000      # 视频分析间隔(ms)
+    frame-rate: 1                # 每秒采样帧数
+    max-frames-per-analysis: 10  # 每次分析最大帧数
+  audio:
+    sample-rate: 16000           # 音频采样率
+    chunk-duration: 1000         # 音频块时长(ms)
+  session:
+    max-questions: 10            # 最大问题数
+    max-follow-ups: 2            # 每题最大追问数
+    answer-timeout: 120000       # 回答超时(ms)
+  # 多模态分析配置
+  multimodal:
+    enabled: true                # 是否启用多模态分析
+    vl-model: qwen-vl-max        # 视觉语言模型
+    audio-model: paraformer-v2   # 语音识别模型

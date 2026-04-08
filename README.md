@@ -1,250 +1,208 @@
-# Spring AI + LangGraph4j Agent 项目
+# AI 面试官系统
 
-基于 Java 21 的多智能体应用项目,集成了 Spring AI 和 LangGraph4j 框架。
+基于 Spring AI + LangGraph4j 构建的多模态 AI 面试系统，支持实时视频分析、语音评估和智能追问。
 
 ## 技术栈
 
 - **Java 21** - 支持 Virtual Threads 和最新特性
 - **Spring Boot 3.4.4** - 基础框架
 - **Spring AI 1.1.4** - Spring 官方 AI 集成框架
-- **LangGraph4j 1.8.11** - 构建有状态多智能体应用的 Java 库
+- **LangGraph4j 1.8.11** - 构建有状态多智能体应用
+- **MyBatis-Plus 3.5.9** - ORM 框架
+- **PostgreSQL + pgvector** - 数据库与向量存储
+- **Hutool** - Java 工具库
+- **通义千问** - 大语言模型 (兼容 OpenAI API)
 
-## 核心概念
+## 核心功能
 
-### LangGraph4j 特性
+### 1. 智能面试流程
+- 根据简历和岗位自动生成针对性问题
+- 支持技术基础、项目经验、业务理解、软技能等多维度考察
+- 智能追问机制，深入挖掘候选人能力
 
-LangGraph4j 是受 Python LangGraph 启发的 Java 库,用于构建**有状态的、多智能体应用**:
+### 2. 多模态评估
+- **视频分析**: 表情识别、肢体语言评估
+- **语音分析**: 语调情感、表达流畅度
+- **文本评估**: 内容准确性、逻辑清晰度、自信程度
 
-#### 1. StateGraph (状态图)
-- 定义应用的结构:节点(Nodes)和边(Edges)
-- 支持循环图结构,适合 Agent 架构
-- 编译后生成可执行的 CompiledGraph
-
-#### 2. AgentState (智能体状态)
-- 图的共享状态,在节点间传递
-- 使用 Map<String, Object> 存储
-- 支持 Schema 定义和 Reducer 合并策略
-
-#### 3. Nodes (节点)
-- 执行具体动作的构建块
-- 接收状态,处理逻辑,返回状态更新
-- 支持同步和异步(CompletableFuture)
-
-#### 4. Edges (边)
-- 定义节点间的控制流
-- **普通边**: 无条件转移
-- **条件边**: 根据状态动态选择下一个节点
-- 支持分支和循环
-
-#### 5. Checkpoints (检查点)
-- 保存和恢复图的状态
-- 支持调试、回放和"时间旅行"
-- 适合长时间运行的 Agent 交互
-
-#### 6. Studio (可视化工具)
-- Web UI 可视化、运行和调试图
-- 支持 Spring Boot、Quarkus、Jetty 集成
-- 实时观察图执行过程
-
-### Spring AI + LangGraph4j 集成优势
-
-- **Spring AI**: 提供统一的 LLM 接口、向量数据库、RAG 等功能
-- **LangGraph4j**: 提供状态管理、工作流编排、多 Agent 协作能力
-- **互补关系**: Spring AI 作为底层 AI 能力提供者,LangGraph4j 作为上层编排框架
+### 3. 实时交互
+- WebSocket 实时推送问题
+- 实时情感和肢体语言反馈
+- 面试结束生成综合报告
 
 ## 项目结构
 
 ```
-src/main/java/com/example/agent/
-├── AgentApplication.java          # 主应用类
-├── config/                        # 配置类
-│   └── AgentConfiguration.java   # Agent 和图配置
-├── state/                         # 状态定义
-│   └── AgentState.java           # 自定义状态类
-├── graph/                         # 图定义
-│   └── SimpleGraph.java          # 示例图
-├── tools/                         # Agent 工具
-│   └── CustomTools.java          # 自定义工具
-└── controller/                    # REST 控制器
-    └── AgentController.java      # API 接口
+src/main/java/com/zunff/agent/
+├── AgentApplication.java              # 主应用类
+├── config/                            # 配置类
+│   ├── AgentConfiguration.java       # Agent 配置
+│   ├── InterviewAgentConfiguration.java  # 面试 Agent 图配置
+│   ├── MybatisPlusConfig.java        # MyBatis-Plus 配置
+│   ├── ServiceConfig.java            # 服务配置
+│   └── WebSocketConfig.java          # WebSocket 配置
+├── controller/                        # REST 控制器
+│   └── InterviewController.java      # 面试 API
+├── websocket/                         # WebSocket 处理
+│   └── InterviewWebSocketHandler.java
+├── service/                           # 业务服务
+│   ├── InterviewBusinessService.java # 面试业务服务
+│   ├── InterviewSessionService.java  # 会话服务接口
+│   ├── impl/                         # 服务实现
+│   ├── MultimodalAnalysisService.java # 多模态分析
+│   └── VideoStreamService.java       # 视频流服务
+├── mapper/                            # MyBatis Mapper
+│   ├── InterviewSessionMapper.java
+│   ├── AnswerRecordMapper.java
+│   └── EvaluationRecordMapper.java
+├── model/                             # 数据模型
+│   ├── entity/                       # 数据库实体
+│   ├── dto/                          # 数据传输对象
+│   │   ├── request/                  # 请求对象
+│   │   ├── response/                 # 响应对象
+│   │   └── websocket/                # WebSocket 消息
+│   └── bo/                           # 业务对象
+├── agent/                             # Agent 节点
+│   └── nodes/
+│       ├── QuestionGeneratorNode.java    # 问题生成
+│       ├── AnswerEvaluatorNode.java      # 答案评估
+│       ├── FollowUpDecisionNode.java     # 追问决策
+│       └── ReportGeneratorNode.java      # 报告生成
+├── state/                             # 状态定义
+│   └── InterviewState.java           # 面试状态
+└── common/                            # 公共组件
+    ├── exception/                    # 异常处理
+    └── response/                     # 统一响应
 ```
-
-## 最佳实践
-
-### 1. 状态设计
-- 使用清晰的状态 Schema
-- 选择合适的 Reducer (覆盖 vs 追加)
-- 保持状态轻量,避免存储大量数据
-
-```java
-public class MyState extends AgentState {
-    public static final Map<String, Channel<?>> SCHEMA = Map.of(
-        "messages", Channels.appender(ArrayList::new),
-        "result", Channels.base()
-    );
-}
-```
-
-### 2. 节点设计
-- 单一职责:每个节点专注于一个任务
-- 幂等性:相同输入产生相同输出
-- 错误处理:返回有意义的状态更新
-
-```java
-public class MyNode implements NodeAction<MyState> {
-    @Override
-    public Map<String, Object> apply(MyState state) {
-        // 处理逻辑
-        return Map.of("result", processedData);
-    }
-}
-```
-
-### 3. 图构建
-- 从简单开始,逐步添加复杂性
-- 使用条件边实现分支逻辑
-- 利用 Checkpoints 调试复杂流程
-
-```java
-var graph = new StateGraph<>(MyState.SCHEMA, MyState::new)
-    .addNode("node1", node1Action)
-    .addNode("node2", node2Action)
-    .addEdge(START, "node1")
-    .addConditionalEdges("node1", routingFunction)
-    .addEdge("node2", END)
-    .compile();
-```
-
-### 4. 异步和流式处理
-- 使用异步节点处理 I/O 密集型操作
-- 利用流式输出实时响应 LLM 结果
-
-```java
-var graph = compileGraph();
-for (var state : graph.stream(initialState)) {
-    // 处理每个步骤的状态更新
-}
-```
-
-### 5. 工具集成
-- 使用 Spring AI 的 @Tool 注解定义工具
-- 通过 AgentExecutor 自动调用工具
-
-```java
-public class MyTools {
-    @Tool(description = "工具描述")
-    public String myTool(@ToolParam(description = "参数") String param) {
-        return "result";
-    }
-}
-```
-
-### 6. 可视化调试
-- 启用 LangGraph4j Studio
-- 生成 PlantUML 或 Mermaid 图表
-- 使用 Checkpoints 检查中间状态
 
 ## 快速开始
 
 ### 前置要求
 - JDK 21+
 - Maven 3.9+
-- OpenAI API Key (或其他支持的模型)
+- Docker (用于 PostgreSQL)
+- 通义千问 API Key
 
-### 运行项目
+### 1. 配置环境变量
 
-1. 设置环境变量:
+复制 `.env.example` 为 `.env` 并填写配置:
+
 ```bash
-export OPENAI_API_KEY=your-api-key-here
+# 通义千问 API Key
+DASHSCOPE_API_KEY=your-dashscope-api-key
+
+# 数据库配置
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=interview_agent
+DB_USERNAME=interview
+DB_PASSWORD=interview123
 ```
 
-2. 启动应用:
+### 2. 启动数据库
+
+```bash
+docker-compose up -d
+```
+
+### 3. 运行项目
+
 ```bash
 ./mvnw spring-boot:run
 ```
 
-3. 访问端点:
+### 4. 访问端点
+
 - 健康检查: `http://localhost:8080/actuator/health`
-- Studio UI: `http://localhost:8080/studio` (可视化调试)
+- LangGraph Studio: `http://localhost:8080/studio`
 
-## 扩展指南
+## API 接口
 
-### 创建简单的状态图
+### REST API
 
-```java
-// 1. 定义状态
-class SimpleState extends AgentState {
-    public static final Map<String, Channel<?>> SCHEMA = Map.of(
-        "messages", Channels.appender(ArrayList::new)
-    );
-}
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/interview/start` | POST | 开始面试 |
+| `/api/interview/answer` | POST | 提交答案 |
+| `/api/interview/session/{sessionId}` | GET | 获取会话状态 |
+| `/api/interview/end/{sessionId}` | POST | 结束面试 |
+| `/api/interview/report/{sessionId}` | GET | 获取面试报告 |
 
-// 2. 定义节点
-class GreeterNode implements NodeAction<SimpleState> {
-    public Map<String, Object> apply(SimpleState state) {
-        return Map.of("messages", "Hello!");
-    }
-}
+### WebSocket
 
-// 3. 构建图
-var graph = new StateGraph<>(SimpleState.SCHEMA, SimpleState::new)
-    .addNode("greeter", new GreeterNode())
-    .addEdge(START, "greeter")
-    .addEdge("greeter", END)
-    .compile();
+连接地址: `ws://localhost:8080/ws/interview/{sessionId}`
 
-// 4. 运行图
-var result = graph.invoke(Map.of());
-```
-
-### 构建 Agent Executor
-
-```java
-// 使用 LangGraph4j 的 AgentExecutor
-var agent = AgentExecutor.builder()
-    .chatModel(chatModel)
-    .toolsFromObject(new MyTools())
-    .build()
-    .compile();
-
-// 执行 Agent
-for (var item : agent.stream(Map.of("messages", "查询用户信息"))) {
-    System.out.println(item);
-}
-```
-
-### 条件路由示例
-
-```java
-var graph = new StateGraph<>(MyState.SCHEMA, MyState::new)
-    .addNode("router", routerNode)
-    .addNode("agent_a", agentA)
-    .addNode("agent_b", agentB)
-    .addConditionalEdges("router", state -> {
-        String route = state.value("route", String.class).orElse("agent_a");
-        return route;
-    }, Map.of("agent_a", "agent_a", "agent_b", "agent_b"))
-    .addEdge("agent_a", END)
-    .addEdge("agent_b", END)
-    .compile();
-```
+消息类型:
+- `NEW_QUESTION` - 新问题推送
+- `EMOTION_UPDATE` - 情感更新
+- `EVALUATION_RESULT` - 评估结果
+- `FINAL_REPORT` - 最终报告
+- `ANSWER_RECEIVED` - 回答确认
 
 ## 配置说明
 
-### application.yml 主要配置项
+### application.yml 主要配置
 
-- `spring.ai.openai.api-key`: OpenAI API 密钥
-- `spring.ai.openai.chat.options.model`: 使用的模型
-- `langgraph4j.studio.enabled`: 启用 Studio 可视化
-- `langgraph4j.studio.path`: Studio 访问路径
+```yaml
+# 通义千问 API (兼容 OpenAI)
+spring:
+  ai:
+    openai:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: qwen-plus
+          temperature: 0.7
+
+# 面试系统配置
+interview:
+  session:
+    max-questions: 10      # 最大问题数
+    max-follow-ups: 2      # 每题最大追问数
+    answer-timeout: 120000 # 回答超时(ms)
+```
+
+## 面试流程
+
+```mermaid
+graph TD
+    A[开始面试] --> B[生成问题]
+    B --> C[等待回答]
+    C --> D[评估答案]
+    D --> E{需要追问?}
+    E -->|是| F[生成追问]
+    F --> C
+    E -->|否| G{问题数达标?}
+    G -->|否| B
+    G -->|是| H[生成报告]
+    H --> I[结束面试]
+```
+
+## 扩展指南
+
+### 添加新的问题类型
+
+1. 在 `QuestionGeneratorNode` 中扩展 `SYSTEM_PROMPT`
+2. 添加新的问题类型到提示词
+
+### 自定义评估维度
+
+1. 修改 `EvaluationBO` 添加新字段
+2. 更新 `MultimodalAnalysisService.comprehensiveEvaluate()` 的提示词
+3. 更新数据库表 `evaluation_record`
+
+### 集成真实多模态分析
+
+1. 参考 [通义千问 VL API](https://help.aliyun.com/document_detail/2712195.html) 实现视频分析
+2. 参考 [通义千问 Audio API](https://help.aliyun.com/document_detail/2712571.html) 实现音频分析
 
 ## 参考资料
 
 - [LangGraph4j 官方文档](https://langgraph4j.github.io/langgraph4j/)
-- [LangGraph4j GitHub](https://github.com/langgraph4j/langgraph4j)
 - [Spring AI 官方文档](https://docs.spring.io/spring-ai/reference/)
-- [LangGraph 原始 Python 版本](https://github.com/langchain-ai/langgraph)
-- [LangGraph4j Examples](https://github.com/langgraph4j/langgraph4j-examples)
+- [通义千问 API 文档](https://help.aliyun.com/zh/dashscope/)
+- [MyBatis-Plus 官方文档](https://baomidou.com/)
 
 ## License
 
