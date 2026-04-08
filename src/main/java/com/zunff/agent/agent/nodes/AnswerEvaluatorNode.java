@@ -1,6 +1,8 @@
 package com.zunff.agent.agent.nodes;
 
 import com.zunff.agent.model.bo.EvaluationBO;
+import com.zunff.agent.model.dto.analysis.AudioAnalysisResult;
+import com.zunff.agent.model.dto.analysis.VideoAnalysisResult;
 import com.zunff.agent.service.MultimodalAnalysisService;
 import com.zunff.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -41,15 +43,15 @@ public class AnswerEvaluatorNode {
 
         // 1. 分析视频帧
         log.debug("开始视频帧分析，帧数: {}", answerFrames.size());
-        MultimodalAnalysisService.VideoAnalysisResult videoResult =
+        VideoAnalysisResult videoResult =
                 multimodalAnalysisService.analyzeVideoFrames(answerFrames);
 
         // 2. 分析音频
         log.debug("开始音频分析");
-        MultimodalAnalysisService.AudioAnalysisResult audioResult =
+        AudioAnalysisResult audioResult =
                 answerAudio != null && !answerAudio.isEmpty()
                         ? multimodalAnalysisService.analyzeAudio(answerAudio)
-                        : MultimodalAnalysisService.AudioAnalysisResult.empty();
+                        : AudioAnalysisResult.empty();
 
         // 3. 综合评估
         log.debug("开始综合评估");

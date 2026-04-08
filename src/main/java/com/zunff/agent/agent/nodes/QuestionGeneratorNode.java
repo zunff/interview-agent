@@ -3,6 +3,7 @@ package com.zunff.agent.agent.nodes;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.zunff.agent.service.PromptTemplateService;
 import com.zunff.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,33 +26,7 @@ import java.util.concurrent.CompletableFuture;
 public class QuestionGeneratorNode {
 
     private final ChatClient.Builder chatClientBuilder;
-
-    private static final String SYSTEM_PROMPT = """
-            你是一位资深的面试官，正在进行一场技术面试。
-
-            你的任务是根据候选人的简历和应聘岗位，生成有针对性的面试问题。
-
-            问题类型包括：
-            1. 技术基础：考察候选人对技术栈的掌握程度
-            2. 项目经验：深入挖掘候选人的项目经历
-            3. 业务理解：考察候选人对业务的理解能力
-            4. 软技能：考察沟通、团队协作等能力
-
-            生成问题的要求：
-            1. 问题要有针对性，结合简历中的具体项目或经历
-            2. 问题要有深度，能够考察候选人的真实水平
-            3. 避免与已提问的问题重复
-            4. 问题要清晰明确，便于候选人理解
-
-            请以 JSON 格式返回问题：
-            {
-                "question": "问题内容",
-                "questionType": "技术基础|项目经验|业务理解|软技能",
-                "expectedKeywords": ["关键词1", "关键词2"],
-                "difficulty": "简单|中等|困难",
-                "reason": "为什么问这个问题"
-            }
-            """;
+    private final PromptTemplateService promptTemplateService;
 
     /**
      * 执行问题生成
@@ -64,6 +39,9 @@ public class QuestionGeneratorNode {
         String interviewType = state.interviewType();
         List<String> previousQuestions = state.questions();
         int questionIndex = state.questionIndex();
+
+        // 从模板加载 system prompt
+        String systemPrompt = promptTemplateService.getPrompt("question-generator");
 
         // 构建用户提示
         StringBuilder userPrompt = new StringBuilder();
@@ -86,7 +64,7 @@ public class QuestionGeneratorNode {
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
+                    .system(systemPrompt)
                     .user(userPrompt.toString())
                     .call()
                     .content();

@@ -1,5 +1,6 @@
 package com.zunff.agent.agent.nodes;
 
+import com.zunff.agent.service.PromptTemplateService;
 import com.zunff.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,37 +22,7 @@ import java.util.concurrent.CompletableFuture;
 public class ReportGeneratorNode {
 
     private final ChatClient.Builder chatClientBuilder;
-
-    private static final String SYSTEM_PROMPT = """
-            你是一位资深的面试评估专家，需要根据面试记录生成综合评估报告。
-
-            报告需要包含以下内容：
-
-            ## 一、总体评价
-            - 面试表现概述
-            - 综合得分（0-100分）
-
-            ## 二、各维度评估
-            - 技术能力评估
-            - 项目经验评估
-            - 沟通表达能力
-            - 专业素养
-
-            ## 三、优势与亮点
-            列出候选人的主要优势
-
-            ## 四、待提升方面
-            列出需要改进的地方
-
-            ## 五、面试建议
-            给候选人的改进建议
-
-            ## 六、录用建议
-            - 推荐等级：强烈推荐/推荐/一般/不推荐
-            - 适用岗位建议
-
-            请以 Markdown 格式输出报告内容。
-            """;
+    private final PromptTemplateService promptTemplateService;
 
     /**
      * 执行报告生成
@@ -84,6 +55,9 @@ public class ReportGeneratorNode {
 
         double avgScore = totalQuestions > 0 ? (double) totalScore / totalQuestions : 0;
 
+        // 从模板加载 system prompt
+        String systemPrompt = promptTemplateService.getPrompt("report-generator");
+
         // 构建用户提示
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("## 候选人简历\n").append(resume).append("\n\n");
@@ -98,7 +72,7 @@ public class ReportGeneratorNode {
             ChatClient chatClient = chatClientBuilder.build();
 
             String report = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
+                    .system(systemPrompt)
                     .user(userPrompt.toString())
                     .call()
                     .content();

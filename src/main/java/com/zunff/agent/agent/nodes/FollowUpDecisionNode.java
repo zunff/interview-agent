@@ -2,6 +2,7 @@ package com.zunff.agent.agent.nodes;
 
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.zunff.agent.service.PromptTemplateService;
 import com.zunff.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,33 +23,7 @@ import java.util.concurrent.CompletableFuture;
 public class FollowUpDecisionNode {
 
     private final ChatClient.Builder chatClientBuilder;
-
-    private static final String SYSTEM_PROMPT = """
-            你是一位资深的面试官，需要根据候选人的回答质量决定是否进行追问。
-
-            追问的目的是：
-            1. 深入了解候选人的真实水平
-            2. 验证回答的准确性
-            3. 考察候选人的思维深度
-
-            何时需要追问：
-            - 回答不够具体，需要更多细节
-            - 回答模糊或有疑点，需要澄清
-            - 回答优秀，想深入挖掘更多能力
-            - 回答与简历描述不符，需要验证
-
-            何时不需追问：
-            - 回答已经很完整和清晰
-            - 候选人明显不熟悉该领域（继续追问无意义）
-            - 已经追问两次以上
-
-            请以 JSON 格式返回决策：
-            {
-                "needFollowUp": true,
-                "followUpQuestion": "追问的问题内容",
-                "reason": "为什么需要/不需要追问"
-            }
-            """;
+    private final PromptTemplateService promptTemplateService;
 
     /**
      * 执行追问决策
@@ -70,6 +45,9 @@ public class FollowUpDecisionNode {
             updates.put(InterviewState.NEED_FOLLOW_UP, false);
             return CompletableFuture.completedFuture(updates);
         }
+
+        // 从模板加载 system prompt
+        String systemPrompt = promptTemplateService.getPrompt("followup-decision");
 
         // 构建提示
         StringBuilder userPrompt = new StringBuilder();
@@ -96,7 +74,7 @@ public class FollowUpDecisionNode {
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
+                    .system(systemPrompt)
                     .user(userPrompt.toString())
                     .call()
                     .content();

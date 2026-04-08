@@ -1,8 +1,8 @@
 package com.zunff.agent.service;
 
+import com.zunff.agent.model.dto.analysis.VideoAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,10 +65,10 @@ public class VideoStreamService {
      * @param sessionId 会话ID
      * @return 分析结果
      */
-    public MultimodalAnalysisService.VideoAnalysisResult analyzeFrames(String sessionId) {
+    public VideoAnalysisResult analyzeFrames(String sessionId) {
         List<String> frames = getFramesForAnalysis(sessionId);
         if (frames.isEmpty()) {
-            return MultimodalAnalysisService.VideoAnalysisResult.empty();
+            return VideoAnalysisResult.empty();
         }
         return multimodalAnalysisService.analyzeVideoFrames(frames);
     }
