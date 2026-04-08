@@ -1,4 +1,4 @@
-package com.example.agent.controller;
+package com.zunff.agent.controller;
 
 import org.bsc.langgraph4j.CompiledGraph;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,4 +1,4 @@
-package com.example.agent;
+package com.zunff.agent;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
