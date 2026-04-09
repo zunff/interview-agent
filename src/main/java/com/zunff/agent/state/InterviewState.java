@@ -1,5 +1,7 @@
 package com.zunff.agent.state;
 
+import com.zunff.agent.constant.InterviewRound;
+import com.zunff.agent.constant.QuestionType;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
@@ -51,9 +53,30 @@ public class InterviewState extends AgentState {
     public static final String FINAL_REPORT = "finalReport";
     public static final String IS_FINISHED = "isFinished";
 
+    // ========== 轮次管理 ==========
+    public static final String CURRENT_ROUND = "currentRound";           // TECHNICAL / BUSINESS
+    public static final String TECHNICAL_QUESTIONS_DONE = "technicalQuestionsDone";
+    public static final String BUSINESS_QUESTIONS_DONE = "businessQuestionsDone";
+    public static final String TECHNICAL_ROUND_SCORES = "technicalRoundScores";  // List<Integer>
+    public static final String BUSINESS_ROUND_SCORES = "businessRoundScores";    // List<Integer>
+
+    // ========== 提前结束检测 ==========
+    public static final String CONSECUTIVE_HIGH_SCORES = "consecutiveHighScores";
+
+    // ========== 多模态建议 ==========
+    public static final String MODALITY_FOLLOW_UP_SUGGESTION = "modalityFollowUpSuggestion";
+    public static final String MODALITY_CONCERN = "modalityConcern";
+
     // ========== 配置参数 ==========
     public static final String MAX_QUESTIONS = "maxQuestions";
     public static final String MAX_FOLLOW_UPS = "maxFollowUps";
+    public static final String MAX_TECHNICAL_QUESTIONS = "maxTechnicalQuestions";  // 默认6
+    public static final String MAX_BUSINESS_QUESTIONS = "maxBusinessQuestions";    // 默认4
+    public static final String ROUND_PASS_SCORE = "roundPassScore";                // 默认75
+    public static final String HIGH_SCORE_THRESHOLD = "highScoreThreshold";        // 默认85
+    public static final String CONSECUTIVE_HIGH_FOR_EARLY_END = "consecutiveHighForEarlyEnd"; // 默认3
+    public static final String MAX_FOLLOW_UPS_TECHNICAL = "maxFollowUpsTechnical"; // 默认3
+    public static final String MAX_FOLLOW_UPS_BUSINESS = "maxFollowUpsBusiness";   // 默认2
 
     /**
      * LastValue Reducer: 新值覆盖旧值
@@ -78,11 +101,13 @@ public class InterviewState extends AgentState {
         SCHEMA.put(BODY_LANGUAGE_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(VOICE_TONE_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(ANSWER_FRAMES, Channels.appender(ArrayList::new));
+        SCHEMA.put(TECHNICAL_ROUND_SCORES, Channels.appender(ArrayList::new));
+        SCHEMA.put(BUSINESS_ROUND_SCORES, Channels.appender(ArrayList::new));
 
         // 最后值类型：使用 base + LastValueReducer
         SCHEMA.put(QUESTION_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(CURRENT_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
-        SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> "技术基础"));
+        SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC.getDisplayName()));
         SCHEMA.put(ANSWER_TEXT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(ANSWER_AUDIO, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(CURRENT_EVALUATION, Channels.base(new LastValueReducer<>(), () -> null));
@@ -93,6 +118,21 @@ public class InterviewState extends AgentState {
         SCHEMA.put(IS_FINISHED, Channels.base(new LastValueReducer<>(), () -> false));
         SCHEMA.put(MAX_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 10));
         SCHEMA.put(MAX_FOLLOW_UPS, Channels.base(new LastValueReducer<>(), () -> 2));
+        SCHEMA.put(MAX_TECHNICAL_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 6));
+        SCHEMA.put(MAX_BUSINESS_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 4));
+        SCHEMA.put(ROUND_PASS_SCORE, Channels.base(new LastValueReducer<>(), () -> 75));
+        SCHEMA.put(HIGH_SCORE_THRESHOLD, Channels.base(new LastValueReducer<>(), () -> 85));
+        SCHEMA.put(CONSECUTIVE_HIGH_FOR_EARLY_END, Channels.base(new LastValueReducer<>(), () -> 3));
+        SCHEMA.put(MAX_FOLLOW_UPS_TECHNICAL, Channels.base(new LastValueReducer<>(), () -> 3));
+        SCHEMA.put(MAX_FOLLOW_UPS_BUSINESS, Channels.base(new LastValueReducer<>(), () -> 2));
+
+        // 轮次管理
+        SCHEMA.put(CURRENT_ROUND, Channels.base(new LastValueReducer<>(), () -> InterviewRound.TECHNICAL.getCode()));
+        SCHEMA.put(TECHNICAL_QUESTIONS_DONE, Channels.base(new LastValueReducer<>(), () -> 0));
+        SCHEMA.put(BUSINESS_QUESTIONS_DONE, Channels.base(new LastValueReducer<>(), () -> 0));
+        SCHEMA.put(CONSECUTIVE_HIGH_SCORES, Channels.base(new LastValueReducer<>(), () -> 0));
+        SCHEMA.put(MODALITY_FOLLOW_UP_SUGGESTION, Channels.base(new LastValueReducer<>(), () -> ""));
+        SCHEMA.put(MODALITY_CONCERN, Channels.base(new LastValueReducer<>(), () -> false));
 
         // 上下文信息也使用 base
         SCHEMA.put(RESUME, Channels.base(new LastValueReducer<>(), () -> ""));
@@ -133,7 +173,7 @@ public class InterviewState extends AgentState {
     }
 
     public String questionType() {
-        return (String) data().getOrDefault(QUESTION_TYPE, "技术基础");
+        return (String) data().getOrDefault(QUESTION_TYPE, QuestionType.TECHNICAL_BASIC.getDisplayName());
     }
 
     public String answerText() {
@@ -177,5 +217,182 @@ public class InterviewState extends AgentState {
 
     public String getFinalReport() {
         return (String) data().getOrDefault(FINAL_REPORT, "");
+    }
+
+    // ========== 轮次管理便捷方法 ==========
+
+    /**
+     * 获取当前轮次
+     */
+    public String currentRound() {
+        return (String) data().getOrDefault(CURRENT_ROUND, InterviewRound.TECHNICAL.getCode());
+    }
+
+    /**
+     * 获取当前轮次枚举
+     */
+    public InterviewRound currentRoundEnum() {
+        return InterviewRound.fromCode(currentRound());
+    }
+
+    /**
+     * 是否为技术轮
+     */
+    public boolean isTechnicalRound() {
+        return currentRoundEnum().isTechnical();
+    }
+
+    /**
+     * 是否为业务轮
+     */
+    public boolean isBusinessRound() {
+        return currentRoundEnum().isBusiness();
+    }
+
+    /**
+     * 获取技术轮已问问题数
+     */
+    public int technicalQuestionsDone() {
+        Object value = data().get(TECHNICAL_QUESTIONS_DONE);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    /**
+     * 获取业务轮已问问题数
+     */
+    public int businessQuestionsDone() {
+        Object value = data().get(BUSINESS_QUESTIONS_DONE);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    /**
+     * 获取技术轮最大问题数
+     */
+    public int maxTechnicalQuestions() {
+        Object value = data().get(MAX_TECHNICAL_QUESTIONS);
+        return value instanceof Number ? ((Number) value).intValue() : 6;
+    }
+
+    /**
+     * 获取业务轮最大问题数
+     */
+    public int maxBusinessQuestions() {
+        Object value = data().get(MAX_BUSINESS_QUESTIONS);
+        return value instanceof Number ? ((Number) value).intValue() : 4;
+    }
+
+    /**
+     * 获取轮次通过分数
+     */
+    public int roundPassScore() {
+        Object value = data().get(ROUND_PASS_SCORE);
+        return value instanceof Number ? ((Number) value).intValue() : 75;
+    }
+
+    /**
+     * 获取高分阈值
+     */
+    public int highScoreThreshold() {
+        Object value = data().get(HIGH_SCORE_THRESHOLD);
+        return value instanceof Number ? ((Number) value).intValue() : 85;
+    }
+
+    /**
+     * 获取连续高分次数要求
+     */
+    public int consecutiveHighForEarlyEnd() {
+        Object value = data().get(CONSECUTIVE_HIGH_FOR_EARLY_END);
+        return value instanceof Number ? ((Number) value).intValue() : 3;
+    }
+
+    /**
+     * 获取当前连续高分次数
+     */
+    public int consecutiveHighScores() {
+        Object value = data().get(CONSECUTIVE_HIGH_SCORES);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    /**
+     * 获取当前轮次的追问上限
+     */
+    public int maxFollowUpsForCurrentRound() {
+        if (isTechnicalRound()) {
+            Object value = data().get(MAX_FOLLOW_UPS_TECHNICAL);
+            return value instanceof Number ? ((Number) value).intValue() : 3;
+        } else {
+            Object value = data().get(MAX_FOLLOW_UPS_BUSINESS);
+            return value instanceof Number ? ((Number) value).intValue() : 2;
+        }
+    }
+
+    /**
+     * 获取技术轮分数列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<Integer> technicalRoundScores() {
+        return (List<Integer>) data().getOrDefault(TECHNICAL_ROUND_SCORES, new ArrayList<>());
+    }
+
+    /**
+     * 获取业务轮分数列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<Integer> businessRoundScores() {
+        return (List<Integer>) data().getOrDefault(BUSINESS_ROUND_SCORES, new ArrayList<>());
+    }
+
+    /**
+     * 计算技术轮平均分
+     */
+    public double technicalAverageScore() {
+        List<Integer> scores = technicalRoundScores();
+        if (scores.isEmpty()) return 0;
+        return scores.stream().mapToInt(Integer::intValue).average().orElse(0);
+    }
+
+    /**
+     * 计算业务轮平均分
+     */
+    public double businessAverageScore() {
+        List<Integer> scores = businessRoundScores();
+        if (scores.isEmpty()) return 0;
+        return scores.stream().mapToInt(Integer::intValue).average().orElse(0);
+    }
+
+    /**
+     * 是否可以提前结束面试（连续高分）
+     */
+    public boolean canEndInterviewEarly() {
+        return consecutiveHighScores() >= consecutiveHighForEarlyEnd();
+    }
+
+    /**
+     * 技术轮是否完成
+     */
+    public boolean isTechnicalRoundComplete() {
+        return technicalQuestionsDone() >= maxTechnicalQuestions();
+    }
+
+    /**
+     * 业务轮是否完成
+     */
+    public boolean isBusinessRoundComplete() {
+        return businessQuestionsDone() >= maxBusinessQuestions();
+    }
+
+    /**
+     * 获取多模态追问建议
+     */
+    public String modalityFollowUpSuggestion() {
+        return (String) data().getOrDefault(MODALITY_FOLLOW_UP_SUGGESTION, "");
+    }
+
+    /**
+     * 是否存在多模态异常
+     */
+    public boolean modalityConcern() {
+        Object value = data().get(MODALITY_CONCERN);
+        return Boolean.TRUE.equals(value);
     }
 }

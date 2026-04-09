@@ -1,5 +1,6 @@
 package com.zunff.agent.service;
 
+import com.zunff.agent.constant.QuestionType;
 import com.zunff.agent.model.dto.request.StartInterviewRequest;
 import com.zunff.agent.model.dto.request.SubmitAnswerRequest;
 import com.zunff.agent.model.dto.response.InterviewAnswerResponse;
@@ -65,7 +66,7 @@ public class InterviewBusinessService {
             Optional<InterviewState> result = interviewAgent.invoke(initialState, config);
 
             String currentQuestion = result.map(InterviewState::currentQuestion).orElse("");
-            String questionType = result.map(InterviewState::questionType).orElse("技术基础");
+            String questionType = result.map(InterviewState::questionType).orElse(QuestionType.TECHNICAL_BASIC.getDisplayName());
             int questionIndex = result.map(InterviewState::questionIndex).orElse(1);
 
             sessionService.updateStatus(session.getSessionId(), InterviewSessionEntity.Status.IN_PROGRESS.name());
@@ -134,7 +135,7 @@ public class InterviewBusinessService {
                 return InterviewAnswerResponse.finishedWith(report);
             } else {
                 String nextQuestion = result.map(InterviewState::currentQuestion).orElse("");
-                String questionType = result.map(InterviewState::questionType).orElse("技术基础");
+                String questionType = result.map(InterviewState::questionType).orElse(QuestionType.TECHNICAL_BASIC.getDisplayName());
                 int questionIndex = result.map(InterviewState::questionIndex).orElse(1);
 
                 if (!nextQuestion.isEmpty()) {

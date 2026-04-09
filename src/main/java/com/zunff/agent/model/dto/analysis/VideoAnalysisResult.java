@@ -32,6 +32,12 @@ public class VideoAnalysisResult {
     /** 改进建议 */
     private List<String> suggestions;
 
+    /** 多模态追问建议（如"肢体语言紧张，建议追问自信度"） */
+    private String followUpSuggestion;
+
+    /** 是否存在明显异常 */
+    private boolean hasConcern;
+
     /**
      * 空结果（未进行分析）
      */
@@ -42,6 +48,8 @@ public class VideoAnalysisResult {
                 .emotionAnalysis("未进行视频分析")
                 .bodyLanguageAnalysis("未进行视频分析")
                 .suggestions(new ArrayList<>())
+                .followUpSuggestion("")
+                .hasConcern(false)
                 .build();
     }
 
@@ -55,6 +63,8 @@ public class VideoAnalysisResult {
                 .emotionAnalysis("基于实时分析，面试者表情较为自然，偶有紧张表现")
                 .bodyLanguageAnalysis("坐姿端正，手势配合得当，整体表现良好")
                 .suggestions(List.of("建议保持更多眼神交流", "回答时可以更加自信"))
+                .followUpSuggestion("")
+                .hasConcern(false)
                 .build();
     }
 }

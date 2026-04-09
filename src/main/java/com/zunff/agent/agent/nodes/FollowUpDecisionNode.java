@@ -2,6 +2,7 @@ package com.zunff.agent.agent.nodes;
 
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.zunff.agent.constant.InterviewRound;
 import com.zunff.agent.service.PromptTemplateService;
 import com.zunff.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -29,18 +30,20 @@ public class FollowUpDecisionNode {
      * 执行追问决策
      */
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
-        log.info("开始追问决策，当前追问次数: {}", state.followUpCount());
+        log.info("开始追问决策，当前轮次: {}, 追问次数: {}", state.currentRound(), state.followUpCount());
 
         String question = state.currentQuestion();
         String answerText = state.answerText();
         @SuppressWarnings("unchecked")
         Map<String, Object> evaluation = (Map<String, Object>) state.data().get(InterviewState.CURRENT_EVALUATION);
         int followUpCount = state.followUpCount();
-        int maxFollowUps = state.maxFollowUps();
+        int maxFollowUps = state.maxFollowUpsForCurrentRound();
+        InterviewRound round = state.currentRoundEnum();
+        String modalitySuggestion = state.modalityFollowUpSuggestion();
 
         // 检查是否已达到最大追问次数
         if (followUpCount >= maxFollowUps) {
-            log.info("已达到最大追问次数 {}，不再追问", maxFollowUps);
+            log.info("已达到当前轮次最大追问次数 {}，不再追问", maxFollowUps);
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.NEED_FOLLOW_UP, false);
             return CompletableFuture.completedFuture(updates);
@@ -53,12 +56,15 @@ public class FollowUpDecisionNode {
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("原始问题：").append(question).append("\n\n");
         userPrompt.append("候选人回答：").append(answerText).append("\n\n");
+        userPrompt.append("当前轮次：").append(round.getDisplayName()).append("\n\n");
 
         if (evaluation != null) {
             userPrompt.append("评估结果：\n");
             userPrompt.append("- 综合得分：").append(evaluation.get("overallScore")).append("\n");
             userPrompt.append("- 准确性：").append(evaluation.get("accuracy")).append("\n");
             userPrompt.append("- 逻辑性：").append(evaluation.get("logic")).append("\n");
+            userPrompt.append("- 流畅度：").append(evaluation.get("fluency")).append("\n");
+            userPrompt.append("- 自信度：").append(evaluation.get("confidence")).append("\n");
 
             @SuppressWarnings("unchecked")
             java.util.List<String> weaknesses = (java.util.List<String>) evaluation.get("weaknesses");
@@ -67,7 +73,12 @@ public class FollowUpDecisionNode {
             }
         }
 
-        userPrompt.append("\n已追问次数：").append(followUpCount).append("/").append(maxFollowUps);
+        // 添加多模态建议
+        if (modalitySuggestion != null && !modalitySuggestion.isEmpty()) {
+            userPrompt.append("\n多模态观察：").append(modalitySuggestion).append("\n");
+        }
+
+        userPrompt.append("\n剩余追问配额：").append(maxFollowUps - followUpCount).append("/").append(maxFollowUps);
         userPrompt.append("\n请决定是否需要追问，如需要请提供追问问题。");
 
         try {

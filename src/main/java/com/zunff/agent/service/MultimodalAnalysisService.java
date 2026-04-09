@@ -202,18 +202,50 @@ public class MultimodalAnalysisService {
             String jsonStr = extractJson(response);
             JSONObject result = JSONUtil.parseObj(jsonStr);
 
+            int emotionScore = result.getInt("emotionScore", 70);
+            int bodyLanguageScore = result.getInt("bodyLanguageScore", 70);
+            String emotionAnalysis = result.getStr("emotionAnalysis", "分析完成");
+            String bodyLanguageAnalysis = result.getStr("bodyLanguageAnalysis", "分析完成");
+
+            // 检测多模态异常
+            boolean hasConcern = emotionScore < 60 || bodyLanguageScore < 60;
+            String followUpSuggestion = generateVideoFollowUpSuggestion(emotionScore, bodyLanguageScore, emotionAnalysis, bodyLanguageAnalysis);
+
             return VideoAnalysisResult.builder()
-                    .emotionScore(result.getInt("emotionScore", 70))
-                    .bodyLanguageScore(result.getInt("bodyLanguageScore", 70))
-                    .emotionAnalysis(result.getStr("emotionAnalysis", "分析完成"))
-                    .bodyLanguageAnalysis(result.getStr("bodyLanguageAnalysis", "分析完成"))
+                    .emotionScore(emotionScore)
+                    .bodyLanguageScore(bodyLanguageScore)
+                    .emotionAnalysis(emotionAnalysis)
+                    .bodyLanguageAnalysis(bodyLanguageAnalysis)
                     .suggestions(parseStringList(result, "suggestions"))
+                    .followUpSuggestion(followUpSuggestion)
+                    .hasConcern(hasConcern)
                     .build();
 
         } catch (Exception e) {
             log.error("解析视频分析结果失败: {}", e.getMessage());
             return VideoAnalysisResult.defaultResult();
         }
+    }
+
+    /**
+     * 根据视频分析结果生成追问建议
+     */
+    private String generateVideoFollowUpSuggestion(int emotionScore, int bodyLanguageScore,
+                                                    String emotionAnalysis, String bodyLanguageAnalysis) {
+        StringBuilder suggestion = new StringBuilder();
+
+        if (emotionScore < 60) {
+            suggestion.append("表情得分较低(").append(emotionScore).append(")，").append(emotionAnalysis);
+            suggestion.append("，建议追问候选人是否对当前话题有顾虑或压力");
+        }
+
+        if (bodyLanguageScore < 60) {
+            if (suggestion.length() > 0) suggestion.append("；");
+            suggestion.append("肢体语言得分较低(").append(bodyLanguageScore).append(")，").append(bodyLanguageAnalysis);
+            suggestion.append("，建议追问候选人的自信程度或沟通风格");
+        }
+
+        return suggestion.length() > 0 ? suggestion.toString() : "";
     }
 
     /**
@@ -224,12 +256,22 @@ public class MultimodalAnalysisService {
             String jsonStr = extractJson(response);
             JSONObject result = JSONUtil.parseObj(jsonStr);
 
+            int voiceToneScore = result.getInt("voiceToneScore", 70);
+            String toneAnalysis = result.getStr("toneAnalysis", "语音分析完成");
+            String emotionAnalysis = result.getStr("emotionAnalysis", "情感分析完成");
+
+            // 检测多模态异常
+            boolean hasConcern = voiceToneScore < 60;
+            String followUpSuggestion = generateAudioFollowUpSuggestion(voiceToneScore, toneAnalysis, emotionAnalysis);
+
             return AudioAnalysisResult.builder()
-                    .voiceToneScore(result.getInt("voiceToneScore", 70))
+                    .voiceToneScore(voiceToneScore)
                     .transcribedText(result.getStr("transcribedText", ""))
-                    .toneAnalysis(result.getStr("toneAnalysis", "语音分析完成"))
-                    .emotionAnalysis(result.getStr("emotionAnalysis", "情感分析完成"))
+                    .toneAnalysis(toneAnalysis)
+                    .emotionAnalysis(emotionAnalysis)
                     .suggestions(parseStringList(result, "suggestions"))
+                    .followUpSuggestion(followUpSuggestion)
+                    .hasConcern(hasConcern)
                     .build();
 
         } catch (Exception e) {
@@ -238,12 +280,27 @@ public class MultimodalAnalysisService {
         }
     }
 
+    /**
+     * 根据音频分析结果生成追问建议
+     */
+    private String generateAudioFollowUpSuggestion(int voiceToneScore, String toneAnalysis, String emotionAnalysis) {
+        if (voiceToneScore < 60) {
+            return "语音语调得分较低(" + voiceToneScore + ")，" + toneAnalysis +
+                    "，建议追问候选人是否紧张或有表达困难";
+        }
+        return "";
+    }
+
     private EvaluationBO parseEvaluationBO(String response,
                                             VideoAnalysisResult videoResult,
                                             AudioAnalysisResult audioResult) {
         try {
             String jsonStr = extractJson(response);
             JSONObject json = JSONUtil.parseObj(jsonStr);
+
+            // 生成多模态追问建议
+            String modalityFollowUpSuggestion = buildModalityFollowUpSuggestion(videoResult, audioResult);
+            boolean modalityConcern = videoResult.isHasConcern() || audioResult.isHasConcern();
 
             return EvaluationBO.builder()
                     .accuracy(json.getInt("accuracy", 60))
@@ -259,6 +316,8 @@ public class MultimodalAnalysisService {
                     .needFollowUp(json.getBool("needFollowUp", false))
                     .followUpSuggestion(json.getStr("followUpSuggestion", ""))
                     .detailedEvaluation(json.getStr("detailedEvaluation", ""))
+                    .modalityFollowUpSuggestion(modalityFollowUpSuggestion)
+                    .modalityConcern(modalityConcern)
                     .build();
         } catch (Exception e) {
             log.error("解析评估结果失败: {}", e.getMessage());
@@ -274,6 +333,24 @@ public class MultimodalAnalysisService {
                     .needFollowUp(false)
                     .build();
         }
+    }
+
+    /**
+     * 构建多模态追问建议
+     */
+    private String buildModalityFollowUpSuggestion(VideoAnalysisResult videoResult, AudioAnalysisResult audioResult) {
+        StringBuilder suggestion = new StringBuilder();
+
+        if (videoResult.getFollowUpSuggestion() != null && !videoResult.getFollowUpSuggestion().isEmpty()) {
+            suggestion.append(videoResult.getFollowUpSuggestion());
+        }
+
+        if (audioResult.getFollowUpSuggestion() != null && !audioResult.getFollowUpSuggestion().isEmpty()) {
+            if (suggestion.length() > 0) suggestion.append("；");
+            suggestion.append(audioResult.getFollowUpSuggestion());
+        }
+
+        return suggestion.toString();
     }
 
     private List<String> parseStringList(JSONObject json, String key) {

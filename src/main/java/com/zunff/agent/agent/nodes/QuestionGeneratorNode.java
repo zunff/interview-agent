@@ -3,6 +3,8 @@ package com.zunff.agent.agent.nodes;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.zunff.agent.constant.InterviewRound;
+import com.zunff.agent.constant.QuestionType;
 import com.zunff.agent.service.PromptTemplateService;
 import com.zunff.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -32,22 +34,33 @@ public class QuestionGeneratorNode {
      * 执行问题生成
      */
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
-        log.info("开始生成面试问题，当前问题索引: {}", state.questionIndex());
+        log.info("开始生成面试问题，当前轮次: {}, 问题索引: {}", state.currentRound(), state.questionIndex());
 
         String resume = state.resume();
         String jobInfo = state.jobInfo();
         String interviewType = state.interviewType();
         List<String> previousQuestions = state.questions();
         int questionIndex = state.questionIndex();
+        String currentRound = state.currentRound();
 
-        // 从模板加载 system prompt
-        String systemPrompt = promptTemplateService.getPrompt("question-generator");
+        // 根据轮次选择不同的 Prompt 模板
+        InterviewRound round = InterviewRound.fromCode(currentRound);
+        String systemPrompt = promptTemplateService.getPrompt(round.getPromptTemplate());
 
         // 构建用户提示
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("候选人简历：\n").append(resume).append("\n\n");
         userPrompt.append("应聘岗位：\n").append(jobInfo).append("\n\n");
         userPrompt.append("面试类型：").append(interviewType).append("\n\n");
+        userPrompt.append("当前轮次：").append(round.getDisplayName()).append("\n\n");
+
+        // 根据轮次显示已问问题数
+        if (round.isTechnical()) {
+            userPrompt.append("技术轮已问问题数：").append(state.technicalQuestionsDone()).append("/").append(state.maxTechnicalQuestions()).append("\n\n");
+        } else {
+            userPrompt.append("业务轮已问问题数：").append(state.businessQuestionsDone()).append("/").append(state.maxBusinessQuestions()).append("\n\n");
+        }
+
         userPrompt.append("当前问题序号：").append(questionIndex + 1).append("\n\n");
 
         if (!previousQuestions.isEmpty()) {
@@ -57,7 +70,11 @@ public class QuestionGeneratorNode {
             }
             userPrompt.append("\n请生成下一个问题，避免与已提问的问题重复。\n");
         } else {
-            userPrompt.append("这是第一个问题，请从技术基础或项目经验方面入手。\n");
+            if (round.isTechnical()) {
+                userPrompt.append("这是技术轮的第一个问题，请从技术基础或项目经验方面入手。\n");
+            } else {
+                userPrompt.append("这是业务轮的第一个问题，请从业务场景或软技能方面入手。\n");
+            }
         }
 
         try {
@@ -109,7 +126,7 @@ public class QuestionGeneratorNode {
 
             return QuestionResult.builder()
                     .question(json.getStr("question", response))
-                    .questionType(json.getStr("questionType", "技术基础"))
+                    .questionType(json.getStr("questionType", QuestionType.TECHNICAL_BASIC.getDisplayName()))
                     .expectedKeywords(keywords)
                     .difficulty(json.getStr("difficulty", "中等"))
                     .reason(json.getStr("reason", ""))
@@ -118,7 +135,7 @@ public class QuestionGeneratorNode {
             log.error("解析问题结果失败: {}", e.getMessage());
             return QuestionResult.builder()
                     .question(response)
-                    .questionType("技术基础")
+                    .questionType(QuestionType.TECHNICAL_BASIC.getDisplayName())
                     .difficulty("中等")
                     .build();
         }

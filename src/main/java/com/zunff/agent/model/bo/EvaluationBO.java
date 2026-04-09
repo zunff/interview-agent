@@ -66,4 +66,10 @@ public class EvaluationBO {
 
     /** 追问建议 */
     private String followUpSuggestion;
+
+    /** 多模态追问建议（如"肢体语言紧张，建议追问自信度"） */
+    private String modalityFollowUpSuggestion;
+
+    /** 是否存在多模态异常 */
+    private boolean modalityConcern;
 }

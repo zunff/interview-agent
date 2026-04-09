@@ -68,6 +68,13 @@ public class AnswerEvaluatorNode {
         updates.put(InterviewState.NEED_FOLLOW_UP, evaluation.isNeedFollowUp());
         updates.put(InterviewState.FOLLOW_UP_QUESTION, evaluation.getFollowUpSuggestion());
 
+        // 传递多模态追问建议到状态
+        if (evaluation.getModalityFollowUpSuggestion() != null && !evaluation.getModalityFollowUpSuggestion().isEmpty()) {
+            updates.put(InterviewState.MODALITY_FOLLOW_UP_SUGGESTION, evaluation.getModalityFollowUpSuggestion());
+            updates.put(InterviewState.MODALITY_CONCERN, evaluation.isModalityConcern());
+            log.debug("多模态建议: {}", evaluation.getModalityFollowUpSuggestion());
+        }
+
         log.info("评估完成，综合得分: {}, 是否需要追问: {}",
                 evaluation.getOverallScore(), evaluation.isNeedFollowUp());
 

@@ -32,6 +32,12 @@ public class AudioAnalysisResult {
     /** 改进建议 */
     private List<String> suggestions;
 
+    /** 多模态追问建议（如"语速过快，建议追问是否有压力"） */
+    private String followUpSuggestion;
+
+    /** 是否存在明显异常 */
+    private boolean hasConcern;
+
     /**
      * 空结果（未进行分析）
      */
@@ -42,6 +48,8 @@ public class AudioAnalysisResult {
                 .toneAnalysis("未进行音频分析")
                 .emotionAnalysis("未进行音频分析")
                 .suggestions(new ArrayList<>())
+                .followUpSuggestion("")
+                .hasConcern(false)
                 .build();
     }
 
@@ -55,6 +63,8 @@ public class AudioAnalysisResult {
                 .toneAnalysis("语调较为自然，表达流畅度中等")
                 .emotionAnalysis("声音中略有紧张感，但整体表现稳定")
                 .suggestions(List.of("建议语速稍慢一些", "可以在重点处加强语气"))
+                .followUpSuggestion("")
+                .hasConcern(false)
                 .build();
     }
 }
