@@ -64,7 +64,7 @@ logging:
     root: INFO
     org.bsc.langgraph4j: DEBUG
     org.springframework.ai: DEBUG
-    com.zunff.agent: DEBUG
+    com.zunff.interview: DEBUG
 
 # LangGraph4j Studio 配置
 langgraph4j:
