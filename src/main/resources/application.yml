@@ -32,6 +32,13 @@ spring:
       audio:
         options:
           model: qwen-audio-turbo
+    # 向量存储配置 (pgvector)
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1024
+        initialize-schema: true
 
 # MyBatis-Plus 配置
 mybatis-plus:
@@ -98,3 +105,7 @@ interview:
     enabled: true                # 是否启用多模态分析
     vl-model: qwen-vl-max        # 视觉语言模型
     audio-model: paraformer-v2   # 语音识别模型
+  # 知识库配置
+  knowledge:
+    enabled: true                # 是否启用知识库检索
+    top-k: 5                     # 默认检索数量

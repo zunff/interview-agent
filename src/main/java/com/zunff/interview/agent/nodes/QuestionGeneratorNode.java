@@ -5,11 +5,14 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
+import com.zunff.interview.model.dto.KnowledgeSearchResult;
+import com.zunff.interview.service.InterviewKnowledgeService;
 import com.zunff.interview.service.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -21,6 +24,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 问题生成节点
  * 根据简历、岗位信息和面试类型生成面试问题
+ * 支持从知识库检索参考题目
  */
 @Slf4j
 @Component
@@ -29,6 +33,10 @@ public class QuestionGeneratorNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
+    private final InterviewKnowledgeService knowledgeService;
+
+    @Value("${interview.knowledge.enabled:true}")
+    private boolean knowledgeEnabled;
 
     /**
      * 执行问题生成
@@ -42,9 +50,9 @@ public class QuestionGeneratorNode {
         List<String> previousQuestions = state.questions();
         int questionIndex = state.questionIndex();
         String currentRound = state.currentRound();
+        InterviewRound round = InterviewRound.fromCode(currentRound);
 
         // 根据轮次选择不同的 Prompt 模板
-        InterviewRound round = InterviewRound.fromCode(currentRound);
         String systemPrompt = promptTemplateService.getPrompt(round.getPromptTemplate());
 
         // 构建用户提示
@@ -74,6 +82,16 @@ public class QuestionGeneratorNode {
                 userPrompt.append("这是技术轮的第一个问题，请从技术基础或项目经验方面入手。\n");
             } else {
                 userPrompt.append("这是业务轮的第一个问题，请从业务场景或软技能方面入手。\n");
+            }
+        }
+
+        // 从知识库检索参考题目
+        String referenceContext = "";
+        if (knowledgeEnabled) {
+            referenceContext = searchReferenceQuestions(jobInfo, round);
+            if (!referenceContext.isEmpty()) {
+                userPrompt.append("\n--- 可选参考题目（仅供参考，请生成新的问题）---\n");
+                userPrompt.append(referenceContext);
             }
         }
 
@@ -111,6 +129,33 @@ public class QuestionGeneratorNode {
         }
     }
 
+    /**
+     * 从知识库检索参考题目
+     */
+    private String searchReferenceQuestions(String jobInfo, InterviewRound round) {
+        try {
+            String questionType = round.isTechnical() ? "技术面" : "业务面";
+            List<KnowledgeSearchResult> results = knowledgeService.searchByJobInfo(jobInfo, questionType, 3);
+
+            if (results.isEmpty()) {
+                return "";
+            }
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < results.size(); i++) {
+                KnowledgeSearchResult r = results.get(i);
+                sb.append(i + 1).append(". ").append(r.getQuestion()).append("\n");
+                if (r.getCompany() != null && !r.getCompany().isEmpty()) {
+                    sb.append("   公司：").append(r.getCompany()).append("\n");
+                }
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("知识库检索失败: {}", e.getMessage());
+            return "";
+        }
+    }
+
     private QuestionResult parseQuestionResult(String response) {
         try {
             String jsonStr = extractJson(response);
@@ -129,7 +174,7 @@ public class QuestionGeneratorNode {
                     .questionType(json.getStr("questionType", QuestionType.TECHNICAL_BASIC.getDisplayName()))
                     .expectedKeywords(keywords)
                     .difficulty(json.getStr("difficulty", "中等"))
-                    .reason(json.getStr("reason", ""))
+                    .reason(json.getStr("reason", json.getStr("interviewIntent", "")))
                     .build();
         } catch (Exception e) {
             log.error("解析问题结果失败: {}", e.getMessage());

@@ -149,11 +149,25 @@ public class MultimodalAnalysisService {
             String answerText,
             VideoAnalysisResult videoResult,
             AudioAnalysisResult audioResult) {
+        return comprehensiveEvaluate(question, answerText, videoResult, audioResult, "evaluation");
+    }
 
-        log.info("开始综合评估");
+    /**
+     * 综合多模态评估（支持自定义评估模板）
+     * 结合文本回答、视频分析、音频分析进行综合评估
+     * @param evaluationPromptName 评估 Prompt 模板名称
+     */
+    public EvaluationBO comprehensiveEvaluate(
+            String question,
+            String answerText,
+            VideoAnalysisResult videoResult,
+            AudioAnalysisResult audioResult,
+            String evaluationPromptName) {
+
+        log.info("开始综合评估，使用模板: {}", evaluationPromptName);
 
         // 从模板加载 system prompt
-        String systemPrompt = promptTemplateService.getPrompt("evaluation");
+        String systemPrompt = promptTemplateService.getPrompt(evaluationPromptName);
 
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("问题：").append(question).append("\n\n");

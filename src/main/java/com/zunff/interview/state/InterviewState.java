@@ -78,6 +78,10 @@ public class InterviewState extends AgentState {
     public static final String MAX_FOLLOW_UPS_TECHNICAL = "maxFollowUpsTechnical"; // 默认3
     public static final String MAX_FOLLOW_UPS_BUSINESS = "maxFollowUpsBusiness";   // 默认2
 
+    // ========== 岗位分析 ==========
+    public static final String JOB_ANALYSIS_RESULT = "jobAnalysisResult";          // JobAnalysisResult 对象
+    public static final String CURRENT_QUESTION_CATEGORY = "currentQuestionCategory"; // 当前题目类别索引
+
     /**
      * LastValue Reducer: 新值覆盖旧值
      */
@@ -133,6 +137,10 @@ public class InterviewState extends AgentState {
         SCHEMA.put(CONSECUTIVE_HIGH_SCORES, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(MODALITY_FOLLOW_UP_SUGGESTION, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(MODALITY_CONCERN, Channels.base(new LastValueReducer<>(), () -> false));
+
+        // 岗位分析
+        SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), () -> null));
+        SCHEMA.put(CURRENT_QUESTION_CATEGORY, Channels.base(new LastValueReducer<>(), () -> 0));
 
         // 上下文信息也使用 base
         SCHEMA.put(RESUME, Channels.base(new LastValueReducer<>(), () -> ""));
@@ -394,5 +402,30 @@ public class InterviewState extends AgentState {
     public boolean modalityConcern() {
         Object value = data().get(MODALITY_CONCERN);
         return Boolean.TRUE.equals(value);
+    }
+
+    // ========== 岗位分析便捷方法 ==========
+
+    /**
+     * 获取岗位分析结果
+     */
+    @SuppressWarnings("unchecked")
+    public com.zunff.interview.model.dto.JobAnalysisResult jobAnalysisResult() {
+        return (com.zunff.interview.model.dto.JobAnalysisResult) data().get(JOB_ANALYSIS_RESULT);
+    }
+
+    /**
+     * 获取当前题目类别索引
+     */
+    public int currentQuestionCategory() {
+        Object value = data().get(CURRENT_QUESTION_CATEGORY);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    /**
+     * 是否有岗位分析结果
+     */
+    public boolean hasJobAnalysisResult() {
+        return data().containsKey(JOB_ANALYSIS_RESULT) && data().get(JOB_ANALYSIS_RESULT) != null;
     }
 }

@@ -1,6 +1,7 @@
 package com.zunff.interview.agent.graph;
 
 import com.zunff.interview.agent.nodes.InitInterviewNode;
+import com.zunff.interview.agent.nodes.JobAnalysisNode;
 import com.zunff.interview.agent.nodes.ReportGeneratorNode;
 import com.zunff.interview.agent.nodes.RoundTransitionNode;
 import com.zunff.interview.agent.router.RoundTransitionRouter;
@@ -26,7 +27,7 @@ import static org.bsc.langgraph4j.StateGraph.START;
  * 面试 Agent 主图配置
  *
  * 架构:
- * START → init → technicalRound(子图) → roundTransition → businessRound(子图) → generateReport → END
+ * START -> init -> jobAnalysis -> technicalRound(子图) -> roundTransition -> businessRound(子图) -> generateReport -> END
  */
 @Slf4j
 @Configuration
@@ -34,6 +35,7 @@ import static org.bsc.langgraph4j.StateGraph.START;
 public class InterviewAgentGraph {
 
     private final InitInterviewNode initInterviewNode;
+    private final JobAnalysisNode jobAnalysisNode;
     private final ReportGeneratorNode reportGeneratorNode;
     private final RoundTransitionNode roundTransitionNode;
     private final RoundTransitionRouter roundTransitionRouter;
@@ -44,11 +46,12 @@ public class InterviewAgentGraph {
      */
     @Bean
     public CompiledGraph<InterviewState> interviewAgent() throws GraphStateException {
-        log.info("初始化面试 Agent 主图（子图架构）");
+        log.info("初始化面试 Agent 主图（子图架构 + 岗位分析）");
 
         return new StateGraph<>(InterviewState.SCHEMA, InterviewState::new)
                 // ========== 添加节点 ==========
                 .addNode(NodeNames.INIT, initInterviewNode::execute)
+                .addNode(NodeNames.JOB_ANALYSIS, jobAnalysisNode::execute)
                 .addNode(NodeNames.TECHNICAL_ROUND, interviewRoundGraph.createGraph(InterviewRound.TECHNICAL))
                 .addNode(NodeNames.ROUND_TRANSITION, roundTransitionNode::execute)
                 .addNode(NodeNames.BUSINESS_ROUND, interviewRoundGraph.createGraph(InterviewRound.BUSINESS))
@@ -56,7 +59,8 @@ public class InterviewAgentGraph {
 
                 // ========== 定义边 ==========
                 .addEdge(START, NodeNames.INIT)
-                .addEdge(NodeNames.INIT, NodeNames.TECHNICAL_ROUND)
+                .addEdge(NodeNames.INIT, NodeNames.JOB_ANALYSIS)
+                .addEdge(NodeNames.JOB_ANALYSIS, NodeNames.TECHNICAL_ROUND)
                 .addEdge(NodeNames.TECHNICAL_ROUND, NodeNames.ROUND_TRANSITION)
 
                 // ========== 轮次路由 ==========
