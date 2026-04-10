@@ -1,5 +1,6 @@
 package com.zunff.interview.agent.nodes;
 
+import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
@@ -84,8 +85,7 @@ public class AnswerEvaluatorNode {
             updates.put(InterviewState.CURRENT_EVALUATION, evaluation);
             updates.put(InterviewState.NEED_FOLLOW_UP, evaluation.isNeedFollowUp());
             updates.put(InterviewState.FOLLOW_UP_QUESTION, evaluation.getFollowUpSuggestion());
-            // LLM 调用成功，重置失败计数
-            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, 0);
+            CircuitBreakerHelper.recordSuccess(updates);
 
             // 传递多模态追问建议到状态
             if (evaluation.getModalityFollowUpSuggestion() != null && !evaluation.getModalityFollowUpSuggestion().isEmpty()) {
@@ -101,12 +101,7 @@ public class AnswerEvaluatorNode {
 
         } catch (Exception e) {
             log.error("评估答案失败", e);
-            int failures = state.consecutiveLLMFailures() + 1;
-            if (failures >= state.maxLLMFailures()) {
-                throw new RuntimeException("LLM 连续调用失败达到 " + state.maxLLMFailures() + " 次，触发熔断", e);
-            }
             Map<String, Object> updates = new HashMap<>();
-            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, failures);
             // 返回默认评估，继续流转
             EvaluationBO defaultEval = EvaluationBO.builder()
                     .accuracy(60).logic(60).fluency(60).confidence(60)
@@ -115,6 +110,7 @@ public class AnswerEvaluatorNode {
                     .build();
             updates.put(InterviewState.CURRENT_EVALUATION, defaultEval);
             updates.put(InterviewState.NEED_FOLLOW_UP, false);
+            CircuitBreakerHelper.handleFailure(state, updates, e);
             return CompletableFuture.completedFuture(updates);
         }
     }

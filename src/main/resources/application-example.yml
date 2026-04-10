@@ -13,7 +13,7 @@ spring:
       idle-timeout: 300000
       connection-timeout: 20000
 
-  # Spring AI Alibaba 配置
+  # Spring AI 模型配置（按环境切换）
   ai:
     dashscope:
       # 请替换为您的 DashScope API Key
@@ -38,7 +38,7 @@ spring:
         dimensions: 1024
         initialize-schema: true
 
-# 开发环境日志级别
+# 日志级别
 logging:
   level:
     root: INFO

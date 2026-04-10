@@ -1,5 +1,6 @@
 package com.zunff.interview.agent.nodes;
 
+import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.service.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -113,6 +114,7 @@ public class ReportGeneratorNode {
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.FINAL_REPORT, fullReport);
             updates.put(InterviewState.IS_FINISHED, true);
+            CircuitBreakerHelper.recordSuccess(updates);
 
             log.info("面试报告生成完成，平均得分: {}", avgScore);
 
@@ -121,6 +123,7 @@ public class ReportGeneratorNode {
         } catch (Exception e) {
             log.error("生成报告失败", e);
             Map<String, Object> updates = new HashMap<>();
+            CircuitBreakerHelper.handleFailure(state, updates, e);
             updates.put(InterviewState.FINAL_REPORT, "报告生成失败，请稍后重试。");
             updates.put(InterviewState.IS_FINISHED, true);
             return CompletableFuture.completedFuture(updates);

@@ -1,8 +1,10 @@
 spring:
   application:
     name: interview-agent
+  profiles:
+    active: dev
 
-  # Spring AI Alibaba DashScope 配置
+  # Spring AI 通用配置（不含模型，模型在 profile 中指定）
   ai:
     model:
       audio:
@@ -10,24 +12,10 @@ spring:
     retry:
       max-attempts: 3
       backoff:
-        initial-interval: 1s
+        initial-interval: 2s
         multiplier: 2
-        max-interval: 10s
+        max-interval: 30s
       on-http-codes: 429, 500, 502, 503
-    dashscope:
-      api-key: ${DASHSCOPE_API_KEY}
-      chat:
-        options:
-          model: qwen3.5-plus
-          temperature: 0.7
-      vision:
-        model: qwen-image-2.0-pro              # 视觉模型（处理视频帧）
-      audio:
-        transcription:
-          options:
-            model: qwen3-asr-flash-realtime-2026-02-10
-            format: wav
-            sample-rate: 16000
 
   # 静态资源处理
   web:

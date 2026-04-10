@@ -2,6 +2,7 @@ package com.zunff.interview.agent.nodes;
 
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.service.PromptTemplateService;
@@ -94,6 +95,7 @@ public class FollowUpDecisionNode {
             result.followUpCount = followUpCount + 1; // 增加追问计数
 
             Map<String, Object> updates = new HashMap<>();
+            CircuitBreakerHelper.recordSuccess(updates);
             updates.put(InterviewState.NEED_FOLLOW_UP, result.needFollowUp);
 
             if (result.needFollowUp && result.followUpQuestion != null) {
@@ -109,6 +111,7 @@ public class FollowUpDecisionNode {
         } catch (Exception e) {
             log.error("追问决策失败", e);
             Map<String, Object> updates = new HashMap<>();
+            CircuitBreakerHelper.handleFailure(state, updates, e);
             updates.put(InterviewState.NEED_FOLLOW_UP, false);
             return CompletableFuture.completedFuture(updates);
         }

@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 /**
  * 多模态分析服务
@@ -101,8 +102,7 @@ public class MultimodalAnalysisService {
             return parseVideoAnalysisResult(response);
 
         } catch (Exception e) {
-            log.error("视频帧分析失败", e);
-            return VideoAnalysisResult.defaultResult();
+            throw new RuntimeException("视频帧分析失败", e);
         }
     }
 
@@ -141,8 +141,7 @@ public class MultimodalAnalysisService {
             return analyzeAudioEmotion(transcribedText);
 
         } catch (Exception e) {
-            log.error("音频分析失败", e);
-            return AudioAnalysisResult.defaultResult();
+            throw new RuntimeException("音频分析失败", e);
         }
     }
 
@@ -173,8 +172,7 @@ public class MultimodalAnalysisService {
             return parseAudioAnalysisResult(response, transcribedText);
 
         } catch (Exception e) {
-            log.error("音频情感分析失败", e);
-            return AudioAnalysisResult.defaultResult();
+            throw new RuntimeException("音频情感分析失败", e);
         }
     }
 
@@ -231,19 +229,7 @@ public class MultimodalAnalysisService {
             return parseEvaluationBO(response, videoResult, audioResult);
 
         } catch (Exception e) {
-            log.error("综合评估失败", e);
-            return EvaluationBO.builder()
-                    .accuracy(60)
-                    .logic(60)
-                    .fluency(60)
-                    .confidence(60)
-                    .emotionScore(videoResult.getEmotionScore())
-                    .bodyLanguageScore(videoResult.getBodyLanguageScore())
-                    .voiceToneScore(audioResult.getVoiceToneScore())
-                    .overallScore(60)
-                    .needFollowUp(false)
-                    .detailedEvaluation("评估过程中出现错误，使用默认评分")
-                    .build();
+            throw new RuntimeException("综合评估失败", e);
         }
     }
 
