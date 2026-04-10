@@ -3,11 +3,14 @@ package com.zunff.interview.websocket;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.request.SubmitAnswerRequest;
 import com.zunff.interview.model.dto.websocket.EmotionUpdateMessage;
 import com.zunff.interview.model.dto.websocket.QuestionMessage;
 import com.zunff.interview.model.dto.websocket.ReportMessage;
 import com.zunff.interview.model.dto.websocket.WebSocketMessage;
 import com.zunff.interview.model.entity.InterviewSessionEntity;
+import com.zunff.interview.service.AudioStreamService;
+import com.zunff.interview.service.InterviewBusinessService;
 import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.VideoStreamService;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +38,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
     private final VideoStreamService videoStreamService;
+    private final AudioStreamService audioStreamService;
     private final InterviewSessionService sessionService;
+    private final InterviewBusinessService interviewBusinessService;
 
     /** WebSocket 会话映射 */
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
@@ -99,7 +104,15 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         if (session != null) {
             sessionService.updateStatus(sessionId, InterviewSessionEntity.Status.WAITING_ANSWER.name());
         }
-        log.debug("接收到音频块，会话: {}", sessionId);
+
+        String audioBase64 = data.getStr("audio");
+        if (audioBase64 != null && !audioBase64.isEmpty()) {
+            byte[] audioData = java.util.Base64.getDecoder().decode(audioBase64);
+            audioStreamService.appendChunk(sessionId, audioData);
+            log.debug("积累音频块，会话: {}, 当前缓冲: {} bytes", sessionId, audioStreamService.getBufferSize(sessionId));
+        } else {
+            log.debug("接收到音频块但无数据，会话: {}", sessionId);
+        }
     }
 
     private void handleAnswerComplete(String sessionId, JSONObject data) {
@@ -108,9 +121,30 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
         log.info("收到完整回答，会话: {}, 文本长度: {}", sessionId, answerText.length());
 
-        List<String> frames = videoStreamService.getFramesForAnalysis(sessionId);
-        // 通过业务服务处理回答完成，这里简化处理
+        // 如果没有直接传入音频，尝试从缓冲区获取积累的音频块
+        if ((answerAudio == null || answerAudio.isEmpty()) && audioStreamService.getBufferSize(sessionId) > 0) {
+            byte[] completeAudio = audioStreamService.getCompleteAudio(sessionId);
+            if (completeAudio != null) {
+                answerAudio = java.util.Base64.getEncoder().encodeToString(completeAudio);
+                log.info("使用缓冲区音频，大小: {} bytes", completeAudio.length);
+            }
+        }
+
         sendAnswerReceived(sessionId);
+
+        // 通过业务服务处理回答
+        SubmitAnswerRequest request = SubmitAnswerRequest.builder()
+                .sessionId(sessionId)
+                .answerText(answerText.isEmpty() ? null : answerText)
+                .answerAudio(answerAudio)
+                .build();
+
+        try {
+            interviewBusinessService.submitAnswer(request);
+        } catch (Exception e) {
+            log.error("WebSocket 提交答案失败，会话: {}", sessionId, e);
+            sendErrorMessage(sessionId, "答案处理失败: " + e.getMessage());
+        }
     }
 
     private void handleEmotionUpdate(String sessionId, JSONObject data) {
@@ -192,6 +226,16 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         } else {
             log.warn("无法发送消息，没有可用的 WebSocket 会话: {}", sessionId);
         }
+    }
+
+    /**
+     * 发送错误消息
+     */
+    private void sendErrorMessage(String sessionId, String errorMessage) {
+        sendMessage(sessionId, WebSocketMessage.of(
+                WebSocketMessage.Type.ERROR,
+                Map.of("message", errorMessage)
+        ));
     }
 
     private String extractSessionId(WebSocketSession session) {

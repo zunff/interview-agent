@@ -21,6 +21,7 @@ import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -36,6 +37,7 @@ public class InterviewBusinessService {
     private final CompiledGraph<InterviewState> interviewAgent;
     private final InterviewSessionService sessionService;
     private final InterviewWebSocketHandler webSocketHandler;
+    private final VideoStreamService videoStreamService;
 
     /**
      * 开始面试
@@ -110,12 +112,16 @@ public class InterviewBusinessService {
         }
 
         Map<String, Object> stateUpdate = new HashMap<>();
-        stateUpdate.put(InterviewState.ANSWER_TEXT, request.getAnswerText());
+        if (request.getAnswerText() != null && !request.getAnswerText().isEmpty()) {
+            stateUpdate.put(InterviewState.ANSWER_TEXT, request.getAnswerText());
+        }
         if (request.getAnswerAudio() != null) {
             stateUpdate.put(InterviewState.ANSWER_AUDIO, request.getAnswerAudio());
         }
-        if (request.getAnswerFrames() != null && !request.getAnswerFrames().isEmpty()) {
-            stateUpdate.put(InterviewState.ANSWER_FRAMES, request.getAnswerFrames());
+        // 从 WebSocket 缓冲获取视频帧
+        List<String> frames = videoStreamService.getFramesForAnalysis(sessionId);
+        if (!frames.isEmpty()) {
+            stateUpdate.put(InterviewState.ANSWER_FRAMES, frames);
         }
 
         RunnableConfig config = RunnableConfig.builder()

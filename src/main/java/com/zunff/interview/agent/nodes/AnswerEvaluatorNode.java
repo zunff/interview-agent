@@ -51,12 +51,19 @@ public class AnswerEvaluatorNode {
             VideoAnalysisResult videoResult =
                     multimodalAnalysisService.analyzeVideoFrames(answerFrames);
 
-            // 2. 分析音频
+            // 2. 分析音频（含服务端 STT）
             log.debug("开始音频分析");
-            AudioAnalysisResult audioResult =
-                    answerAudio != null && !answerAudio.isEmpty()
-                            ? multimodalAnalysisService.analyzeAudio(answerAudio)
-                            : AudioAnalysisResult.empty();
+            AudioAnalysisResult audioResult;
+            if (answerAudio != null && !answerAudio.isEmpty()) {
+                audioResult = multimodalAnalysisService.analyzeAudio(answerAudio);
+                // 如果前端没传文本，用服务端 STT 转写结果
+                if ((answerText == null || answerText.isEmpty()) && audioResult.getTranscribedText() != null) {
+                    answerText = audioResult.getTranscribedText();
+                    log.info("使用服务端 STT 转写结果作为回答文本，长度: {}", answerText.length());
+                }
+            } else {
+                audioResult = AudioAnalysisResult.empty();
+            }
 
             // 3. 根据问题类型选择评估模板
             String evaluationPrompt = getEvaluationPromptByQuestionType(questionType);

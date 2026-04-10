@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zunff.interview.mapper.InterviewSessionMapper;
 import com.zunff.interview.model.entity.InterviewSessionEntity;
+import com.zunff.interview.service.AudioStreamService;
 import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.VideoStreamService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
         implements InterviewSessionService {
 
     private final VideoStreamService videoStreamService;
+    private final AudioStreamService audioStreamService;
 
     @Override
     @Transactional
@@ -85,6 +87,7 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
             session.setEndTime(LocalDateTime.now());
             updateById(session);
             videoStreamService.clearSession(sessionId);
+            audioStreamService.clearSession(sessionId);
             log.info("面试会话 {} 已结束", sessionId);
         }
     }

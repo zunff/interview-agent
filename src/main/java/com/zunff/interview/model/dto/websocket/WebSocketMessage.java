@@ -50,5 +50,7 @@ public class WebSocketMessage<T> {
         public static final String FINAL_REPORT = "final_report";
         /** 回答已接收 */
         public static final String ANSWER_RECEIVED = "answer_received";
+        /** 错误消息 */
+        public static final String ERROR = "error";
     }
 }
