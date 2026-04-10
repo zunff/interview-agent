@@ -66,8 +66,6 @@ interview:
     sample-rate: 16000           # 音频采样率
     chunk-duration: 1000         # 音频块时长(ms)
   session:
-    max-questions: 10            # 最大问题数（兼容旧配置）
-    max-follow-ups: 2            # 每题最大追问数（兼容旧配置）
     max-technical-questions: 6   # 技术轮最大问题数
     max-business-questions: 4    # 业务轮最大问题数
     round-pass-score: 75         # 轮次通过分数阈值

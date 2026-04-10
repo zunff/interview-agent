@@ -19,7 +19,6 @@ public final class NodeNames {
     public static final String EVALUATE_ANSWER = "evaluateAnswer";
     public static final String FOLLOW_UP_DECISION = "followUpDecision";
     public static final String GENERATE_FOLLOW_UP = "generateFollowUp";
-    public static final String NEXT_QUESTION = "nextQuestion";
     public static final String ROUND_TRANSITION = "roundTransition";
     public static final String GENERATE_REPORT = "generateReport";
 

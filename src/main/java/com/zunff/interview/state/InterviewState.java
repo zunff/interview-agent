@@ -4,6 +4,8 @@ import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
+import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
@@ -40,6 +42,10 @@ public class InterviewState extends AgentState {
     public static final String ANSWER_FRAMES = "answerFrames";
     public static final String CURRENT_EVALUATION = "currentEvaluation";
     public static final String EVALUATIONS = "evaluations";
+
+    // ========== 多模态分析中间结果 ==========
+    public static final String VISION_ANALYSIS_RESULT = "visionAnalysisResult";
+    public static final String AUDIO_ANALYSIS_RESULT = "audioAnalysisResult";
 
     // ========== 实时多模态分析 ==========
     public static final String EMOTION_SCORES = "emotionScores";
@@ -88,6 +94,9 @@ public class InterviewState extends AgentState {
     public static final String CONSECUTIVE_LLM_FAILURES = "consecutiveLLMFailures";
     public static final String MAX_LLM_FAILURES = "maxLLMFailures";                // 默认3
 
+    // ========== 等待状态 ==========
+    public static final String WAITING_FOR_ANSWER = "waitingForAnswer";           // 是否正在等待答案
+
     /**
      * LastValue Reducer: 新值覆盖旧值
      */
@@ -113,6 +122,10 @@ public class InterviewState extends AgentState {
         SCHEMA.put(ANSWER_FRAMES, Channels.appender(ArrayList::new));
         SCHEMA.put(TECHNICAL_ROUND_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(BUSINESS_ROUND_SCORES, Channels.appender(ArrayList::new));
+
+        // 多模态分析中间结果
+        SCHEMA.put(VISION_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), VisionAnalysisResult::empty));
+        SCHEMA.put(AUDIO_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), AudioAnalysisResult::empty));
 
         // 最后值类型：使用 base + LastValueReducer
         SCHEMA.put(QUESTION_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
@@ -151,6 +164,9 @@ public class InterviewState extends AgentState {
         // 熔断机制
         SCHEMA.put(CONSECUTIVE_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(MAX_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 3));
+
+        // 等待状态
+        SCHEMA.put(WAITING_FOR_ANSWER, Channels.base(new LastValueReducer<>(), () -> false));
 
         // 上下文信息也使用 base
         SCHEMA.put(RESUME, Channels.base(new LastValueReducer<>(), () -> ""));
@@ -439,6 +455,31 @@ public class InterviewState extends AgentState {
         return data().containsKey(JOB_ANALYSIS_RESULT) && data().get(JOB_ANALYSIS_RESULT) != null;
     }
 
+    // ========== 多模态分析中间结果便捷方法 ==========
+
+    /**
+     * 获取视觉分析结果
+     */
+    public VisionAnalysisResult visionAnalysisResult() {
+        return (VisionAnalysisResult) data().getOrDefault(
+                VISION_ANALYSIS_RESULT, VisionAnalysisResult.empty());
+    }
+
+    /**
+     * 获取音频分析结果
+     */
+    public AudioAnalysisResult audioAnalysisResult() {
+        return (AudioAnalysisResult) data().getOrDefault(
+                AUDIO_ANALYSIS_RESULT, AudioAnalysisResult.empty());
+    }
+
+    /**
+     * 获取当前评估结果
+     */
+    public EvaluationBO getCurrentEvaluation() {
+        return (EvaluationBO) data().getOrDefault(CURRENT_EVALUATION, new EvaluationBO());
+    }
+
     // ========== 熔断机制便捷方法 ==========
 
     /**
@@ -462,5 +503,15 @@ public class InterviewState extends AgentState {
      */
     public boolean isLLMCircuitBroken() {
         return consecutiveLLMFailures() >= maxLLMFailures();
+    }
+
+    // ========== 等待状态便捷方法 ==========
+
+    /**
+     * 是否正在等待答案
+     */
+    public boolean isWaitingForAnswer() {
+        Object value = data().get(WAITING_FOR_ANSWER);
+        return Boolean.TRUE.equals(value);
     }
 }

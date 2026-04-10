@@ -1,6 +1,6 @@
 package com.zunff.interview.service;
 
-import com.zunff.interview.model.dto.analysis.VideoAnalysisResult;
+import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -65,10 +65,10 @@ public class VideoStreamService {
      * @param sessionId 会话ID
      * @return 分析结果
      */
-    public VideoAnalysisResult analyzeFrames(String sessionId) {
+    public VisionAnalysisResult analyzeFrames(String sessionId) {
         List<String> frames = getFramesForAnalysis(sessionId);
         if (frames.isEmpty()) {
-            return VideoAnalysisResult.empty();
+            return VisionAnalysisResult.empty();
         }
         return multimodalAnalysisService.analyzeVideoFrames(frames);
     }

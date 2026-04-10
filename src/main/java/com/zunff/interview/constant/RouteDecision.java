@@ -11,6 +11,8 @@ public enum RouteDecision {
 
     FOLLOW_UP("followUp"),
     NEXT_QUESTION("nextQuestion"),
+    DEEP_DIVE("deepDive"),          // 低分深入追问
+    CHALLENGE_MODE("challengeMode"), // 高分挑战模式
     END("end"),
     TECHNICAL_TO_BUSINESS("technicalToBusiness"),
     BUSINESS_DONE("businessDone"),

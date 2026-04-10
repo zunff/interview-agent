@@ -21,6 +21,10 @@ public class RoundTransitionRouter {
     public String route(InterviewState state) {
         InterviewRound currentRound = state.currentRoundEnum();
 
+        // 如果正在等待答案，直接返回一个特殊的"暂停"决策
+        // 注意：由于主图没有处理 WAITING 的路由，我们需要让子图正确处理这个情况
+        // 这里暂时不处理，让子图的 WAITING_FOR_ANSWER 状态来控制
+
         // 提前结束检测
         if (state.canEndInterviewEarly()) {
             if (state.isBusinessRound()) {

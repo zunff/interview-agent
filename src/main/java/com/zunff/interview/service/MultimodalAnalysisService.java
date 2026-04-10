@@ -6,7 +6,7 @@ import cn.hutool.json.JSONUtil;
 import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionModel;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
-import com.zunff.interview.model.dto.analysis.VideoAnalysisResult;
+import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
 import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
@@ -59,16 +59,16 @@ public class MultimodalAnalysisService {
      * @param base64Frames Base64编码的视频帧列表
      * @return 分析结果
      */
-    public VideoAnalysisResult analyzeVideoFrames(List<String> base64Frames) {
+    public VisionAnalysisResult analyzeVideoFrames(List<String> base64Frames) {
         if (base64Frames == null || base64Frames.isEmpty()) {
-            return VideoAnalysisResult.empty();
+            return VisionAnalysisResult.empty();
         }
 
         log.info("开始分析 {} 帧视频数据，使用视觉模型", base64Frames.size());
 
         if (!multimodalEnabled) {
             log.debug("多模态分析已禁用，返回默认结果");
-            return VideoAnalysisResult.defaultResult();
+            return VisionAnalysisResult.defaultResult();
         }
 
         try {
@@ -99,7 +99,7 @@ public class MultimodalAnalysisService {
                     .call()
                     .content();
 
-            return parseVideoAnalysisResult(response);
+            return parseVisionAnalysisResult(response);
 
         } catch (Exception e) {
             throw new RuntimeException("视频帧分析失败", e);
@@ -183,9 +183,9 @@ public class MultimodalAnalysisService {
     public EvaluationBO comprehensiveEvaluate(
             String question,
             String answerText,
-            VideoAnalysisResult videoResult,
+            VisionAnalysisResult visionResult,
             AudioAnalysisResult audioResult) {
-        return comprehensiveEvaluate(question, answerText, videoResult, audioResult, "evaluation");
+        return comprehensiveEvaluate(question, answerText, visionResult, audioResult, "evaluation");
     }
 
     /**
@@ -196,7 +196,7 @@ public class MultimodalAnalysisService {
     public EvaluationBO comprehensiveEvaluate(
             String question,
             String answerText,
-            VideoAnalysisResult videoResult,
+            VisionAnalysisResult visionResult,
             AudioAnalysisResult audioResult,
             String evaluationPromptName) {
 
@@ -209,9 +209,9 @@ public class MultimodalAnalysisService {
         userPrompt.append("问题：").append(question).append("\n\n");
         userPrompt.append("回答内容：").append(answerText).append("\n\n");
         userPrompt.append("视频分析结果：\n");
-        userPrompt.append("- 表情得分：").append(videoResult.getEmotionScore()).append("\n");
-        userPrompt.append("- 肢体语言得分：").append(videoResult.getBodyLanguageScore()).append("\n");
-        userPrompt.append("- 表情分析：").append(videoResult.getEmotionAnalysis()).append("\n\n");
+        userPrompt.append("- 表情得分：").append(visionResult.getEmotionScore()).append("\n");
+        userPrompt.append("- 肢体语言得分：").append(visionResult.getBodyLanguageScore()).append("\n");
+        userPrompt.append("- 表情分析：").append(visionResult.getEmotionAnalysis()).append("\n\n");
         userPrompt.append("音频分析结果：\n");
         userPrompt.append("- 语音得分：").append(audioResult.getVoiceToneScore()).append("\n");
         userPrompt.append("- 语音分析：").append(audioResult.getToneAnalysis()).append("\n");
@@ -226,7 +226,7 @@ public class MultimodalAnalysisService {
                     .call()
                     .content();
 
-            return parseEvaluationBO(response, videoResult, audioResult);
+            return parseEvaluationBO(response, visionResult, audioResult);
 
         } catch (Exception e) {
             throw new RuntimeException("综合评估失败", e);
@@ -236,7 +236,7 @@ public class MultimodalAnalysisService {
     /**
      * 解析视频分析结果
      */
-    private VideoAnalysisResult parseVideoAnalysisResult(String response) {
+    private VisionAnalysisResult parseVisionAnalysisResult(String response) {
         try {
             String jsonStr = extractJson(response);
             JSONObject result = JSONUtil.parseObj(jsonStr);
@@ -250,7 +250,7 @@ public class MultimodalAnalysisService {
             boolean hasConcern = emotionScore < 60 || bodyLanguageScore < 60;
             String followUpSuggestion = generateVideoFollowUpSuggestion(emotionScore, bodyLanguageScore, emotionAnalysis, bodyLanguageAnalysis);
 
-            return VideoAnalysisResult.builder()
+            return VisionAnalysisResult.builder()
                     .emotionScore(emotionScore)
                     .bodyLanguageScore(bodyLanguageScore)
                     .emotionAnalysis(emotionAnalysis)
@@ -262,7 +262,7 @@ public class MultimodalAnalysisService {
 
         } catch (Exception e) {
             log.error("解析视频分析结果失败: {}", e.getMessage());
-            return VideoAnalysisResult.defaultResult();
+            return VisionAnalysisResult.defaultResult();
         }
     }
 
@@ -331,23 +331,23 @@ public class MultimodalAnalysisService {
     }
 
     private EvaluationBO parseEvaluationBO(String response,
-                                            VideoAnalysisResult videoResult,
+                                            VisionAnalysisResult visionResult,
                                             AudioAnalysisResult audioResult) {
         try {
             String jsonStr = extractJson(response);
             JSONObject json = JSONUtil.parseObj(jsonStr);
 
             // 生成多模态追问建议
-            String modalityFollowUpSuggestion = buildModalityFollowUpSuggestion(videoResult, audioResult);
-            boolean modalityConcern = videoResult.isHasConcern() || audioResult.isHasConcern();
+            String modalityFollowUpSuggestion = buildModalityFollowUpSuggestion(visionResult, audioResult);
+            boolean modalityConcern = visionResult.isHasConcern() || audioResult.isHasConcern();
 
             return EvaluationBO.builder()
                     .accuracy(json.getInt("accuracy", 60))
                     .logic(json.getInt("logic", 60))
                     .fluency(json.getInt("fluency", 60))
                     .confidence(json.getInt("confidence", 60))
-                    .emotionScore(videoResult.getEmotionScore())
-                    .bodyLanguageScore(videoResult.getBodyLanguageScore())
+                    .emotionScore(visionResult.getEmotionScore())
+                    .bodyLanguageScore(visionResult.getBodyLanguageScore())
                     .voiceToneScore(audioResult.getVoiceToneScore())
                     .overallScore(json.getInt("overallScore", 60))
                     .strengths(parseStringList(json, "strengths"))
@@ -365,8 +365,8 @@ public class MultimodalAnalysisService {
                     .logic(60)
                     .fluency(60)
                     .confidence(60)
-                    .emotionScore(videoResult.getEmotionScore())
-                    .bodyLanguageScore(videoResult.getBodyLanguageScore())
+                    .emotionScore(visionResult.getEmotionScore())
+                    .bodyLanguageScore(visionResult.getBodyLanguageScore())
                     .voiceToneScore(audioResult.getVoiceToneScore())
                     .overallScore(60)
                     .needFollowUp(false)
@@ -377,11 +377,11 @@ public class MultimodalAnalysisService {
     /**
      * 构建多模态追问建议
      */
-    private String buildModalityFollowUpSuggestion(VideoAnalysisResult videoResult, AudioAnalysisResult audioResult) {
+    private String buildModalityFollowUpSuggestion(VisionAnalysisResult visionResult, AudioAnalysisResult audioResult) {
         StringBuilder suggestion = new StringBuilder();
 
-        if (videoResult.getFollowUpSuggestion() != null && !videoResult.getFollowUpSuggestion().isEmpty()) {
-            suggestion.append(videoResult.getFollowUpSuggestion());
+        if (visionResult.getFollowUpSuggestion() != null && !visionResult.getFollowUpSuggestion().isEmpty()) {
+            suggestion.append(visionResult.getFollowUpSuggestion());
         }
 
         if (audioResult.getFollowUpSuggestion() != null && !audioResult.getFollowUpSuggestion().isEmpty()) {

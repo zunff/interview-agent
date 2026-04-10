@@ -5,17 +5,21 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 视频分析结果
+ * 视觉分析结果
+ * 分析视频帧中的表情和肢体语言
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VideoAnalysisResult {
+public class VisionAnalysisResult implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /** 表情情感得分 (0-100) */
     private int emotionScore;
@@ -41,12 +45,12 @@ public class VideoAnalysisResult {
     /**
      * 空结果（未进行分析）
      */
-    public static VideoAnalysisResult empty() {
-        return VideoAnalysisResult.builder()
+    public static VisionAnalysisResult empty() {
+        return VisionAnalysisResult.builder()
                 .emotionScore(70)
                 .bodyLanguageScore(70)
-                .emotionAnalysis("未进行视频分析")
-                .bodyLanguageAnalysis("未进行视频分析")
+                .emotionAnalysis("未进行视觉分析")
+                .bodyLanguageAnalysis("未进行视觉分析")
                 .suggestions(new ArrayList<>())
                 .followUpSuggestion("")
                 .hasConcern(false)
@@ -56,8 +60,8 @@ public class VideoAnalysisResult {
     /**
      * 默认结果（分析失败时使用）
      */
-    public static VideoAnalysisResult defaultResult() {
-        return VideoAnalysisResult.builder()
+    public static VisionAnalysisResult defaultResult() {
+        return VisionAnalysisResult.builder()
                 .emotionScore(75)
                 .bodyLanguageScore(78)
                 .emotionAnalysis("基于实时分析，面试者表情较为自然，偶有紧张表现")
