@@ -4,7 +4,6 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionModel;
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
@@ -13,7 +12,6 @@ import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
 import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.content.Media;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.util.MimeTypeUtils;
 
@@ -21,39 +19,35 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Semaphore;
 
 /**
  * 多模态分析服务
  * 使用 Spring AI 调用通义千问模型进行视频帧和音频分析
  *
- * 模型分工：
- * - chatClientBuilder (qwen-plus): 文本评估 + 语音情感分析
- * - visionChatClientBuilder (qwen-image-2.0-pro): 视频帧分析
- * - audioTranscriptionModel (Spring AI Alibaba): 语音转录 ASR
+ * 模型分工（独立 ChatClient Bean，避免 Builder 共享污染）：
+ * - textChatClient (qwen-plus): 文本评估 + 语音情感分析
+ * - visionChatClient (qwen3.5-omni-plus): 视频帧分析
+ * - transcriptionModel (Spring AI Alibaba): 语音转录 ASR
  */
 @Slf4j
 public class MultimodalAnalysisService {
 
-    private final ChatClient.Builder chatClientBuilder;       // 文本评估 + 情感分析
-    private final ChatClient.Builder visionChatClientBuilder; // 视觉分析
+    private final ChatClient textChatClient;                  // 文本评估 + 情感分析
+    private final ChatClient visionChatClient;                // 视觉分析
     private final AudioTranscriptionModel transcriptionModel; // 语音转录 (Spring AI Alibaba)
     private final PromptTemplateService promptTemplateService;
+    private final boolean multimodalEnabled;
 
-    @Value("${interview.multimodal.enabled:true}")
-    private boolean multimodalEnabled;
-
-    @Value("${spring.ai.dashscope.chat.options.model:qwen-plus}")
-    private String chatModelName;
-
-    public MultimodalAnalysisService(ChatClient.Builder chatClientBuilder,
-                                      ChatClient.Builder visionChatClientBuilder,
+    public MultimodalAnalysisService(ChatClient textChatClient,
+                                      ChatClient visionChatClient,
                                       AudioTranscriptionModel transcriptionModel,
-                                      PromptTemplateService promptTemplateService) {
-        this.chatClientBuilder = chatClientBuilder;
-        this.visionChatClientBuilder = visionChatClientBuilder;
+                                      PromptTemplateService promptTemplateService,
+                                      boolean multimodalEnabled) {
+        this.textChatClient = textChatClient;
+        this.visionChatClient = visionChatClient;
         this.transcriptionModel = transcriptionModel;
         this.promptTemplateService = promptTemplateService;
+        this.multimodalEnabled = multimodalEnabled;
     }
 
     /**
@@ -93,10 +87,8 @@ public class MultimodalAnalysisService {
                 mediaList.add(new Media(MimeTypeUtils.IMAGE_JPEG, resource));
             }
 
-            // 使用视觉模型 ChatClient
-            ChatClient chatClient = visionChatClientBuilder.build();
-
-            String response = chatClient.prompt()
+            // 使用视觉模型 ChatClient（独立 Bean，不会污染文本模型）
+            String response = visionChatClient.prompt()
                     .user(userSpec -> {
                         userSpec.text(prompt);
                         userSpec.media(mediaList.toArray(new Media[0]));
@@ -169,13 +161,8 @@ public class MultimodalAnalysisService {
             String prompt = promptTemplateService.getPrompt("audio-emotion-analysis",
                     Map.of("transcribedText", transcribedText));
 
-            // 使用文本模型 ChatClient，显式在 prompt 级别覆盖模型
-            DashScopeChatOptions textOptions = new DashScopeChatOptions();
-            textOptions.setModel(chatModelName);
-            ChatClient chatClient = chatClientBuilder.build();
-
-            String response = chatClient.prompt()
-                    .options(textOptions)
+            // 直接使用文本模型 ChatClient（独立 Bean，模型已固定为 qwen-plus）
+            String response = textChatClient.prompt()
                     .user(prompt)
                     .call()
                     .content();
@@ -228,13 +215,8 @@ public class MultimodalAnalysisService {
         userPrompt.append("- 语音分析：").append(audioResult.getToneAnalysis()).append("\n");
 
         try {
-            // 综合评估使用普通文本模型，显式在 prompt 级别覆盖模型
-            DashScopeChatOptions textOptions = new DashScopeChatOptions();
-            textOptions.setModel(chatModelName);
-            ChatClient chatClient = chatClientBuilder.build();
-
-            String response = chatClient.prompt()
-                    .options(textOptions)
+            // 直接使用文本模型 ChatClient（独立 Bean，模型已固定为 qwen-plus）
+            String response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt.toString())
                     .call()

@@ -7,6 +7,7 @@ import com.zunff.interview.service.PromptTemplateService;
 import com.zunff.interview.service.VideoStreamService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,31 +25,48 @@ public class ServiceConfig {
     }
 
     /**
+     * 文本模型 ChatClient (qwen-plus)
+     * 用于文本评估和语音情感分析
+     */
+    @Bean
+    public ChatClient textChatClient(ChatModel chatModel) {
+        log.info("初始化文本 ChatClient，模型: qwen-plus");
+        return ChatClient.create(chatModel);
+    }
+
+    /**
+     * 视觉模型 ChatClient (qwen3.5-omni-plus)
+     * 用于视频帧分析，独立 Bean 避免污染文本模型
+     */
+    @Bean
+    public ChatClient visionChatClient(
+            ChatModel chatModel,
+            @Value("${spring.ai.dashscope.vision.model}") String visionModel) {
+        log.info("初始化视觉 ChatClient，模型: {}", visionModel);
+        DashScopeChatOptions visionOptions = new DashScopeChatOptions();
+        visionOptions.setModel(visionModel);
+        return ChatClient.builder(chatModel)
+                .defaultOptions(visionOptions)
+                .build();
+    }
+
+    /**
      * 多模态分析服务
-     * 使用 Spring AI Alibaba：
-     * - chatClientBuilder: 文本评估 + 语音情感分析 (qwen-plus)
-     * - visionChatClientBuilder: 视频帧分析 (qwen-image-2.0-pro)
-     * - transcriptionModel: 语音转录 ASR (qwen3-asr-flash-realtime)
+     * 注入独立的 ChatClient Bean，避免 Builder 共享污染
      */
     @Bean
     public MultimodalAnalysisService multimodalAnalysisService(
-            ChatClient.Builder chatClientBuilder,
-            PromptTemplateService promptTemplateService,
+            ChatClient textChatClient,
+            ChatClient visionChatClient,
             AudioTranscriptionModel transcriptionModel,
-            @Value("${spring.ai.dashscope.vision.model}") String visionModel) {
-
-        // 视觉模型 Builder
-        log.info("初始化视觉模型，模型名称: {}", visionModel);
-        DashScopeChatOptions visionOptions = new DashScopeChatOptions();
-        visionOptions.setModel(visionModel);
-        ChatClient.Builder visionBuilder = chatClientBuilder
-                .defaultOptions(visionOptions);
-
+            PromptTemplateService promptTemplateService,
+            @Value("${interview.multimodal.enabled:true}") boolean multimodalEnabled) {
         return new MultimodalAnalysisService(
-                chatClientBuilder,
-                visionBuilder,
+                textChatClient,
+                visionChatClient,
                 transcriptionModel,
-                promptTemplateService);
+                promptTemplateService,
+                multimodalEnabled);
     }
 
     @Bean
