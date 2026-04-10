@@ -45,29 +45,163 @@
 
 系统采用 **LangGraph4j 主图 + 子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析→技术轮→业务轮→报告），每个轮次通过可复用的子图实例执行（生成问题→等待回答→评估→追问决策）。
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    InterviewAgentGraph (主图)             │
-│                                                         │
-│  START → Init → JobAnalysis → TechnicalRound(子图) ──┐  │
-│                     │                                  │  │
-│                     └─→ RoundTransition ──→ BusinessRound(子图) ──┐
-│                                                         │  │
-│                              GenerateReport ←───────────┘  │
-│                                                         │
-│                              END                         │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph MainGraph["InterviewAgentGraph 主图"]
+        START([START]) --> INIT[InitInterviewNode<br/>初始化面试]
+        INIT --> JOB[JobAnalysisNode<br/>岗位分析]
+        JOB --> TECH[InterviewRoundGraph<br/>技术轮子图]
+        TECH --> ROUTER[RoundTransitionNode<br/>轮次决策]
+        ROUTER -->|技术轮未完成| TECH
+        ROUTER -->|切换业务轮| BIZ[InterviewRoundGraph<br/>业务轮子图]
+        ROUTER -->|提前结束| REPORT[ReportGeneratorNode<br/>生成报告]
+        BIZ --> ROUTER
+        ROUTER -->|业务完成| REPORT
+        REPORT --> END([END])
+    end
 
-┌─────────────────────────────────────────────────────────┐
-│              InterviewRoundGraph (子图，可复用)           │
-│                                                         │
-│  START → GenerateQuestion → AskQuestion → WaitForAnswer │
-│                    ↑                                    │
-│                    └── GenerateFollowUp ← FollowUpDecision │
-│                                                         │
-│                          END                            │
-└─────────────────────────────────────────────────────────┘
+    subgraph SubGraph["InterviewRoundGraph 子图 (可复用)"]
+        SUB_START([START]) --> GEN[QuestionGeneratorNode<br/>生成问题]
+        GEN --> ASK[AskQuestionNode<br/>记录问题]
+        ASK --> WAIT[WaitForAnswerNode<br/>等待回答]
+        WAIT --> EVAL[AnswerEvaluatorNode<br/>多模态评估]
+        EVAL --> FOLLOW[FollowUpDecisionNode<br/>追问决策]
+        FOLLOW -->|需要追问| GEN_FOLLOW[GenerateFollowUpNode<br/>生成追问]
+        FOLLOW -->|不需要追问| SUB_END([END])
+        GEN_FOLLOW --> ASK
+    end
 ```
+
+### Agent 编排详解
+
+#### 节点职责列表
+
+| 节点名称 | 类名 | 职责描述 |
+|---------|------|---------|
+| **init** | InitInterviewNode | 初始化面试状态，设置计数器和轮次信息 |
+| **jobAnalysis** | JobAnalysisNode | 分析岗位类型（技术驱动/业务驱动/均衡型），动态分配题目数量 |
+| **technicalRound** | InterviewRoundGraph | 技术轮子图实例（可复用组件） |
+| **businessRound** | InterviewRoundGraph | 业务轮子图实例（可复用组件） |
+| **roundTransition** | RoundTransitionNode | 检查轮次完成状态，判断是否切换轮次或提前结束 |
+| **generateReport** | ReportGeneratorNode | 生成综合评估报告 |
+| **generateQuestion** | QuestionGeneratorNode | 根据简历、岗位信息和已问问题生成新问题 |
+| **askQuestion** | AskQuestionNode | 将问题添加到问题列表 |
+| **waitForAnswer** | WaitForAnswerNode | 中断流程，等待候选人提交答案 |
+| **evaluateAnswer** | AnswerEvaluatorNode | 多模态评估答案（文本+视频+音频） |
+| **followUpDecision** | FollowUpDecisionNode | 决定是否需要追问 |
+| **generateFollowUp** | GenerateFollowUpNode | 生成追问问题 |
+
+#### InterviewState 状态字段
+
+```java
+// 面试上下文
+String resume;              // 简历内容
+String jobInfo;            // 岗位信息
+String interviewType;      // 面试类型
+String sessionId;          // 会话ID
+
+// 问题管理
+List<Question> questions;           // 已问问题列表 (累加)
+Question currentQuestion;           // 当前问题
+int questionIndex;                  // 问题索引
+String questionType;                // 问题类型
+
+// 评估相关
+String answerText;                  // 回答文本
+String answerAudio;                 // 回答音频
+List<String> answerFrames;          // 视频帧列表
+EvaluationBO currentEvaluation;     // 当前评估结果
+List<EvaluationBO> evaluations;     // 评估历史 (累加)
+
+// 多模态分析
+List<Integer> emotionScores;        // 情绪分数列表
+List<Integer> bodyLanguageScores;   // 肢体语言分数
+List<Integer> voiceToneScores;      // 语气语调分数
+
+// 追问控制
+int followUpCount;                  // 追问次数
+boolean needFollowUp;               // 是否需要追问
+String followUpQuestion;            // 追问问题
+
+// 轮次管理
+InterviewRound currentRound;        // 当前轮次 (TECHNICAL/BUSINESS)
+int technicalQuestionsDone;         // 技术轮已问问题数
+int businessQuestionsDone;          // 业务轮已问问题数
+List<Integer> technicalRoundScores; // 技术轮分数列表
+List<Integer> businessRoundScores;  // 业务轮分数列表
+
+// 岗位分析
+JobAnalysisResult jobAnalysisResult; // 岗位分析结果对象
+
+// 熔断机制
+int consecutiveLLMFailures;         // 连续LLM失败次数
+```
+
+#### 路由决策逻辑
+
+**RoundTransitionRouter（轮次切换路由）**：
+
+```mermaid
+graph TD
+    START([轮次决策]) --> CHECK_EARLY{连续高分<br/>次数 ≥ 3?}
+    CHECK_EARLY -->|是| CHECK_ROUND{当前是<br/>业务轮?}
+    CHECK_EARLY -->|否| CHECK_TECH{技术轮<br/>完成?}
+
+    CHECK_ROUND -->|是| END_REPORT([生成报告])
+    CHECK_ROUND -->|否| TO_BIZ[切换到业务轮]
+
+    CHECK_TECH -->|是| CALC_SCORE[计算技术轮<br/>平均分]
+    CHECK_TECH -->|否| CONTINUE[继续当前轮次]
+
+    CALC_SCORE --> CHECK_PASS{平均分<br/>≥ 75?}
+    CHECK_PASS -->|是| TO_BIZ
+    CHECK_PASS -->|否| CONTINUE
+
+    CHECK_BIZ{业务轮<br/>完成?}
+    CHECK_BIZ -->|是| END_REPORT
+    CHECK_BIZ -->|否| CONTINUE
+
+    TO_BIZ --> NEXT([进入业务轮])
+    CONTINUE --> NEXT
+```
+
+**决策条件表**：
+
+| 条件 | 转换 |
+|------|------|
+| 技术轮完成 && 平均分 ≥ 75 | 技术轮 → 业务轮 |
+| 技术轮完成 && 平均分 < 75 | 继续技术轮 |
+| 业务轮完成 | 生成报告 |
+| 连续3次高分 (≥85分) | 提前结束 |
+
+**EvaluationRouter（追问路由）**：
+
+```mermaid
+graph LR
+    EVAL([评估完成]) --> CHECK{需要追问?}
+    CHECK -->|是| COUNT{追问次数<br/><上限?}
+    CHECK -->|否| NEXT([下一题])
+    COUNT -->|是| FOLLOW_UP[生成追问]
+    COUNT -->|否| NEXT
+    FOLLOW_UP --> ASK([重新提问])
+```
+
+#### 熔断机制
+
+**CircuitBreakerHelper** 统一管理 LLM 调用失败：
+
+```java
+// 成功时重置计数
+recordSuccess() → consecutiveLLMFailures = 0
+
+// 失败时递增计数
+handleFailure() → consecutiveLLMFailures++
+                  if (>= 3) → 抛出异常触发熔断
+```
+
+所有 Node 在调用 LLM 后都需调用：
+- 成功: `CircuitBreakerHelper.recordSuccess(updates)`
+- 失败: `CircuitBreakerHelper.handleFailure(state, updates, e)`
 
 ### 状态管理
 
@@ -122,6 +256,274 @@
 - **答案评估**: `evaluation.st`, `evaluation-technical.st`, `evaluation-business.st`, `evaluation-project.st`, `evaluation-soft.st`
 - **多模态分析**: `video-analysis.st`, `audio-analysis.st`, `audio-emotion-analysis.st`
 - **流程控制**: `followup-decision.st`, `job-analysis.st`, `report-generator.st`, `question-analysis.st`, `knowledge-filter.st`
+
+## 前后端交互详解
+
+### 双通道通信架构
+
+系统采用 **REST API + WebSocket** 双通道通信模式：
+
+- **REST API**：处理核心流程控制（同步调用）
+- **WebSocket**：处理实时数据传输（异步推送）
+
+```mermaid
+graph TB
+    subgraph Frontend["前端应用"]
+        REST_CLIENT["REST Client"]
+        WS_CLIENT["WebSocket Client"]
+    end
+
+    subgraph Backend["后端服务"]
+        CONTROLLER["InterviewController<br/>REST API"]
+        WS_HANDLER["InterviewWebSocketHandler"]
+        BUSINESS["InterviewBusinessService"]
+        AGENT["InterviewAgentGraph<br/>(LangGraph4j)"]
+    end
+
+    subgraph AI["AI 服务"]
+        CHAT["qwen-plus<br/>文本生成/评估"]
+        VISION["qwen-image-2.0-pro<br/>视觉分析"]
+        ASR["paraformer-realtime-v2<br/>语音转录"]
+    end
+
+    REST_CLIENT -->|POST /api/interview/start| CONTROLLER
+    REST_CLIENT -->|POST /api/interview/answer| CONTROLLER
+    REST_CLIENT -->|GET /api/interview/report/{id}| CONTROLLER
+
+    WS_CLIENT -.->|ws://localhost/ws/interview/{id}| WS_HANDLER
+
+    CONTROLLER --> BUSINESS
+    WS_HANDLER --> BUSINESS
+
+    BUSINESS --> AGENT
+    AGENT -.->|文本生成| CHAT
+    AGENT -.->|视觉分析| VISION
+    AGENT -.->|语音转录| ASR
+
+    WS_HANDLER -.->|实时推送| WS_CLIENT
+```
+
+### REST API 端点
+
+| 端点 | 方法 | 描述 | 请求体 | 响应 |
+|------|------|------|--------|------|
+| `/api/interview/start` | POST | 开始面试 | `StartInterviewRequest` | `InterviewStartResponse` |
+| `/api/interview/answer` | POST | 提交答案 | `SubmitAnswerRequest` | `InterviewAnswerResponse` |
+| `/api/interview/session/{sessionId}` | GET | 获取会话状态 | - | `SessionResponse` |
+| `/api/interview/end/{sessionId}` | POST | 结束面试 | - | `ReportResponse` |
+| `/api/interview/report/{sessionId}` | GET | 获取面试报告 | - | `ReportResponse` |
+| `/api/health` | GET | 健康检查 | - | `HealthResponse` |
+| `/api/info` | GET | 服务信息 | - | `InfoResponse` |
+
+### WebSocket 消息协议
+
+#### 连接地址
+```
+ws://localhost:8080/ws/interview/{sessionId}
+```
+
+#### 客户端 → 服务端
+
+| 消息类型 | 用途 | 格式 |
+|----------|------|------|
+| `video_frame` | 发送视频帧进行实时表情分析 | `{"type":"video_frame","sessionId":"xxx","frame":"base64..."}` |
+| `audio_chunk` | 发送音频块积累用于语音转写 | `{"type":"audio_chunk","sessionId":"xxx","audio":"base64..."}` |
+| `answer_complete` | 提交完整回答 | `{"type":"answer_complete","sessionId":"xxx","answerText":"..."}` |
+| `emotion_update` | 情感状态更新 | `{"type":"emotion_update","sessionId":"xxx"}` |
+
+#### 服务端 → 客户端
+
+| 消息类型 | 用途 | 格式 |
+|----------|------|------|
+| `new_question` | 推送新面试问题 | `{"type":"new_question","payload":{"content":"...","questionType":"技术基础"},"timestamp":...}` |
+| `emotion_update` | 推送情感分析结果 | `{"type":"emotion_update","payload":{"emotionScore":85,"bodyLanguageScore":80},"timestamp":...}` |
+| `evaluation_result` | 推送答案评估结果 | `{"type":"evaluation_result","payload":{"overallScore":85,...},"timestamp":...}` |
+| `final_report` | 推送最终面试报告 | `{"type":"final_report","payload":{"report":"# 面试报告..."},"timestamp":...}` |
+| `answer_received` | 确认收到回答 | `{"type":"answer_received","payload":{"message":"回答已接收"},"timestamp":...}` |
+| `error` | 错误消息 | `{"type":"error","payload":{"message":"错误描述"},"timestamp":...}` |
+
+### 完整面试流程时序图
+
+```mermaid
+sequenceDiagram
+    participant F as 前端
+    participant C as Controller
+    participant B as BusinessService
+    participant A as AgentGraph
+    participant W as WebSocket
+
+    F->>C: POST /api/interview/start
+    C->>B: startInterview()
+    B->>A: invoke(initialState)
+    A->>A: Init → JobAnalysis
+    A->>A: QuestionGenerator
+    A-->>B: 返回首个问题
+    B-->>C: 返回 sessionId + question
+    C-->>F: InterviewStartResponse
+
+    F->>W: 建立 WebSocket 连接
+
+    loop 问答循环
+        Note over F,W: 实时通信阶段
+        F->>W: video_frame (持续流)
+        W->>W: 缓冲5帧 → 分析
+        W-->>F: emotion_update
+
+        F->>W: audio_chunk (持续流)
+        W->>W: 积累到缓冲区
+
+        F->>W: answer_complete
+        W->>C: 提交完整答案
+        C->>B: submitAnswer()
+        B->>A: invoke(resume())
+        A->>A: AnswerEvaluator
+        A->>A: FollowUpDecision
+        A->>A: QuestionGenerator
+        A-->>B: 返回下一题
+        B-->>F: InterviewAnswerResponse
+        W-->>F: new_question
+    end
+
+    F->>C: POST /api/interview/end/{id}
+    C->>B: endInterview()
+    B->>A: invoke(finalize)
+    A->>A: ReportGenerator
+    A-->>B: 返回报告
+    B-->>F: ReportResponse
+    W-->>F: final_report
+
+    F->>W: 关闭连接
+```
+
+### 多模态数据流
+
+```mermaid
+graph LR
+    subgraph Input["输入数据"]
+        VIDEO["视频帧流"]
+        AUDIO["音频流"]
+        TEXT["回答文本"]
+    end
+
+    subgraph Process["处理流程"]
+        BUF["FrameBuffer<br/>(缓冲5帧)"]
+        VISION["qwen-image-2.0-pro<br/>表情/肢体分析"]
+        ASR["paraformer-realtime-v2<br/>语音转文字"]
+        EMOTION["qwen-plus<br/>语调情感分析"]
+        EVAL["综合评估"]
+    end
+
+    subgraph Output["输出结果"]
+        EMOTION_SCORE["情绪分数"]
+        BODY_SCORE["肢体分数"]
+        VOICE_SCORE["语调分数"]
+        TEXT_SCORE["文本评估"]
+    end
+
+    VIDEO --> BUF
+    BUF --> VISION
+    VISION --> EMOTION_SCORE
+    VISION --> BODY_SCORE
+
+    AUDIO --> ASR
+    ASR --> EMOTION
+    EMOTION --> VOICE_SCORE
+
+    TEXT --> EVAL
+    EMOTION_SCORE --> EVAL
+    BODY_SCORE --> EVAL
+    VOICE_SCORE --> EVAL
+    EVAL --> TEXT_SCORE
+```
+
+### 前端集成示例
+
+```javascript
+class InterviewClient {
+  constructor(sessionId) {
+    this.sessionId = sessionId;
+    this.ws = null;
+  }
+
+  // 建立连接
+  connect() {
+    this.ws = new WebSocket(`ws://localhost:8080/ws/interview/${this.sessionId}`);
+    this.ws.onmessage = (event) => this.handleMessage(JSON.parse(event.data));
+  }
+
+  // 发送视频帧
+  sendVideoFrame(base64Frame) {
+    this.ws.send(JSON.stringify({
+      type: "video_frame",
+      sessionId: this.sessionId,
+      frame: base64Frame
+    }));
+  }
+
+  // 发送音频块
+  sendAudioChunk(base64Audio) {
+    this.ws.send(JSON.stringify({
+      type: "audio_chunk",
+      sessionId: this.sessionId,
+      audio: base64Audio
+    }));
+  }
+
+  // 提交回答
+  submitAnswer(answerText) {
+    this.ws.send(JSON.stringify({
+      type: "answer_complete",
+      sessionId: this.sessionId,
+      answerText: answerText
+    }));
+  }
+
+  // 处理消息
+  handleMessage(data) {
+    switch(data.type) {
+      case "new_question":
+        this.displayQuestion(data.payload);
+        break;
+      case "emotion_update":
+        this.updateEmotionIndicator(data.payload);
+        break;
+      case "evaluation_result":
+        this.displayEvaluation(data.payload);
+        break;
+      case "final_report":
+        this.displayReport(data.payload);
+        break;
+    }
+  }
+}
+
+// 媒体采集示例
+async function captureVideoFrames(client) {
+  const video = document.getElementById('video');
+  const canvas = document.createElement('canvas');
+
+  setInterval(() => {
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const base64 = canvas.toDataURL('image/jpeg', 0.8);
+    client.sendVideoFrame(base64.split(',')[1]);
+  }, 1000); // 每秒1帧
+}
+
+async function captureAudioChunks(client) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const mediaRecorder = new MediaRecorder(stream);
+
+  mediaRecorder.ondataavailable = (event) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      client.sendAudioChunk(reader.result.split(',')[1]);
+    };
+    reader.readAsDataURL(event.data);
+  };
+
+  mediaRecorder.start(1000); // 每秒1块
+}
+```
 
 ## 项目结构
 
