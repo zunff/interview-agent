@@ -5,6 +5,7 @@ import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionMode
 import com.zunff.interview.service.MultimodalAnalysisService;
 import com.zunff.interview.service.PromptTemplateService;
 import com.zunff.interview.service.VideoStreamService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * 服务配置类
  */
+@Slf4j
 @Configuration
 public class ServiceConfig {
 
@@ -36,6 +38,7 @@ public class ServiceConfig {
             @Value("${spring.ai.dashscope.vision.model}") String visionModel) {
 
         // 视觉模型 Builder
+        log.info("初始化视觉模型，模型名称: {}", visionModel);
         DashScopeChatOptions visionOptions = new DashScopeChatOptions();
         visionOptions.setModel(visionModel);
         ChatClient.Builder visionBuilder = chatClientBuilder

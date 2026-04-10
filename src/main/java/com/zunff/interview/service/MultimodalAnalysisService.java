@@ -4,6 +4,7 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionModel;
+import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
@@ -42,6 +43,9 @@ public class MultimodalAnalysisService {
     @Value("${interview.multimodal.enabled:true}")
     private boolean multimodalEnabled;
 
+    @Value("${spring.ai.dashscope.chat.options.model:qwen-plus}")
+    private String chatModelName;
+
     public MultimodalAnalysisService(ChatClient.Builder chatClientBuilder,
                                       ChatClient.Builder visionChatClientBuilder,
                                       AudioTranscriptionModel transcriptionModel,
@@ -61,6 +65,7 @@ public class MultimodalAnalysisService {
      */
     public VisionAnalysisResult analyzeVideoFrames(List<String> base64Frames) {
         if (base64Frames == null || base64Frames.isEmpty()) {
+            log.info("视频帧数据为空，跳过视觉分析");
             return VisionAnalysisResult.empty();
         }
 
@@ -116,10 +121,11 @@ public class MultimodalAnalysisService {
      */
     public AudioAnalysisResult analyzeAudio(String audioBase64) {
         if (audioBase64 == null || audioBase64.isEmpty()) {
+            log.info("音频数据为空，跳过ASR转录");
             return AudioAnalysisResult.empty();
         }
 
-        log.info("开始分析音频数据");
+        log.info("开始分析音频数据，音频Base64长度: {}", audioBase64.length());
 
         if (!multimodalEnabled) {
             log.debug("多模态分析已禁用，返回默认结果");
@@ -130,12 +136,14 @@ public class MultimodalAnalysisService {
             // Step 1: 使用 Spring AI AudioTranscriptionModel 转录
             byte[] audioData = Base64.getDecoder().decode(audioBase64);
             ByteArrayResource audioResource = new ByteArrayResource(audioData);
+            log.info("ASR转录请求：音频数据大小={} bytes，开始调用转录模型", audioData.length);
 
             AudioTranscriptionResponse response = transcriptionModel.call(
                     new AudioTranscriptionPrompt(audioResource));
 
             String transcribedText = response.getResult().getOutput();
-            log.info("音频转录完成，文本长度: {}", transcribedText != null ? transcribedText.length() : 0);
+            log.info("ASR转录完成，文本长度: {}，转录内容: {}", transcribedText != null ? transcribedText.length() : 0,
+                    transcribedText != null ? transcribedText.substring(0, Math.min(100, transcribedText.length())) : "null");
 
             // Step 2: 使用文本模型分析情感语调
             return analyzeAudioEmotion(transcribedText);
@@ -161,10 +169,13 @@ public class MultimodalAnalysisService {
             String prompt = promptTemplateService.getPrompt("audio-emotion-analysis",
                     Map.of("transcribedText", transcribedText));
 
-            // 使用文本模型 ChatClient (qwen3.5-plus)
+            // 使用文本模型 ChatClient，显式在 prompt 级别覆盖模型
+            DashScopeChatOptions textOptions = new DashScopeChatOptions();
+            textOptions.setModel(chatModelName);
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
+                    .options(textOptions)
                     .user(prompt)
                     .call()
                     .content();
@@ -217,10 +228,13 @@ public class MultimodalAnalysisService {
         userPrompt.append("- 语音分析：").append(audioResult.getToneAnalysis()).append("\n");
 
         try {
-            // 综合评估使用普通文本模型
+            // 综合评估使用普通文本模型，显式在 prompt 级别覆盖模型
+            DashScopeChatOptions textOptions = new DashScopeChatOptions();
+            textOptions.setModel(chatModelName);
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
+                    .options(textOptions)
                     .system(systemPrompt)
                     .user(userPrompt.toString())
                     .call()

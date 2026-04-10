@@ -59,6 +59,7 @@ public class InterviewBusinessService {
      * 开始面试
      */
     public InterviewStartResponse startInterview(StartInterviewRequest request) {
+        log.info("开始面试，简历长度: {}, 岗位: {}, 面试类型: {}", request.getResume().length(), request.getJobInfo(), request.getInterviewType());
         // 创建会话
         var session = sessionService.createSession(
                 request.getResume(),
@@ -84,6 +85,7 @@ public class InterviewBusinessService {
         try {
             Optional<InterviewState> result = interviewAgent.invoke(initialState, config);
 
+            log.info("面试Agent执行完成，sessionId: {}", session.getSessionId());
             String currentQuestion = result.map(InterviewState::currentQuestion).orElse("");
             String questionType = result.map(InterviewState::questionType).orElse(QuestionType.TECHNICAL_BASIC.getDisplayName());
             int questionIndex = result.map(InterviewState::questionIndex).orElse(1);
