@@ -14,65 +14,77 @@
 | PostgreSQL + pgvector | - | 数据库与向量存储 |
 | MyBatis-Plus | 3.5.9 | ORM 框架 |
 
-| 用途 | 模型 | 说明 |
-|------|------|------|
-| 文本生成/评估 | qwen-plus | 面试问题生成、答案评估、情感分析 |
-| 视觉分析 | qwen-image-2.0-pro | 视频帧表情识别、肢体语言分析 |
-| 语音转录 | paraformer-realtime-v2 | 实时 ASR 语音转文字 |
+| 用途 | 说明 |
+|------|------|
+| 大语言模型 | 面试问题生成、答案评估、情感分析 |
+| 视觉模型 | 视频帧表情识别、肢体语言分析 |
+| 语音模型 | 实时 ASR 语音转文字 |
 
 ## 核心功能
 
 - **智能面试流程**: 根据简历和岗位自动生成针对性问题，支持技术基础、项目经验、业务理解、软技能等多维度考察
 - **多分支追问策略**: 根据回答质量动态选择追问策略（普通追问/低分深入/高分挑战）
 - **并行多模态评估**: 视觉分析（表情/肢体语言）与音频分析（语调情感/流畅度）并行执行
-- **实时交互**: WebSocket 实时推送问题和情感反馈，面试结束生成综合报告
+- **实时交互**: WebSocket 实时推送问题，缓存视频帧和音频流，回答完成后批量分析
 
 ## 整体架构
 
 系统采用 **LangGraph4j 主图 + 子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析→技术轮→业务轮→报告），每个轮次通过可复用的子图实例执行。
 
 ```mermaid
-graph TB
-    subgraph MainGraph["InterviewAgentGraph 主图"]
-        START([START]) --> INIT[InitInterviewNode<br/>初始化面试]
-        INIT --> JOB[JobAnalysisNode<br/>岗位分析]
+graph TD
+    START((START))
+
+    subgraph 主图["InterviewAgentGraph"]
+        direction TD
+        INIT[InitInterviewNode<br/>初始化面试] --> JOB[JobAnalysisNode<br/>岗位分析]
         JOB --> TECH[InterviewRoundGraph<br/>技术轮子图]
-        TECH --> ROUTER[RoundTransitionNode<br/>轮次决策]
+
+        TECH --> ROUTER{RoundTransitionNode<br/>轮次决策}
+
         ROUTER -->|技术轮未完成| TECH
         ROUTER -->|切换业务轮| BIZ[InterviewRoundGraph<br/>业务轮子图]
-        ROUTER -->|提前结束| REPORT[ReportGeneratorNode<br/>生成报告]
+        ROUTER -->|提前结束| REPORT
+
         BIZ --> ROUTER
-        ROUTER -->|业务完成| REPORT
-        REPORT --> END([END])
+        ROUTER -->|业务完成| REPORT[ReportGeneratorNode<br/>生成报告]
     end
+
+    START --> INIT
+    REPORT --> END((END))
 ```
 
 ### 子图架构（并行多模态分析 + 多分支追问）
 
 ```mermaid
-graph TB
-    subgraph SubGraph["InterviewRoundGraph 子图"]
-        SUB_START([START]) --> GEN[QuestionGeneratorNode<br/>生成问题]
-        GEN --> ASK[AskQuestionNode<br/>记录问题]
+graph TD
+    SUB_START((START))
+
+    subgraph 子图["InterviewRoundGraph"]
+        direction TD
+        GEN[QuestionGeneratorNode<br/>生成问题] --> ASK[AskQuestionNode<br/>记录问题]
+
         ASK --> WAIT[WaitForAnswerNode<br/>等待回答]
-        
+
         WAIT --> VISION[VisionAnalysisNode<br/>视觉分析]
         WAIT --> AUDIO[AudioAnalysisNode<br/>音频分析]
-        
+
         VISION --> AGG[AggregateAnalysisNode<br/>聚合评估]
         AUDIO --> AGG
-        
-        AGG --> DECISION[FollowUpDecisionNode<br/>追问决策]
-        
-        DECISION -->|得分<50| DEEP[DeepDiveNode<br/>深入追问]
-        DECISION -->|得分>90| CHALLENGE[ChallengeQuestionNode<br/>挑战问题]
+
+        AGG --> DECISION{FollowUpDecisionNode<br/>追问决策}
+
+        DECISION -->|得分 < 50| DEEP[DeepDiveNode<br/>深入追问]
+        DECISION -->|得分 > 90| CHALLENGE[ChallengeQuestionNode<br/>挑战问题]
         DECISION -->|普通追问| FOLLOW[GenerateFollowUpNode<br/>生成追问]
-        DECISION -->|下一题| SUB_END([END])
-        
+        DECISION -->|下一题| SUB_END((END))
+
         DEEP --> ASK
         CHALLENGE --> ASK
         FOLLOW --> ASK
     end
+
+    SUB_START --> GEN
 ```
 
 ### 关键架构特性
@@ -106,21 +118,21 @@ graph TB
 ### 多模态分析流水线
 
 ```
-视频帧 → qwen-image-2.0-pro → 表情/肢体语言评分 ─┐
-                                                 ├─→ 聚合评估
-音频数据 → ASR转录 → qwen-plus → 语调情感分析 ───┘
+视频帧 → 视觉模型 → 表情/肢体语言评分 ──┐
+                                        ├─→ 聚合评估
+音频数据 → 语音模型转录 → 大语言模型 → 语调情感分析 ─┘
 ```
 
 ### 熔断与容错
 
 - **LLM 熔断**: 连续失败 3 次自动终止图执行，`CircuitBreakerHelper` 统一管理
 - **重试策略**: 最大重试 3 次，指数退避（1s→2s→4s），仅对 429/5xx 重试
-- **递归限制**: 主图 25，子图 15
+- **递归限制**: 主图 8，子图 8
 - **节点兜底**: 各节点 catch 异常后返回默认值并递增失败计数
 
 ## 前后端交互
 
-系统采用 **REST API + WebSocket** 双通道通信：REST 处理核心流程控制，WebSocket 处理实时数据传输（视频帧、音频流、情感反馈）。
+系统采用 **REST API + WebSocket** 双通道通信：REST 处理核心流程控制，WebSocket 处理实时数据传输（视频帧缓存、音频流缓存）。
 
 ### REST API
 
@@ -142,16 +154,15 @@ graph TB
 
 | 类型 | 描述 |
 |------|------|
-| `video_frame` | 视频帧（实时表情分析） |
-| `audio_chunk` | 音频块（语音转写） |
-| `answer_complete` | 完整回答提交 |
+| `video_frame` | 视频帧（缓存，answer_complete 时批量分析） |
+| `audio_chunk` | 音频块（缓存，answer_complete 时批量分析） |
+| `answer_complete` | 回答完成信号（触发缓存数据分析和下一题生成） |
 
 服务端 → 客户端：
 
 | 类型 | 描述 |
 |------|------|
 | `new_question` | 推送新面试问题 |
-| `emotion_update` | 情感分析结果 |
 | `evaluation_result` | 答案评估结果 |
 | `final_report` | 最终面试报告 |
 
