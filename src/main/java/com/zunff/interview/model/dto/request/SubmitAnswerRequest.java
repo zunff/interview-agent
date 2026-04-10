@@ -26,4 +26,7 @@ public class SubmitAnswerRequest {
 
     @Schema(description = "回答音频数据（Base64编码）")
     private String answerAudio;
+
+    @Schema(description = "关键帧数据（Base64编码，逗号分隔，内部使用）", hidden = true)
+    private String videoFrames;
 }

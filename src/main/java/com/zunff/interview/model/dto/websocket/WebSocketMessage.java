@@ -42,8 +42,6 @@ public class WebSocketMessage<T> {
     public static class Type {
         /** 新问题 */
         public static final String NEW_QUESTION = "new_question";
-        /** 情感更新 */
-        public static final String EMOTION_UPDATE = "emotion_update";
         /** 评估结果 */
         public static final String EVALUATION_RESULT = "evaluation_result";
         /** 最终报告 */

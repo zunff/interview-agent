@@ -43,7 +43,7 @@ public class InterviewController {
     /**
      * 提交答案
      */
-    @Operation(summary = "提交答案", description = "提交候选人对当前问题的回答")
+    @Operation(summary = "【测试用】提交答案", description = "测试时通过 HTTP 提交文本答案，生产环境使用 WebSocket 的 answer_complete 信号")
     @PostMapping("/answer")
     public ApiResponse<InterviewAnswerResponse> submitAnswer(@Valid @RequestBody SubmitAnswerRequest request) {
         log.info("提交答案，会话: {}", request.getSessionId());

@@ -4,14 +4,11 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.request.SubmitAnswerRequest;
-import com.zunff.interview.model.dto.websocket.EmotionUpdateMessage;
 import com.zunff.interview.model.dto.websocket.QuestionMessage;
 import com.zunff.interview.model.dto.websocket.ReportMessage;
 import com.zunff.interview.model.dto.websocket.WebSocketMessage;
-import com.zunff.interview.model.entity.InterviewSessionEntity;
 import com.zunff.interview.service.AudioStreamService;
 import com.zunff.interview.service.InterviewBusinessService;
-import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.VideoStreamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,7 +36,6 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
     private final VideoStreamService videoStreamService;
     private final AudioStreamService audioStreamService;
-    private final InterviewSessionService sessionService;
     private final InterviewBusinessService interviewBusinessService;
 
     /** WebSocket 会话映射 */
@@ -70,8 +66,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         switch (type) {
             case "video_frame" -> handleVideoFrame(interviewSessionId, data);
             case "audio_chunk" -> handleAudioChunk(interviewSessionId, data);
-            case "answer_complete" -> handleAnswerComplete(interviewSessionId, data);
-            case "emotion_update" -> handleEmotionUpdate(interviewSessionId, data);
+            case "answer_complete" -> handleAnswerComplete(interviewSessionId);
             default -> log.warn("未知的消息类型: {}", type);
         }
     }
@@ -92,51 +87,38 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private void handleVideoFrame(String sessionId, JSONObject data) {
         String frameData = data.getStr("frame");
         videoStreamService.handleVideoFrame(sessionId, frameData);
-
-        if (videoStreamService.getBufferSize(sessionId) >= 5) {
-            var result = videoStreamService.analyzeFrames(sessionId);
-            sendEmotionUpdate(sessionId, result.getEmotionScore(), result.getBodyLanguageScore());
-        }
     }
 
     private void handleAudioChunk(String sessionId, JSONObject data) {
-        var session = sessionService.getBySessionId(sessionId);
-        if (session != null) {
-            sessionService.updateStatus(sessionId, InterviewSessionEntity.Status.WAITING_ANSWER.name());
-        }
-
         String audioBase64 = data.getStr("audio");
         if (audioBase64 != null && !audioBase64.isEmpty()) {
             byte[] audioData = java.util.Base64.getDecoder().decode(audioBase64);
             audioStreamService.appendChunk(sessionId, audioData);
-            log.debug("积累音频块，会话: {}, 当前缓冲: {} bytes", sessionId, audioStreamService.getBufferSize(sessionId));
-        } else {
-            log.debug("接收到音频块但无数据，会话: {}", sessionId);
+            log.debug("缓存音频块，会话: {}, 当前缓冲: {} bytes", sessionId, audioStreamService.getBufferSize(sessionId));
         }
     }
 
-    private void handleAnswerComplete(String sessionId, JSONObject data) {
-        String answerText = data.getStr("answerText", "");
-        String answerAudio = data.getStr("answerAudio", "");
+    private void handleAnswerComplete(String sessionId) {
+        log.info("收到 answer_complete 信号，会话: {}", sessionId);
 
-        log.info("收到完整回答，会话: {}, 文本长度: {}", sessionId, answerText.length());
+        // 从缓存取关键帧
+        List<String> frames = videoStreamService.getFramesForAnalysis(sessionId);
+        log.info("从缓存取到 {} 帧视频数据", frames.size());
 
-        // 如果没有直接传入音频，尝试从缓冲区获取积累的音频块
-        if ((answerAudio == null || answerAudio.isEmpty()) && audioStreamService.getBufferSize(sessionId) > 0) {
-            byte[] completeAudio = audioStreamService.getCompleteAudio(sessionId);
-            if (completeAudio != null) {
-                answerAudio = java.util.Base64.getEncoder().encodeToString(completeAudio);
-                log.info("使用缓冲区音频，大小: {} bytes", completeAudio.length);
-            }
+        // 从缓存取音频
+        String audioBase64 = null;
+        byte[] audioData = audioStreamService.getCompleteAudio(sessionId);
+        if (audioData != null) {
+            audioBase64 = java.util.Base64.getEncoder().encodeToString(audioData);
+            log.info("从缓存取到音频数据，大小: {} bytes", audioData.length);
         }
 
         sendAnswerReceived(sessionId);
 
-        // 通过业务服务处理回答
         SubmitAnswerRequest request = SubmitAnswerRequest.builder()
                 .sessionId(sessionId)
-                .answerText(answerText.isEmpty() ? null : answerText)
-                .answerAudio(answerAudio)
+                .videoFrames(frames.isEmpty() ? null : String.join(",", frames))
+                .answerAudio(audioBase64)
                 .build();
 
         try {
@@ -145,10 +127,6 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
             log.error("WebSocket 提交答案失败，会话: {}", sessionId, e);
             sendErrorMessage(sessionId, "答案处理失败: " + e.getMessage());
         }
-    }
-
-    private void handleEmotionUpdate(String sessionId, JSONObject data) {
-        log.debug("收到情感更新: {}", sessionId);
     }
 
     /**
@@ -160,20 +138,6 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
                 question
         ));
         log.info("发送问题到前端: [{}] {}", question.getQuestionType(), question.getContent());
-    }
-
-    /**
-     * 发送情感更新
-     */
-    public void sendEmotionUpdate(String sessionId, int emotionScore, int bodyLanguageScore) {
-        EmotionUpdateMessage message = EmotionUpdateMessage.builder()
-                .emotionScore(emotionScore)
-                .bodyLanguageScore(bodyLanguageScore)
-                .build();
-        sendMessage(sessionId, WebSocketMessage.of(
-                WebSocketMessage.Type.EMOTION_UPDATE,
-                message
-        ));
     }
 
     /**

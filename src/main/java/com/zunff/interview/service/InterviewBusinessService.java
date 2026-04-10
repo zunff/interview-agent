@@ -20,6 +20,7 @@ import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -149,8 +150,14 @@ public class InterviewBusinessService {
             // 执行多模态分析
             log.info("开始分析答案，问题: {}, 答案长度: {}", questionType, answerText != null ? answerText.length() : 0);
 
-            var visionResult = multimodalAnalysisService.analyzeVideoFrames(null);
-            var audioResult = multimodalAnalysisService.analyzeAudio(null);
+            // 解析缓存的关键帧
+            List<String> frames = null;
+            if (request.getVideoFrames() != null && !request.getVideoFrames().isEmpty()) {
+                frames = Arrays.asList(request.getVideoFrames().split(","));
+            }
+
+            var visionResult = multimodalAnalysisService.analyzeVideoFrames(frames);
+            var audioResult = multimodalAnalysisService.analyzeAudio(request.getAnswerAudio());
             var evaluation = multimodalAnalysisService.comprehensiveEvaluate(
                     question, answerText, visionResult, audioResult, "evaluation");
 
