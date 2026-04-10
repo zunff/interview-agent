@@ -20,7 +20,8 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.1.4</spring-ai.version>
+        <spring-ai.version>1.0.0</spring-ai.version>
+        <spring-ai-alibaba.version>1.0.0.2</spring-ai-alibaba.version>
         <langgraph4j.version>1.8.11</langgraph4j.version>
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <hutool.version>5.8.32</hutool.version>
@@ -35,18 +36,17 @@
                 <enabled>false</enabled>
             </snapshots>
         </repository>
-        <repository>
-            <id>spring-snapshots</id>
-            <name>Spring Snapshots</name>
-            <url>https://repo.spring.io/snapshot</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-        </repository>
     </repositories>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-bom</artifactId>
+                <version>${spring-ai-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
@@ -89,17 +89,16 @@
             <artifactId>spring-messaging</artifactId>
         </dependency>
 
-        <!-- Spring AI OpenAI (兼容通义千问等 OpenAI 规范 API) -->
+        <!-- Spring AI Alibaba DashScope (通义千问、语音识别等) -->
         <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
         </dependency>
 
-        <!-- Spring AI PGVector Store -->
+        <!-- Spring AI PGVector Store Starter (includes auto-configuration) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-pgvector-store</artifactId>
-            <version>${spring-ai.version}</version>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
         </dependency>
 
         <!-- LangGraph4j Core -->
@@ -109,7 +108,7 @@
             <version>${langgraph4j.version}</version>
         </dependency>
 
-        <!-- LangGraph4j Agent Executor with Spring AI -->
+        <!-- LangGraph4j Spring AI Integration -->
         <dependency>
             <groupId>org.bsc.langgraph4j</groupId>
             <artifactId>langgraph4j-springai-agentexecutor</artifactId>
@@ -170,6 +169,13 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- SpringDoc OpenAPI 接口文档 -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.6</version>
         </dependency>
 
         <!-- Testing -->

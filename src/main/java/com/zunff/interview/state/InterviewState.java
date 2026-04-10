@@ -2,6 +2,8 @@ package com.zunff.interview.state;
 
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
+import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.JobAnalysisResult;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
@@ -82,6 +84,10 @@ public class InterviewState extends AgentState {
     public static final String JOB_ANALYSIS_RESULT = "jobAnalysisResult";          // JobAnalysisResult 对象
     public static final String CURRENT_QUESTION_CATEGORY = "currentQuestionCategory"; // 当前题目类别索引
 
+    // ========== 熔断机制 ==========
+    public static final String CONSECUTIVE_LLM_FAILURES = "consecutiveLLMFailures";
+    public static final String MAX_LLM_FAILURES = "maxLLMFailures";                // 默认3
+
     /**
      * LastValue Reducer: 新值覆盖旧值
      */
@@ -114,7 +120,7 @@ public class InterviewState extends AgentState {
         SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC.getDisplayName()));
         SCHEMA.put(ANSWER_TEXT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(ANSWER_AUDIO, Channels.base(new LastValueReducer<>(), () -> ""));
-        SCHEMA.put(CURRENT_EVALUATION, Channels.base(new LastValueReducer<>(), () -> null));
+        SCHEMA.put(CURRENT_EVALUATION, Channels.base(new LastValueReducer<>(), EvaluationBO::new));
         SCHEMA.put(FOLLOW_UP_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(NEED_FOLLOW_UP, Channels.base(new LastValueReducer<>(), () -> false));
         SCHEMA.put(FOLLOW_UP_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
@@ -139,8 +145,12 @@ public class InterviewState extends AgentState {
         SCHEMA.put(MODALITY_CONCERN, Channels.base(new LastValueReducer<>(), () -> false));
 
         // 岗位分析
-        SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), () -> null));
+        SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), JobAnalysisResult::new));
         SCHEMA.put(CURRENT_QUESTION_CATEGORY, Channels.base(new LastValueReducer<>(), () -> 0));
+
+        // 熔断机制
+        SCHEMA.put(CONSECUTIVE_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 0));
+        SCHEMA.put(MAX_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 3));
 
         // 上下文信息也使用 base
         SCHEMA.put(RESUME, Channels.base(new LastValueReducer<>(), () -> ""));
@@ -427,5 +437,30 @@ public class InterviewState extends AgentState {
      */
     public boolean hasJobAnalysisResult() {
         return data().containsKey(JOB_ANALYSIS_RESULT) && data().get(JOB_ANALYSIS_RESULT) != null;
+    }
+
+    // ========== 熔断机制便捷方法 ==========
+
+    /**
+     * 获取连续 LLM 失败次数
+     */
+    public int consecutiveLLMFailures() {
+        Object value = data().get(CONSECUTIVE_LLM_FAILURES);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    /**
+     * 获取最大允许 LLM 失败次数
+     */
+    public int maxLLMFailures() {
+        Object value = data().get(MAX_LLM_FAILURES);
+        return value instanceof Number ? ((Number) value).intValue() : 3;
+    }
+
+    /**
+     * 是否触发 LLM 熔断
+     */
+    public boolean isLLMCircuitBroken() {
+        return consecutiveLLMFailures() >= maxLLMFailures();
     }
 }

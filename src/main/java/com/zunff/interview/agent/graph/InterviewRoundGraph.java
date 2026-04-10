@@ -13,9 +13,11 @@ import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bsc.langgraph4j.CompileConfig;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -80,14 +82,9 @@ public class InterviewRoundGraph {
                         )
                 )
                 .addEdge(generateFollowUp, askQuestion)
-                .compile();
-    }
-
-    /**
-     * 获取等待回答节点名称
-     */
-    public static String getWaitForAnswerNodeName(InterviewRound round) {
-        String prefix = round.isTechnical() ? NodeNames.TECH_PREFIX : NodeNames.BIZ_PREFIX;
-        return prefix + NodeNames.WAIT_FOR_ANSWER;
+                .compile(CompileConfig.builder()
+                        .checkpointSaver(new MemorySaver())
+                        .recursionLimit(15)
+                        .build());
     }
 }

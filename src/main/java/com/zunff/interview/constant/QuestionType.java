@@ -17,7 +17,7 @@ public enum QuestionType {
     // ========== 业务轮问题类型 ==========
     BUSINESS_UNDERSTANDING("业务理解"),
     COMMUNICATION("沟通协作"),
-    PROBLEM_SOLVING("问题解决"),
+    PROBLEM_SOLVING("场景分析"),
     PROFESSIONALISM("职业素养"),
 
     // ========== 通用类型 ==========

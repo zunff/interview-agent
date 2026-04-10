@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
+
 /**
  * 岗位分析结果
  * 用于存储岗位类型分析和题目分配结果
@@ -13,7 +15,9 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JobAnalysisResult {
+public class JobAnalysisResult implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /**
      * 岗位类型

@@ -3,6 +3,7 @@ package com.zunff.interview.agent.nodes;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.constant.InterviewRound;
+import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.service.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -34,8 +35,7 @@ public class FollowUpDecisionNode {
 
         String question = state.currentQuestion();
         String answerText = state.answerText();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> evaluation = (Map<String, Object>) state.data().get(InterviewState.CURRENT_EVALUATION);
+        EvaluationBO evaluation = (EvaluationBO) state.data().get(InterviewState.CURRENT_EVALUATION);
         int followUpCount = state.followUpCount();
         int maxFollowUps = state.maxFollowUpsForCurrentRound();
         InterviewRound round = state.currentRoundEnum();
@@ -60,14 +60,13 @@ public class FollowUpDecisionNode {
 
         if (evaluation != null) {
             userPrompt.append("评估结果：\n");
-            userPrompt.append("- 综合得分：").append(evaluation.get("overallScore")).append("\n");
-            userPrompt.append("- 准确性：").append(evaluation.get("accuracy")).append("\n");
-            userPrompt.append("- 逻辑性：").append(evaluation.get("logic")).append("\n");
-            userPrompt.append("- 流畅度：").append(evaluation.get("fluency")).append("\n");
-            userPrompt.append("- 自信度：").append(evaluation.get("confidence")).append("\n");
+            userPrompt.append("- 综合得分：").append(evaluation.getOverallScore()).append("\n");
+            userPrompt.append("- 准确性：").append(evaluation.getAccuracy()).append("\n");
+            userPrompt.append("- 逻辑性：").append(evaluation.getLogic()).append("\n");
+            userPrompt.append("- 流畅度：").append(evaluation.getFluency()).append("\n");
+            userPrompt.append("- 自信度：").append(evaluation.getConfidence()).append("\n");
 
-            @SuppressWarnings("unchecked")
-            java.util.List<String> weaknesses = (java.util.List<String>) evaluation.get("weaknesses");
+            java.util.List<String> weaknesses = evaluation.getWeaknesses();
             if (weaknesses != null && !weaknesses.isEmpty()) {
                 userPrompt.append("- 不足之处：").append(String.join("、", weaknesses)).append("\n");
             }

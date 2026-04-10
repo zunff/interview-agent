@@ -60,6 +60,7 @@ public class JobAnalysisNode {
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.JOB_ANALYSIS_RESULT, result);
+            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, 0); // LLM 调用成功，重置失败计数
 
             log.info("岗位分析完成: 类型={}, 技术基础={}, 项目={}, 业务={}, 软技能={}",
                     result.getJobType().getDisplayName(),
@@ -72,9 +73,12 @@ public class JobAnalysisNode {
 
         } catch (Exception e) {
             log.error("岗位分析失败", e);
-            // 返回默认配置
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.JOB_ANALYSIS_RESULT, getDefaultJobAnalysisResult());
+            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, state.consecutiveLLMFailures() + 1);
+            if (state.consecutiveLLMFailures() + 1 >= state.maxLLMFailures()) {
+                throw new RuntimeException("LLM 连续调用失败达到 " + state.maxLLMFailures() + " 次，触发熔断", e);
+            }
             return CompletableFuture.completedFuture(updates);
         }
     }

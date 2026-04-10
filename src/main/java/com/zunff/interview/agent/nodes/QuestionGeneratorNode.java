@@ -112,6 +112,7 @@ public class QuestionGeneratorNode {
             updates.put(InterviewState.QUESTION_TYPE, result.questionType);
             updates.put(InterviewState.QUESTION_INDEX, questionIndex + 1);
             updates.put(InterviewState.FOLLOW_UP_COUNT, 0); // 重置追问计数
+            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, 0); // LLM 调用成功，重置失败计数
 
             log.info("生成问题成功: [{}] {}", result.questionType, result.question);
 
@@ -119,8 +120,12 @@ public class QuestionGeneratorNode {
 
         } catch (Exception e) {
             log.error("生成问题失败", e);
-            // 返回默认问题
             Map<String, Object> updates = new HashMap<>();
+            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, state.consecutiveLLMFailures() + 1);
+            if (state.consecutiveLLMFailures() + 1 >= state.maxLLMFailures()) {
+                throw new RuntimeException("LLM 连续调用失败达到 " + state.maxLLMFailures() + " 次，触发熔断", e);
+            }
+            // 返回默认问题
             updates.put(InterviewState.CURRENT_QUESTION, "请简单介绍一下你的技术背景和项目经验。");
             updates.put(InterviewState.QUESTION_TYPE, "项目经验");
             updates.put(InterviewState.QUESTION_INDEX, questionIndex + 1);

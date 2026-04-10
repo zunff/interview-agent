@@ -3,10 +3,13 @@ package com.zunff.interview.service;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionModel;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import com.zunff.interview.model.dto.analysis.VideoAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
+import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.content.Media;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,32 +19,41 @@ import org.springframework.util.MimeTypeUtils;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 多模态分析服务
- * 使用 Spring AI 调用通义千问 VL 和 Audio API 进行视频帧和音频分析
+ * 使用 Spring AI 调用通义千问模型进行视频帧和音频分析
+ *
+ * 模型分工：
+ * - chatClientBuilder (qwen-plus): 文本评估 + 语音情感分析
+ * - visionChatClientBuilder (qwen-image-2.0-pro): 视频帧分析
+ * - audioTranscriptionModel (Spring AI Alibaba): 语音转录 ASR
  */
 @Slf4j
 public class MultimodalAnalysisService {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient.Builder chatClientBuilder;       // 文本评估 + 情感分析
+    private final ChatClient.Builder visionChatClientBuilder; // 视觉分析
+    private final AudioTranscriptionModel transcriptionModel; // 语音转录 (Spring AI Alibaba)
     private final PromptTemplateService promptTemplateService;
-
-    @Value("${interview.multimodal.vl-model:qwen-vl-max}")
-    private String vlModel;
 
     @Value("${interview.multimodal.enabled:true}")
     private boolean multimodalEnabled;
 
     public MultimodalAnalysisService(ChatClient.Builder chatClientBuilder,
+                                      ChatClient.Builder visionChatClientBuilder,
+                                      AudioTranscriptionModel transcriptionModel,
                                       PromptTemplateService promptTemplateService) {
         this.chatClientBuilder = chatClientBuilder;
+        this.visionChatClientBuilder = visionChatClientBuilder;
+        this.transcriptionModel = transcriptionModel;
         this.promptTemplateService = promptTemplateService;
     }
 
     /**
      * 分析视频帧
-     * 使用 Spring AI 多模态能力调用通义千问 VL 模型
+     * 使用视觉模型 qwen-image-2.0-pro
      *
      * @param base64Frames Base64编码的视频帧列表
      * @return 分析结果
@@ -51,7 +63,7 @@ public class MultimodalAnalysisService {
             return VideoAnalysisResult.empty();
         }
 
-        log.info("开始分析 {} 帧视频数据", base64Frames.size());
+        log.info("开始分析 {} 帧视频数据，使用视觉模型", base64Frames.size());
 
         if (!multimodalEnabled) {
             log.debug("多模态分析已禁用，返回默认结果");
@@ -75,8 +87,8 @@ public class MultimodalAnalysisService {
                 mediaList.add(new Media(MimeTypeUtils.IMAGE_JPEG, resource));
             }
 
-            // 使用 Spring AI 的 ChatClient 发送多模态请求
-            ChatClient chatClient = chatClientBuilder.build();
+            // 使用视觉模型 ChatClient
+            ChatClient chatClient = visionChatClientBuilder.build();
 
             String response = chatClient.prompt()
                     .user(userSpec -> {
@@ -96,7 +108,8 @@ public class MultimodalAnalysisService {
 
     /**
      * 分析音频
-     * 使用 Spring AI 调用通义千问 Audio 模型
+     * 步骤1: 使用 Spring AI AudioTranscriptionModel 转录语音
+     * 步骤2: 使用文本模型分析情感语调
      *
      * @param audioBase64 Base64编码的音频数据
      * @return 分析结果
@@ -114,28 +127,53 @@ public class MultimodalAnalysisService {
         }
 
         try {
-            // 从模板加载 prompt
-            String prompt = promptTemplateService.getPrompt("audio-analysis");
+            // Step 1: 使用 Spring AI AudioTranscriptionModel 转录
+            byte[] audioData = Base64.getDecoder().decode(audioBase64);
+            ByteArrayResource audioResource = new ByteArrayResource(audioData);
 
-            // 构建音频 Media 对象
-            byte[] audioBytes = Base64.getDecoder().decode(audioBase64);
-            ByteArrayResource resource = new ByteArrayResource(audioBytes);
-            Media audioMedia = new Media(MimeTypeUtils.parseMimeType("audio/wav"), resource);
+            AudioTranscriptionResponse response = transcriptionModel.call(
+                    new AudioTranscriptionPrompt(audioResource));
 
-            ChatClient chatClient = chatClientBuilder.build();
+            String transcribedText = response.getResult().getOutput();
+            log.info("音频转录完成，文本长度: {}", transcribedText != null ? transcribedText.length() : 0);
 
-            String response = chatClient.prompt()
-                    .user(userSpec -> {
-                        userSpec.text(prompt);
-                        userSpec.media(audioMedia);
-                    })
-                    .call()
-                    .content();
-
-            return parseAudioAnalysisResult(response);
+            // Step 2: 使用文本模型分析情感语调
+            return analyzeAudioEmotion(transcribedText);
 
         } catch (Exception e) {
             log.error("音频分析失败", e);
+            return AudioAnalysisResult.defaultResult();
+        }
+    }
+
+    /**
+     * 使用文本模型分析转录文本的情感语调
+     *
+     * @param transcribedText 转录文本
+     * @return 音频分析结果
+     */
+    private AudioAnalysisResult analyzeAudioEmotion(String transcribedText) {
+        if (transcribedText == null || transcribedText.isEmpty()) {
+            return AudioAnalysisResult.defaultResult();
+        }
+
+        try {
+            // 从模板加载情感分析 prompt
+            String prompt = promptTemplateService.getPrompt("audio-emotion-analysis",
+                    Map.of("transcribedText", transcribedText));
+
+            // 使用文本模型 ChatClient (qwen3.5-plus)
+            ChatClient chatClient = chatClientBuilder.build();
+
+            String response = chatClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .content();
+
+            return parseAudioAnalysisResult(response, transcribedText);
+
+        } catch (Exception e) {
+            log.error("音频情感分析失败", e);
             return AudioAnalysisResult.defaultResult();
         }
     }
@@ -181,6 +219,7 @@ public class MultimodalAnalysisService {
         userPrompt.append("- 语音分析：").append(audioResult.getToneAnalysis()).append("\n");
 
         try {
+            // 综合评估使用普通文本模型
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
@@ -265,7 +304,7 @@ public class MultimodalAnalysisService {
     /**
      * 解析音频分析结果
      */
-    private AudioAnalysisResult parseAudioAnalysisResult(String response) {
+    private AudioAnalysisResult parseAudioAnalysisResult(String response, String transcribedText) {
         try {
             String jsonStr = extractJson(response);
             JSONObject result = JSONUtil.parseObj(jsonStr);
@@ -280,7 +319,7 @@ public class MultimodalAnalysisService {
 
             return AudioAnalysisResult.builder()
                     .voiceToneScore(voiceToneScore)
-                    .transcribedText(result.getStr("transcribedText", ""))
+                    .transcribedText(transcribedText)
                     .toneAnalysis(toneAnalysis)
                     .emotionAnalysis(emotionAnalysis)
                     .suggestions(parseStringList(result, "suggestions"))

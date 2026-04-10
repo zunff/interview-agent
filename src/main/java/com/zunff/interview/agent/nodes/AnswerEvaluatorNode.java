@@ -45,49 +45,71 @@ public class AnswerEvaluatorNode {
                 List.of()
         );
 
-        // 1. 分析视频帧
-        log.debug("开始视频帧分析，帧数: {}", answerFrames.size());
-        VideoAnalysisResult videoResult =
-                multimodalAnalysisService.analyzeVideoFrames(answerFrames);
+        try {
+            // 1. 分析视频帧
+            log.debug("开始视频帧分析，帧数: {}", answerFrames.size());
+            VideoAnalysisResult videoResult =
+                    multimodalAnalysisService.analyzeVideoFrames(answerFrames);
 
-        // 2. 分析音频
-        log.debug("开始音频分析");
-        AudioAnalysisResult audioResult =
-                answerAudio != null && !answerAudio.isEmpty()
-                        ? multimodalAnalysisService.analyzeAudio(answerAudio)
-                        : AudioAnalysisResult.empty();
+            // 2. 分析音频
+            log.debug("开始音频分析");
+            AudioAnalysisResult audioResult =
+                    answerAudio != null && !answerAudio.isEmpty()
+                            ? multimodalAnalysisService.analyzeAudio(answerAudio)
+                            : AudioAnalysisResult.empty();
 
-        // 3. 根据问题类型选择评估模板
-        String evaluationPrompt = getEvaluationPromptByQuestionType(questionType);
-        log.debug("选择评估模板: {} -> {}", questionType, evaluationPrompt);
+            // 3. 根据问题类型选择评估模板
+            String evaluationPrompt = getEvaluationPromptByQuestionType(questionType);
+            log.debug("选择评估模板: {} -> {}", questionType, evaluationPrompt);
 
-        // 4. 综合评估
-        log.debug("开始综合评估");
-        EvaluationBO evaluation = multimodalAnalysisService.comprehensiveEvaluate(
-                question,
-                answerText,
-                videoResult,
-                audioResult,
-                evaluationPrompt
-        );
+            // 4. 综合评估
+            log.debug("开始综合评估");
+            EvaluationBO evaluation = multimodalAnalysisService.comprehensiveEvaluate(
+                    question,
+                    answerText,
+                    videoResult,
+                    audioResult,
+                    evaluationPrompt
+            );
 
-        // 构建状态更新
-        Map<String, Object> updates = new HashMap<>();
-        updates.put(InterviewState.CURRENT_EVALUATION, evaluation);
-        updates.put(InterviewState.NEED_FOLLOW_UP, evaluation.isNeedFollowUp());
-        updates.put(InterviewState.FOLLOW_UP_QUESTION, evaluation.getFollowUpSuggestion());
+            // 构建状态更新
+            Map<String, Object> updates = new HashMap<>();
+            updates.put(InterviewState.CURRENT_EVALUATION, evaluation);
+            updates.put(InterviewState.NEED_FOLLOW_UP, evaluation.isNeedFollowUp());
+            updates.put(InterviewState.FOLLOW_UP_QUESTION, evaluation.getFollowUpSuggestion());
+            // LLM 调用成功，重置失败计数
+            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, 0);
 
-        // 传递多模态追问建议到状态
-        if (evaluation.getModalityFollowUpSuggestion() != null && !evaluation.getModalityFollowUpSuggestion().isEmpty()) {
-            updates.put(InterviewState.MODALITY_FOLLOW_UP_SUGGESTION, evaluation.getModalityFollowUpSuggestion());
-            updates.put(InterviewState.MODALITY_CONCERN, evaluation.isModalityConcern());
-            log.debug("多模态建议: {}", evaluation.getModalityFollowUpSuggestion());
+            // 传递多模态追问建议到状态
+            if (evaluation.getModalityFollowUpSuggestion() != null && !evaluation.getModalityFollowUpSuggestion().isEmpty()) {
+                updates.put(InterviewState.MODALITY_FOLLOW_UP_SUGGESTION, evaluation.getModalityFollowUpSuggestion());
+                updates.put(InterviewState.MODALITY_CONCERN, evaluation.isModalityConcern());
+                log.debug("多模态建议: {}", evaluation.getModalityFollowUpSuggestion());
+            }
+
+            log.info("评估完成，综合得分: {}, 是否需要追问: {}, 问题类型: {}",
+                    evaluation.getOverallScore(), evaluation.isNeedFollowUp(), questionType);
+
+            return CompletableFuture.completedFuture(updates);
+
+        } catch (Exception e) {
+            log.error("评估答案失败", e);
+            int failures = state.consecutiveLLMFailures() + 1;
+            if (failures >= state.maxLLMFailures()) {
+                throw new RuntimeException("LLM 连续调用失败达到 " + state.maxLLMFailures() + " 次，触发熔断", e);
+            }
+            Map<String, Object> updates = new HashMap<>();
+            updates.put(InterviewState.CONSECUTIVE_LLM_FAILURES, failures);
+            // 返回默认评估，继续流转
+            EvaluationBO defaultEval = EvaluationBO.builder()
+                    .accuracy(60).logic(60).fluency(60).confidence(60)
+                    .overallScore(60).needFollowUp(false)
+                    .detailedEvaluation("评估失败，使用默认评分")
+                    .build();
+            updates.put(InterviewState.CURRENT_EVALUATION, defaultEval);
+            updates.put(InterviewState.NEED_FOLLOW_UP, false);
+            return CompletableFuture.completedFuture(updates);
         }
-
-        log.info("评估完成，综合得分: {}, 是否需要追问: {}, 问题类型: {}",
-                evaluation.getOverallScore(), evaluation.isNeedFollowUp(), questionType);
-
-        return CompletableFuture.completedFuture(updates);
     }
 
     /**

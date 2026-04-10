@@ -11,9 +11,11 @@ import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bsc.langgraph4j.CompileConfig;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -76,6 +78,9 @@ public class InterviewAgentGraph {
                 )
                 .addEdge(NodeNames.BUSINESS_ROUND, NodeNames.GENERATE_REPORT)
                 .addEdge(NodeNames.GENERATE_REPORT, END)
-                .compile();
+                .compile(CompileConfig.builder()
+                        .checkpointSaver(new MemorySaver())
+                        .recursionLimit(25)
+                        .build());
     }
 }

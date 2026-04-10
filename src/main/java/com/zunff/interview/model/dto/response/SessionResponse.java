@@ -1,5 +1,6 @@
 package com.zunff.interview.model.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,17 +15,18 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "会话状态响应")
 public class SessionResponse {
 
-    /** 会话ID */
+    @Schema(description = "面试会话ID", example = "interview-123e4567-e89b-12d3-a456-426614174000")
     private String sessionId;
 
-    /** 会话状态 */
+    @Schema(description = "会话状态", example = "in_progress", allowableValues = {"created", "in_progress", "waiting_answer", "completed"})
     private String status;
 
-    /** 当前问题序号 */
+    @Schema(description = "当前问题序号", example = "3")
     private int currentQuestionIndex;
 
-    /** 创建时间 */
+    @Schema(description = "会话创建时间", example = "2026-04-09T10:30:00")
     private LocalDateTime createTime;
 }

@@ -1,5 +1,6 @@
 package com.zunff.interview.model.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,38 +13,35 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "提交答案响应")
 public class InterviewAnswerResponse {
 
-    /** 状态：continue/finished */
+    @Schema(description = "面试状态", example = "continue", allowableValues = {"continue", "finished"})
     private String status;
 
-    /** 下一个问题（继续时返回） */
+    @Schema(description = "下一个问题（状态为continue时返回）")
     private QuestionInfo question;
 
-    /** 面试报告（结束时返回） */
+    @Schema(description = "面试报告（状态为finished时返回）")
     private String report;
 
-    /**
-     * 问题信息
-     */
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @Schema(description = "问题信息")
     public static class QuestionInfo {
-        /** 问题内容 */
+
+        @Schema(description = "问题内容", example = "你在项目中是如何处理分布式事务的？")
         private String content;
 
-        /** 问题类型 */
+        @Schema(description = "问题类型", example = "技术难点")
         private String type;
 
-        /** 问题序号 */
+        @Schema(description = "问题序号", example = "2")
         private int index;
     }
 
-    /**
-     * 创建继续响应
-     */
     public static InterviewAnswerResponse continueWith(String content, String type, int index) {
         return InterviewAnswerResponse.builder()
                 .status("continue")
@@ -55,9 +53,6 @@ public class InterviewAnswerResponse {
                 .build();
     }
 
-    /**
-     * 创建结束响应
-     */
     public static InterviewAnswerResponse finishedWith(String report) {
         return InterviewAnswerResponse.builder()
                 .status("finished")

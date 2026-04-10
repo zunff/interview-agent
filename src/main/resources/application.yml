@@ -2,43 +2,39 @@ spring:
   application:
     name: interview-agent
 
-  # 数据源配置
-  datasource:
-    url: jdbc:postgresql://localhost:5432/interview_agent
-    username: interview
-    password: interview123
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      idle-timeout: 300000
-      connection-timeout: 20000
-
-  # Spring AI 配置
+  # Spring AI Alibaba DashScope 配置
   ai:
-    openai:
-      # 通义千问 API（兼容 OpenAI 规范）
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api-key: ${DASHSCOPE_API_KEY:your-dashscope-api-key}
+    model:
+      audio:
+        transcription: dashscope
+    retry:
+      max-attempts: 3
+      backoff:
+        initial-interval: 1s
+        multiplier: 2
+        max-interval: 10s
+      on-http-codes: 429, 500, 502, 503
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
-          model: qwen-plus
+          model: qwen3.5-plus
           temperature: 0.7
-      # 通义千问视觉模型配置
-      image:
-        options:
-          model: qwen-vl-max
-      # 通义千问音频模型配置
+      vision:
+        model: qwen-image-2.0-pro              # 视觉模型（处理视频帧）
       audio:
-        options:
-          model: qwen-audio-turbo
-    # 向量存储配置 (pgvector)
-    vectorstore:
-      pgvector:
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1024
-        initialize-schema: true
+        transcription:
+          options:
+            model: qwen3-asr-flash-realtime-2026-02-10
+            format: wav
+            sample-rate: 16000
+
+  # 静态资源处理
+  web:
+    resources:
+      add-mappings: true
+  mvc:
+    throw-exception-if-no-handler-found: false
 
 # MyBatis-Plus 配置
 mybatis-plus:
@@ -55,7 +51,7 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 management:
   endpoints:
@@ -65,13 +61,6 @@ management:
   endpoint:
     health:
       show-details: always
-
-logging:
-  level:
-    root: INFO
-    org.bsc.langgraph4j: DEBUG
-    org.springframework.ai: DEBUG
-    com.zunff.interview: DEBUG
 
 # LangGraph4j Studio 配置
 langgraph4j:
@@ -91,7 +80,6 @@ interview:
   session:
     max-questions: 10            # 最大问题数（兼容旧配置）
     max-follow-ups: 2            # 每题最大追问数（兼容旧配置）
-    # 轮次配置
     max-technical-questions: 6   # 技术轮最大问题数
     max-business-questions: 4    # 业务轮最大问题数
     round-pass-score: 75         # 轮次通过分数阈值
@@ -100,12 +88,8 @@ interview:
     max-follow-ups-technical: 3  # 技术轮每题最大追问数
     max-follow-ups-business: 2   # 业务轮每题最大追问数
     answer-timeout: 120000       # 回答超时(ms)
-  # 多模态分析配置
   multimodal:
     enabled: true                # 是否启用多模态分析
-    vl-model: qwen-vl-max        # 视觉语言模型
-    audio-model: paraformer-v2   # 语音识别模型
-  # 知识库配置
   knowledge:
     enabled: true                # 是否启用知识库检索
     top-k: 5                     # 默认检索数量

@@ -47,6 +47,7 @@ Thumbs.db
 
 # Environment
 .env
+src/main/resources/application-dev.yml
 
 # Spring Boot
 spring-shell.log
@@ -54,3 +55,5 @@ spring-shell.log
 
 #cli
 .claude/
+
+test/

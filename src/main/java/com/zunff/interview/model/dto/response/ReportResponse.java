@@ -1,5 +1,6 @@
 package com.zunff.interview.model.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,14 +13,15 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "面试报告响应")
 public class ReportResponse {
 
-    /** 会话ID */
+    @Schema(description = "面试会话ID", example = "interview-123e4567-e89b-12d3-a456-426614174000")
     private String sessionId;
 
-    /** 面试报告内容 */
+    @Schema(description = "面试报告内容（Markdown格式）")
     private String report;
 
-    /** 会话状态 */
+    @Schema(description = "会话状态", example = "completed")
     private String status;
 }
