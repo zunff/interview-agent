@@ -76,8 +76,7 @@ public class ReportGeneratorService {
         // 基本信息
         report.append("# 面试综合评估报告\n\n");
         report.append("## 基本信息\n");
-        report.append("- 应聘岗位：").append(state.jobInfo()).append("\n");
-        report.append("- 面试类型：").append(state.interviewType()).append("\n\n");
+        report.append("- 应聘岗位：").append(state.jobInfo()).append("\n\n");
 
         // 面试问题与评估
         List<String> questions = state.questions();

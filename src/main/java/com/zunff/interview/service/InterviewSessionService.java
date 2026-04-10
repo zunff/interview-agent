@@ -11,7 +11,7 @@ public interface InterviewSessionService extends IService<InterviewSessionEntity
     /**
      * 创建新的面试会话
      */
-    InterviewSessionEntity createSession(String resume, String jobInfo, String interviewType,
+    InterviewSessionEntity createSession(String resume, String jobInfo,
                                           int maxQuestions, int maxFollowUps);
 
     /**

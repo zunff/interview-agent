@@ -27,7 +27,6 @@ public class InterviewState extends AgentState {
     // ========== 面试上下文 ==========
     public static final String RESUME = "resume";
     public static final String JOB_INFO = "jobInfo";
-    public static final String INTERVIEW_TYPE = "interviewType";
     public static final String SESSION_ID = "sessionId";
 
     // ========== 问题管理 ==========
@@ -171,7 +170,6 @@ public class InterviewState extends AgentState {
         // 上下文信息也使用 base
         SCHEMA.put(RESUME, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(JOB_INFO, Channels.base(new LastValueReducer<>(), () -> ""));
-        SCHEMA.put(INTERVIEW_TYPE, Channels.base(new LastValueReducer<>(), () -> "一面"));
         SCHEMA.put(SESSION_ID, Channels.base(new LastValueReducer<>(), () -> ""));
     }
 
@@ -187,10 +185,6 @@ public class InterviewState extends AgentState {
 
     public String jobInfo() {
         return (String) data().getOrDefault(JOB_INFO, "");
-    }
-
-    public String interviewType() {
-        return (String) data().getOrDefault(INTERVIEW_TYPE, "一面");
     }
 
     public String sessionId() {

@@ -30,6 +30,8 @@ spring:
             model: qwen3-asr-flash-realtime-2026-02-10
             format: wav
             sample-rate: 16000
+      embedding:
+        model: text-embedding-v3
     # 向量存储配置 (pgvector)
     vectorstore:
       pgvector:

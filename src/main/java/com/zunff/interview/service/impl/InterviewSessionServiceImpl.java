@@ -29,7 +29,7 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
 
     @Override
     @Transactional
-    public InterviewSessionEntity createSession(String resume, String jobInfo, String interviewType,
+    public InterviewSessionEntity createSession(String resume, String jobInfo,
                                                  int maxQuestions, int maxFollowUps) {
         String sessionId = IdUtil.fastSimpleUUID().substring(0, 16);
 
@@ -37,7 +37,6 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
                 .sessionId(sessionId)
                 .resume(resume)
                 .jobInfo(jobInfo)
-                .interviewType(interviewType)
                 .maxQuestions(maxQuestions)
                 .maxFollowUps(maxFollowUps)
                 .currentQuestionIndex(0)

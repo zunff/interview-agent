@@ -47,7 +47,6 @@ public class QuestionGeneratorNode {
 
         String resume = state.resume();
         String jobInfo = state.jobInfo();
-        String interviewType = state.interviewType();
         List<String> previousQuestions = state.questions();
         int questionIndex = state.questionIndex();
         String currentRound = state.currentRound();
@@ -60,7 +59,6 @@ public class QuestionGeneratorNode {
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("候选人简历：\n").append(resume).append("\n\n");
         userPrompt.append("应聘岗位：\n").append(jobInfo).append("\n\n");
-        userPrompt.append("面试类型：").append(interviewType).append("\n\n");
         userPrompt.append("当前轮次：").append(round.getDisplayName()).append("\n\n");
 
         // 根据轮次显示已问问题数

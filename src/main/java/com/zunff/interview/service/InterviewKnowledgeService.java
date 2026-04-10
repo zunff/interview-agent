@@ -12,6 +12,7 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -38,23 +39,59 @@ public class InterviewKnowledgeService {
     public List<KnowledgeSearchResult> searchSimilarQuestions(KnowledgeSearchRequest request) {
         log.info("开始检索知识库, query={}, topK={}", request.getQuery(), request.getTopK());
 
-        // 构建搜索请求
-        SearchRequest searchRequest = SearchRequest.builder()
+        // 构建数据库层过滤表达式（字符串形式）
+        String filterExpression = buildFilterExpression(request);
+
+        // 构建搜索请求（带数据库层过滤）
+        SearchRequest.Builder requestBuilder = SearchRequest.builder()
                 .query(request.getQuery())
-                .topK(request.getTopK() > 0 ? request.getTopK() : 5)
-                .build();
+                .topK(request.getTopK() > 0 ? request.getTopK() : 5);
+
+        if (filterExpression != null && !filterExpression.isEmpty()) {
+            requestBuilder.filterExpression(filterExpression);
+        }
 
         // 执行向量检索
-        List<Document> documents = vectorStore.similaritySearch(searchRequest);
+        List<Document> documents = vectorStore.similaritySearch(requestBuilder.build());
 
-        // 过滤结果（内存过滤）
+        // 转换结果（不再需要内存过滤）
         List<KnowledgeSearchResult> results = documents.stream()
                 .map(this::toSearchResult)
-                .filter(result -> filterResult(result, request))
                 .collect(Collectors.toList());
 
         log.info("检索完成, 找到 {} 条相关题目", results.size());
         return results;
+    }
+
+    /**
+     * 构建数据库层过滤表达式（字符串形式）
+     */
+    private String buildFilterExpression(KnowledgeSearchRequest request) {
+        List<String> conditions = new ArrayList<>();
+
+        // 题型过滤
+        if (request.getQuestionType() != null && !request.getQuestionType().isEmpty()) {
+            conditions.add("questionType == '" + escapeFilterValue(request.getQuestionType()) + "'");
+        }
+
+        // 公司过滤
+        if (request.getCompany() != null && !request.getCompany().isEmpty()) {
+            conditions.add("company == '" + escapeFilterValue(request.getCompany()) + "'");
+        }
+
+        // 岗位过滤
+        if (request.getJobPosition() != null && !request.getJobPosition().isEmpty()) {
+            conditions.add("jobPosition == '" + escapeFilterValue(request.getJobPosition()) + "'");
+        }
+
+        return conditions.isEmpty() ? null : String.join(" && ", conditions);
+    }
+
+    /**
+     * 转义过滤表达式中的特殊字符
+     */
+    private String escapeFilterValue(String value) {
+        return value.replace("'", "\\'");
     }
 
     /**
@@ -112,38 +149,6 @@ public class InterviewKnowledgeService {
     public void deleteDocuments(List<String> ids) {
         vectorStore.delete(ids);
         log.info("删除 {} 个文档成功", ids.size());
-    }
-
-    /**
-     * 内存过滤结果
-     */
-    private boolean filterResult(KnowledgeSearchResult result, KnowledgeSearchRequest request) {
-        // 如果有题型过滤，检查是否匹配
-        if (request.getQuestionType() != null && !request.getQuestionType().isEmpty()) {
-            if (result.getQuestionType() != null &&
-                !result.getQuestionType().contains(request.getQuestionType()) &&
-                !request.getQuestionType().contains(result.getQuestionType())) {
-                return false;
-            }
-        }
-
-        // 如果有公司过滤，检查是否匹配
-        if (request.getCompany() != null && !request.getCompany().isEmpty()) {
-            if (result.getCompany() != null &&
-                !result.getCompany().equals(request.getCompany())) {
-                return false;
-            }
-        }
-
-        // 如果有岗位过滤，检查是否匹配
-        if (request.getJobPosition() != null && !request.getJobPosition().isEmpty()) {
-            if (result.getJobPosition() != null &&
-                !result.getJobPosition().equals(request.getJobPosition())) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**

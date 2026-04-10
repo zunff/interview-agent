@@ -30,9 +30,6 @@ public class InterviewSessionEntity {
     /** 岗位信息 */
     private String jobInfo;
 
-    /** 面试类型 */
-    private String interviewType;
-
     /** 最大问题数 */
     private Integer maxQuestions;
 

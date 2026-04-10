@@ -50,12 +50,6 @@ management:
     health:
       show-details: always
 
-# LangGraph4j Studio 配置
-langgraph4j:
-  studio:
-    enabled: true
-    path: /studio
-
 # 面试系统配置
 interview:
   video:

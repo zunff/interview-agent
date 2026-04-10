@@ -8,6 +8,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -17,6 +18,21 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * 处理静态资源未找到异常（如 favicon.ico）
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Void> handleNoResourceFoundException(NoResourceFoundException e) {
+        // 静默处理 favicon.ico 等静态资源请求
+        String resourcePath = e.getResourcePath();
+        if (resourcePath != null && (resourcePath.contains("favicon") || resourcePath.endsWith(".ico"))) {
+            log.debug("静态资源未找到: {}", resourcePath);
+            return ResponseEntity.notFound().build();
+        }
+        log.warn("静态资源未找到: {}", resourcePath);
+        return ResponseEntity.notFound().build();
+    }
 
     /**
      * 处理业务异常

@@ -25,10 +25,6 @@ public class StartInterviewRequest {
     @NotBlank(message = "岗位信息不能为空")
     private String jobInfo;
 
-    @Schema(description = "面试类型", example = "一面", allowableValues = {"一面", "二面", "技术面", "业务面"})
-    @Builder.Default
-    private String interviewType = "一面";
-
     @Schema(description = "最大问题数量", example = "10", defaultValue = "10")
     @Builder.Default
     private int maxQuestions = 10;

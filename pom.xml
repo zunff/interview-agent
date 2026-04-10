@@ -106,6 +106,12 @@
             <groupId>org.bsc.langgraph4j</groupId>
             <artifactId>langgraph4j-core</artifactId>
             <version>${langgraph4j.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.swagger.core.v3</groupId>
+                    <artifactId>swagger-annotations</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- LangGraph4j Spring AI Integration -->
@@ -113,13 +119,12 @@
             <groupId>org.bsc.langgraph4j</groupId>
             <artifactId>langgraph4j-springai-agentexecutor</artifactId>
             <version>${langgraph4j.version}</version>
-        </dependency>
-
-        <!-- LangGraph4j Studio for Spring Boot (Optional - for visualization) -->
-        <dependency>
-            <groupId>org.bsc.langgraph4j</groupId>
-            <artifactId>langgraph4j-studio-springboot</artifactId>
-            <version>${langgraph4j.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.swagger.core.v3</groupId>
+                    <artifactId>swagger-annotations</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Lombok for cleaner code -->

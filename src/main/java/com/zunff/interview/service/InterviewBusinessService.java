@@ -60,12 +60,11 @@ public class InterviewBusinessService {
      * 开始面试
      */
     public InterviewStartResponse startInterview(StartInterviewRequest request) {
-        log.info("开始面试，简历长度: {}, 岗位: {}, 面试类型: {}", request.getResume().length(), request.getJobInfo(), request.getInterviewType());
+        log.info("开始面试，简历长度: {}, 岗位: {}", request.getResume().length(), request.getJobInfo());
         // 创建会话
         var session = sessionService.createSession(
                 request.getResume(),
                 request.getJobInfo(),
-                request.getInterviewType(),
                 request.getMaxQuestions(),
                 request.getMaxFollowUps()
         );
@@ -75,7 +74,6 @@ public class InterviewBusinessService {
         initialState.put(InterviewState.SESSION_ID, session.getSessionId());
         initialState.put(InterviewState.RESUME, request.getResume());
         initialState.put(InterviewState.JOB_INFO, request.getJobInfo());
-        initialState.put(InterviewState.INTERVIEW_TYPE, request.getInterviewType());
         initialState.put(InterviewState.MAX_QUESTIONS, request.getMaxQuestions());
         initialState.put(InterviewState.MAX_FOLLOW_UPS, request.getMaxFollowUps());
 
