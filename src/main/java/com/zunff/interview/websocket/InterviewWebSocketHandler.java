@@ -9,6 +9,7 @@ import com.zunff.interview.model.dto.websocket.ReportMessage;
 import com.zunff.interview.model.dto.websocket.WebSocketMessage;
 import com.zunff.interview.service.AudioStreamService;
 import com.zunff.interview.service.InterviewBusinessService;
+import com.zunff.interview.service.TtsService;
 import com.zunff.interview.service.VideoStreamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,9 +38,13 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private final VideoStreamService videoStreamService;
     private final AudioStreamService audioStreamService;
     private final InterviewBusinessService interviewBusinessService;
+    private final TtsService ttsService;
 
     /** WebSocket 会话映射 */
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+
+    /** TTS 线程映射，用于会话关闭时中断 */
+    private final Map<String, Thread> ttsThreads = new ConcurrentHashMap<>();
 
     @Autowired(required = false)
     private SimpMessagingTemplate messagingTemplate;
@@ -75,6 +80,8 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         String sessionId = extractSessionId(session);
         sessions.remove(sessionId);
+        // 中断该会话的 TTS 线程，节省资源
+        interruptTtsThread(sessionId);
         log.info("WebSocket 连接关闭: {}, 状态: {}", sessionId, status);
     }
 
@@ -130,14 +137,44 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 发送问题给前端
+     * 发送问题给前端（文字 + 语音）
      */
     public void sendQuestion(String sessionId, QuestionMessage question) {
+        // 1. 先发文字问题
         sendMessage(sessionId, WebSocketMessage.of(
                 WebSocketMessage.Type.NEW_QUESTION,
                 question
         ));
         log.info("发送问题到前端: [{}] {}", question.getQuestionType(), question.getContent());
+
+        // 2. 异步触发 TTS 语音合成推送
+        WebSocketSession session = sessions.get(sessionId);
+        if (session != null && session.isOpen()) {
+            // 先中断之前的 TTS 线程（如有）
+            interruptTtsThread(sessionId);
+            // 创建新线程并保存句柄
+            Thread ttsThread = Thread.ofVirtual().name("tts-" + sessionId).unstarted(() -> {
+                try {
+                    ttsService.synthesizeAndStream(question.getContent(), sessionId, session);
+                } finally {
+                    // 线程完成后清理句柄
+                    ttsThreads.remove(sessionId);
+                }
+            });
+            ttsThreads.put(sessionId, ttsThread);
+            ttsThread.start();
+        }
+    }
+
+    /**
+     * 中断指定会话的 TTS 线程
+     */
+    private void interruptTtsThread(String sessionId) {
+        Thread thread = ttsThreads.remove(sessionId);
+        if (thread != null && thread.isAlive()) {
+            thread.interrupt();
+            log.info("已中断 TTS 线程: {}", sessionId);
+        }
     }
 
     /**

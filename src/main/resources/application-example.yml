@@ -32,6 +32,12 @@ spring:
             sample-rate: 16000
       embedding:
         model: text-embedding-v3
+      # TTS 语音合成配置
+      tts:
+        model: qwen3-tts-flash
+        voice: Cherry
+        language-type: Chinese
+        enabled: true
     # 向量存储配置 (pgvector)
     vectorstore:
       pgvector:

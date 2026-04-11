@@ -73,3 +73,5 @@ interview:
   knowledge:
     enabled: true                # 是否启用知识库检索
     top-k: 5                     # 默认检索数量
+  tts:
+    enabled: true                # 是否启用语音提问

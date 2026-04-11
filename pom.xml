@@ -95,6 +95,13 @@
             <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
         </dependency>
 
+        <!-- DashScope SDK (Qwen-TTS 语音合成，需 >= 2.19.0) -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>dashscope-sdk-java</artifactId>
+            <version>2.19.0</version>
+        </dependency>
+
         <!-- Spring AI PGVector Store Starter (includes auto-configuration) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
