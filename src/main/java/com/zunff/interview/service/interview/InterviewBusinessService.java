@@ -1,12 +1,10 @@
 package com.zunff.interview.service.interview;
 
-import com.zunff.interview.agent.nodes.QuestionGeneratorNode;
 import com.zunff.interview.common.exception.BusinessException;
-import com.zunff.interview.constant.QuestionType;
-import com.zunff.interview.model.request.StartInterviewRequest;
+import com.zunff.interview.constant.NodeNames;
+import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.response.InterviewAnswerResponse;
-import com.zunff.interview.model.response.InterviewStartResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;
 import com.zunff.interview.model.websocket.QuestionMessage;
@@ -14,12 +12,11 @@ import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.service.AnswerRecordService;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
-import com.zunff.interview.service.extend.MultimodalAnalysisService;
-import com.zunff.interview.service.extend.VideoStreamService;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.CompiledGraph;
+import org.bsc.langgraph4j.GraphInput;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.context.annotation.Lazy;
@@ -30,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * 面试业务服务
@@ -42,9 +40,6 @@ public class InterviewBusinessService {
     private final CompiledGraph<InterviewState> interviewAgent;
     private final InterviewSessionService sessionService;
     private final InterviewWebSocketHandler webSocketHandler;
-    private final VideoStreamService videoStreamService;
-    private final MultimodalAnalysisService multimodalAnalysisService;
-    private final QuestionGeneratorNode questionGeneratorNode;
     private final AnswerRecordService answerRecordService;
     private final EvaluationRecordService evaluationRecordService;
 
@@ -52,84 +47,49 @@ public class InterviewBusinessService {
             CompiledGraph<InterviewState> interviewAgent,
             InterviewSessionService sessionService,
             @Lazy InterviewWebSocketHandler webSocketHandler,
-            VideoStreamService videoStreamService,
-            MultimodalAnalysisService multimodalAnalysisService,
-            QuestionGeneratorNode questionGeneratorNode,
             AnswerRecordService answerRecordService,
             EvaluationRecordService evaluationRecordService) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
-        this.videoStreamService = videoStreamService;
-        this.multimodalAnalysisService = multimodalAnalysisService;
-        this.questionGeneratorNode = questionGeneratorNode;
         this.answerRecordService = answerRecordService;
         this.evaluationRecordService = evaluationRecordService;
     }
 
     /**
-     * 开始面试
+     * 创建会话并执行面试图，返回第一道题的信息
+     * 供 WebSocket handler 调用
+     *
+     * @return 图执行结果（包含第一道题），如果失败返回 null
      */
-    public InterviewStartResponse startInterview(StartInterviewRequest request) {
-        log.info("开始面试，简历长度: {}, 岗位: {}", request.getResume().length(), request.getJobInfo());
-        // 创建会话
-        var session = sessionService.createSession(
-                request.getResume(),
-                request.getJobInfo(),
-                request.getMaxQuestions(),
-                request.getMaxFollowUps()
-        );
+    public InterviewState executeInterviewGraph(String sessionId, String resume, String jobInfo,
+                                                 int maxQuestions, int maxFollowUps) {
+        log.info("开始执行面试图，sessionId: {}, 简历长度: {}, 岗位: {}", sessionId, resume.length(), jobInfo);
 
-        // 初始化状态
         Map<String, Object> initialState = new HashMap<>();
-        initialState.put(InterviewState.SESSION_ID, session.getSessionId());
-        initialState.put(InterviewState.RESUME, request.getResume());
-        initialState.put(InterviewState.JOB_INFO, request.getJobInfo());
-        initialState.put(InterviewState.MAX_QUESTIONS, request.getMaxQuestions());
-        initialState.put(InterviewState.MAX_FOLLOW_UPS, request.getMaxFollowUps());
+        initialState.put(InterviewState.SESSION_ID, sessionId);
+        initialState.put(InterviewState.RESUME, resume);
+        initialState.put(InterviewState.JOB_INFO, jobInfo);
+        initialState.put(InterviewState.MAX_QUESTIONS, maxQuestions);
+        initialState.put(InterviewState.MAX_FOLLOW_UPS, maxFollowUps);
 
         RunnableConfig config = RunnableConfig.builder()
-                .threadId(session.getSessionId())
+                .threadId(sessionId)
                 .build();
 
         try {
             Optional<InterviewState> result = interviewAgent.invoke(initialState, config);
-
-            log.info("面试Agent执行完成，sessionId: {}", session.getSessionId());
-            String currentQuestion = result.map(InterviewState::currentQuestion).orElse("");
-            String questionType = result.map(InterviewState::questionType).orElse(QuestionType.TECHNICAL_BASIC.getDisplayName());
-            int questionIndex = result.map(InterviewState::questionIndex).orElse(1);
-
-            sessionService.updateStatus(session.getSessionId(), InterviewSession.Status.IN_PROGRESS.name());
-
-            // 推送问题到前端
-            if (!currentQuestion.isEmpty()) {
-                webSocketHandler.sendQuestion(session.getSessionId(),
-                        QuestionMessage.builder()
-                                .content(currentQuestion)
-                                .questionType(questionType)
-                                .questionIndex(questionIndex)
-                                .build());
-            }
-
-            return InterviewStartResponse.builder()
-                    .sessionId(session.getSessionId())
-                    .question(InterviewStartResponse.QuestionInfo.builder()
-                            .content(currentQuestion)
-                            .type(questionType)
-                            .index(questionIndex)
-                            .build())
-                    .build();
-
+            sessionService.updateStatus(sessionId, InterviewSession.Status.IN_PROGRESS.name());
+            return result.orElse(null);
         } catch (Exception e) {
-            log.error("启动面试失败", e);
-            throw new BusinessException(1003, "面试启动失败: " + e.getMessage());
+            log.error("执行面试图失败，sessionId: {}", sessionId, e);
+            return null;
         }
     }
 
     /**
      * 提交答案
-     * 执行分析逻辑并生成下一个问题
+     * 使用 GraphInput.resume() 恢复图执行，由图节点完成分析和问题生成
      */
     public InterviewAnswerResponse submitAnswer(SubmitAnswerRequest request) {
         String sessionId = request.getSessionId();
@@ -152,67 +112,92 @@ public class InterviewBusinessService {
 
             InterviewState currentState = snapshot.state();
             String question = currentState.currentQuestion();
-            String answerText = request.getAnswerText();
-            String questionType = currentState.questionType();
+            int questionIndex = currentState.questionIndex();
 
-            // 执行多模态分析
-            log.info("开始分析答案，问题: {}, 答案长度: {}", questionType, answerText != null ? answerText.length() : 0);
+            log.info("提交答案，问题索引: {}, 问题: {}", questionIndex, question);
 
-            // 解析缓存的关键帧
+            // 准备多模态数据
             List<String> frames = null;
             if (request.getVideoFrames() != null && !request.getVideoFrames().isEmpty()) {
                 frames = Arrays.asList(request.getVideoFrames().split(","));
+                log.info("解析视频帧: {} 帧", frames.size());
             }
 
-            var visionResult = multimodalAnalysisService.analyzeVideoFrames(frames);
-            var audioResult = multimodalAnalysisService.analyzeAudio(request.getAnswerAudio());
-            var evaluation = multimodalAnalysisService.comprehensiveEvaluate(
-                    question, answerText, visionResult, audioResult, "evaluation");
-
-            log.info("评估完成，综合得分: {}, 是否需要追问: {}", evaluation.getOverallScore(), evaluation.isNeedFollowUp());
-
-            // 记录回答
-            answerRecordService.recordAnswer(
-                    sessionId,
-                    currentState.questionIndex(),
-                    question,
-                    answerText
-            );
-
-            // 保存评估结果
-            evaluationRecordService.saveEvaluation(sessionId, evaluation);
-
-            // 更新状态
+            // 更新状态：注入答案和多模态数据
             Map<String, Object> stateUpdate = new HashMap<>();
-            stateUpdate.put(InterviewState.ANSWER_TEXT, answerText);
-            stateUpdate.put(InterviewState.WAITING_FOR_ANSWER, false);
-            stateUpdate.put(InterviewState.CURRENT_EVALUATION, evaluation);
-            stateUpdate.put(InterviewState.NEED_FOLLOW_UP, evaluation.isNeedFollowUp());
-
+            stateUpdate.put(InterviewState.ANSWER_TEXT, request.getAnswerText());
+            if (frames != null) {
+                stateUpdate.put(InterviewState.ANSWER_FRAMES, frames);
+                log.info("更新状态：ANSWER_FRAMES 包含 {} 帧", frames.size());
+            }
+            if (request.getAnswerAudio() != null) {
+                stateUpdate.put(InterviewState.ANSWER_AUDIO, request.getAnswerAudio());
+                log.info("更新状态：ANSWER_AUDIO 长度 {}", request.getAnswerAudio().length());
+            }
             interviewAgent.updateState(config, stateUpdate);
 
-            // 生成下一个问题
-            log.info("开始生成下一个问题...");
-            var newSnapshot = interviewAgent.getState(config);
-            InterviewState updatedState = newSnapshot.state();
+            // 验证状态更新
+            log.info("状态更新完成，验证状态...");
+            StateSnapshot<InterviewState> verifySnapshot = interviewAgent.getState(config);
+            log.info("验证：ANSWER_FRAMES 大小 = {}, ANSWER_AUDIO 是否存在 = {}",
+                    verifySnapshot.state().answerFrames().size(),
+                    verifySnapshot.state().data().get(InterviewState.ANSWER_AUDIO) != null);
 
-            Map<String, Object> questionResult = questionGeneratorNode.execute(updatedState).join();
+            // 配置并行执行器（子图节点格式：subgraphId-nodeId）
+            String prefix = currentState.isTechnicalRound() ? NodeNames.TECH_PREFIX : NodeNames.BIZ_PREFIX;
+            String subgraphNodeName = currentState.isTechnicalRound() ? NodeNames.TECHNICAL_ROUND : NodeNames.BUSINESS_ROUND;
+            String askQuestionNodeName = subgraphNodeName + "-" + prefix + NodeNames.ASK_QUESTION;
+            log.info("配置并行执行器，节点名称: {}", askQuestionNodeName);
 
-            String newQuestion = (String) questionResult.get(InterviewState.CURRENT_QUESTION);
-            String newQuestionType = (String) questionResult.getOrDefault(InterviewState.QUESTION_TYPE, QuestionType.TECHNICAL_BASIC.getDisplayName());
-            int newQuestionIndex = updatedState.questionIndex() + 1;
+            config = RunnableConfig.builder()
+                    .threadId(sessionId)
+                    .addParallelNodeExecutor(askQuestionNodeName, ForkJoinPool.commonPool())
+                    .build();
 
-            // 更新状态
-            Map<String, Object> finalUpdate = new HashMap<>();
-            finalUpdate.put(InterviewState.CURRENT_QUESTION, newQuestion);
-            finalUpdate.put(InterviewState.QUESTION_TYPE, newQuestionType);
-            finalUpdate.put(InterviewState.QUESTION_INDEX, newQuestionIndex);
-            finalUpdate.put(InterviewState.FOLLOW_UP_COUNT, 0);
-            finalUpdate.put(InterviewState.WAITING_FOR_ANSWER, true);
+            log.info("状态已更新，开始恢复图执行...");
 
-            interviewAgent.updateState(config, finalUpdate);
+            // 使用 GraphInput.resume() 恢复图执行
+            // 图会从 askQuestion 之后继续，直接执行分析节点和追问决策
+            Optional<InterviewState> result = interviewAgent.invoke(GraphInput.resume(), config);
 
-            // 推送新问题到前端
+            if (result.isEmpty()) {
+                throw new BusinessException(1004, "图执行未返回结果");
+            }
+
+            InterviewState finalState = result.get();
+            log.info("图执行完成，当前问题索引: {}", finalState.questionIndex());
+
+            // 获取评估结果并记录
+            EvaluationBO evaluation = finalState.getCurrentEvaluation();
+            if (evaluation != null) {
+                log.info("评估完成，综合得分: {}", evaluation.getOverallScore());
+
+                // 记录回答
+                answerRecordService.recordAnswer(
+                        sessionId,
+                        questionIndex,
+                        question,
+                        finalState.answerText()
+                );
+
+                // 保存评估结果
+                evaluationRecordService.saveEvaluation(sessionId, evaluation);
+
+                // 推送评估结果到前端
+                webSocketHandler.sendEvaluationResult(sessionId, evaluation);
+            }
+
+            // 检查是否结束
+            if (finalState.isFinished()) {
+                log.info("面试已结束，sessionId: {}", sessionId);
+                return InterviewAnswerResponse.finishedWith(finalState.getFinalReport());
+            }
+
+            // 获取新问题并推送
+            String newQuestion = finalState.currentQuestion();
+            String newQuestionType = finalState.questionType();
+            int newQuestionIndex = finalState.questionIndex();
+
             if (newQuestion != null && !newQuestion.isEmpty()) {
                 webSocketHandler.sendQuestion(sessionId,
                         QuestionMessage.builder()
@@ -220,9 +205,8 @@ public class InterviewBusinessService {
                                 .questionType(newQuestionType)
                                 .questionIndex(newQuestionIndex)
                                 .build());
+                log.info("新问题已推送: {}", newQuestion.substring(0, Math.min(50, newQuestion.length())) + "...");
             }
-
-            log.info("生成新问题成功: {}", newQuestion != null ? newQuestion.substring(0, Math.min(50, newQuestion.length())) + "..." : "null");
 
             return InterviewAnswerResponse.continueWith(newQuestion, newQuestionType, newQuestionIndex);
 

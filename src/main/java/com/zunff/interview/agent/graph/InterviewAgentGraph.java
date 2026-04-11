@@ -20,6 +20,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static org.bsc.langgraph4j.StateGraph.END;
@@ -31,8 +32,8 @@ import static org.bsc.langgraph4j.StateGraph.START;
  * 架构:
  * START -> init -> jobAnalysis -> technicalRound(子图) -> roundTransition -> businessRound(子图) -> generateReport -> END
  *
- * 注意：子图会在waitForAnswer节点暂停并返回END
- * 主图需要正确处理这种情况
+ * 子图使用 addSubGraph() 合并到主图，状态共享
+ * interruptsAfter 在主图编译时设置，子图节点合并后可直接暂停
  */
 @Slf4j
 @Configuration
@@ -65,18 +66,30 @@ public class InterviewAgentGraph {
 
     /**
      * 创建面试 Agent 主图
+     * 使用 addSubGraph() 合并子图，状态共享
      */
     @Bean
     public CompiledGraph<InterviewState> interviewAgent() throws GraphStateException {
         log.info("初始化面试 Agent 主图（子图架构 + 岗位分析）");
 
+        // 获取子图的 StateGraph（未编译）
+        StateGraph<InterviewState> technicalSubgraph = interviewRoundGraph.createGraph(InterviewRound.TECHNICAL);
+        StateGraph<InterviewState> businessSubgraph = interviewRoundGraph.createGraph(InterviewRound.BUSINESS);
+
+        // 子图内部的 askQuestion 节点名称（用于 interruptsAfter）
+        String techAskQuestion = NodeNames.TECH_PREFIX + NodeNames.ASK_QUESTION;
+        String bizAskQuestion = NodeNames.BIZ_PREFIX + NodeNames.ASK_QUESTION;
+
         return new StateGraph<>(InterviewState.SCHEMA, InterviewState::new)
                 // ========== 添加节点 ==========
                 .addNode(NodeNames.INIT, initInterviewNode::execute)
                 .addNode(NodeNames.JOB_ANALYSIS, jobAnalysisNode::execute)
-                .addNode(NodeNames.TECHNICAL_ROUND, interviewRoundGraph.createGraph(InterviewRound.TECHNICAL))
+
+                // 使用 addSubgraph() 合并子图（状态共享）
+                .addNode(NodeNames.TECHNICAL_ROUND, technicalSubgraph)
+                .addNode(NodeNames.BUSINESS_ROUND, businessSubgraph)
+
                 .addNode(NodeNames.ROUND_TRANSITION, roundTransitionNode::execute)
-                .addNode(NodeNames.BUSINESS_ROUND, interviewRoundGraph.createGraph(InterviewRound.BUSINESS))
                 .addNode(NodeNames.GENERATE_REPORT, reportGeneratorNode::execute)
 
                 // ========== 定义边 ==========
@@ -84,17 +97,8 @@ public class InterviewAgentGraph {
                 .addEdge(NodeNames.INIT, NodeNames.JOB_ANALYSIS)
                 .addEdge(NodeNames.JOB_ANALYSIS, NodeNames.TECHNICAL_ROUND)
 
-                // ========== 条件路由：检查技术轮子图状态 ==========
-                // 如果正在等待答案，返回 END 暂停主图
-                // 否则继续执行轮次切换
-                .addConditionalEdges(
-                        NodeNames.TECHNICAL_ROUND,
-                        state -> CompletableFuture.completedFuture(checkTechnicalRoundStatus(state)),
-                        Map.of(
-                                "waiting", END,  // 等待答案时暂停主图
-                                "continue", NodeNames.ROUND_TRANSITION  // 继续执行轮次切换
-                        )
-                )
+                // 技术轮完成后进入轮次切换
+                .addEdge(NodeNames.TECHNICAL_ROUND, NodeNames.ROUND_TRANSITION)
 
                 // ========== 轮次路由 ==========
                 .addConditionalEdges(
@@ -108,38 +112,21 @@ public class InterviewAgentGraph {
                         )
                 )
 
-                // ========== 条件路由：检查业务轮子图状态 ==========
-                .addConditionalEdges(
-                        NodeNames.BUSINESS_ROUND,
-                        state -> CompletableFuture.completedFuture(checkBusinessRoundStatus(state)),
-                        Map.of(
-                                "waiting", END,  // 等待答案时暂停主图
-                                "continue", NodeNames.GENERATE_REPORT  // 业务轮完成后生成报告
-                        )
-                )
+                // 业务轮完成后生成报告
+                .addEdge(NodeNames.BUSINESS_ROUND, NodeNames.GENERATE_REPORT)
 
                 .addEdge(NodeNames.GENERATE_REPORT, END)
+
+                // 主图统一编译，设置 checkpointSaver 和 interruptsAfter
                 .compile(CompileConfig.builder()
-                        .checkpointSaver(new MemorySaver())
+                        .checkpointSaver(new MemorySaver())  // 只有主图有 MemorySaver
                         .recursionLimit(graphConfig.getMainRecursionLimit())
+                        // 在主图编译时设置 interruptsAfter（子图节点格式：subgraphId-nodeId）
+                        .interruptsAfter(Set.of(
+                                NodeNames.TECHNICAL_ROUND + "-" + techAskQuestion,
+                                NodeNames.BUSINESS_ROUND + "-" + bizAskQuestion
+                        ))
                         .build());
     }
 
-    /**
-     * 检查技术轮子图状态
-     */
-    private String checkTechnicalRoundStatus(InterviewState state) {
-        boolean waiting = state.isWaitingForAnswer();
-        log.debug("[技术轮] 检查等待状态: waiting={}", waiting);
-        return waiting ? "waiting" : "continue";
-    }
-
-    /**
-     * 检查业务轮子图状态
-     */
-    private String checkBusinessRoundStatus(InterviewState state) {
-        boolean waiting = state.isWaitingForAnswer();
-        log.debug("[业务轮] 检查等待状态: waiting={}", waiting);
-        return waiting ? "waiting" : "continue";
-    }
 }

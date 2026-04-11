@@ -20,7 +20,7 @@ spring:
       api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
-          model: qwen3.5-plus
+          model: qwen-plus
           temperature: 0.7
       vision:
         model: qwen3.5-omni-plus
@@ -32,10 +32,11 @@ spring:
             sample-rate: 16000
       embedding:
         model: text-embedding-v3
-      # TTS 语音合成配置
+      # TTS 语音合成配置（Realtime 模式）
       tts:
-        model: qwen3-tts-flash
+        model: qwen3-tts-flash-realtime
         voice: Ethan
+        # url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime  # 可选，默认已内置
     # 向量存储配置 (pgvector)
     vectorstore:
       pgvector:
@@ -43,6 +44,12 @@ spring:
         distance-type: COSINE_DISTANCE
         dimensions: 1024
         initialize-schema: true
+
+# LangGraph4j 图配置
+langgraph4j:
+  graph:
+    main-recursion-limit: 25
+    sub-recursion-limit: 15
 
 # 日志级别
 logging:

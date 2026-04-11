@@ -59,6 +59,7 @@ public class InterviewSession {
         WAITING,        // 等待开始
         IN_PROGRESS,    // 进行中
         WAITING_ANSWER, // 等待回答
+        DISCONNECTED,   // 连接断开
         FINISHED        // 已结束
     }
 }

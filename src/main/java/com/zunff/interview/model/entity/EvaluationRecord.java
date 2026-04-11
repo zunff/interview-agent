@@ -1,7 +1,7 @@
 package com.zunff.interview.model.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.zunff.interview.config.JsonbTypeHandler;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,7 +17,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("evaluation_record")
+@TableName(value = "evaluation_record", autoResultMap = true)
 public class EvaluationRecord {
 
     @TableId(type = IdType.AUTO)
@@ -60,11 +60,11 @@ public class EvaluationRecord {
     private Integer overallScore;
 
     /** 优点 (JSON) */
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private List<String> strengths;
 
     /** 不足 (JSON) */
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = JsonbTypeHandler.class)
     private List<String> weaknesses;
 
     /** 详细评估 */

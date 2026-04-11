@@ -1,10 +1,8 @@
 package com.zunff.interview.controller;
 
 import com.zunff.interview.common.response.ApiResponse;
-import com.zunff.interview.model.request.StartInterviewRequest;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.response.InterviewAnswerResponse;
-import com.zunff.interview.model.response.InterviewStartResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;
 import com.zunff.interview.service.interview.InterviewBusinessService;
@@ -19,6 +17,8 @@ import org.springframework.web.bind.annotation.*;
 /**
  * 面试控制器
  * 提供面试相关的 REST API
+ *
+ * 注意：面试启动已迁移到 WebSocket（start_interview 消息）
  */
 @Slf4j
 @RestController
@@ -28,15 +28,6 @@ import org.springframework.web.bind.annotation.*;
 public class InterviewController {
 
     private final InterviewBusinessService interviewBusinessService;
-
-    @Operation(summary = "开始面试", description = "根据简历和岗位信息创建新的面试会话")
-    @PostMapping("/start")
-    public ApiResponse<InterviewStartResponse> startInterview(@Valid @RequestBody StartInterviewRequest request) {
-        log.info("开始面试，岗位: {}", request.getJobInfo());
-        InterviewStartResponse response = interviewBusinessService.startInterview(request);
-        return ApiResponse.success(response);
-    }
-
 
     @Operation(summary = "【测试用】提交答案", description = "测试时通过 HTTP 提交文本答案，生产环境使用 WebSocket 的 answer_complete 信号")
     @PostMapping("/answer")

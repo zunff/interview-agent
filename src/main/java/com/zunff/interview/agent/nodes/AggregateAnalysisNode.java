@@ -48,7 +48,6 @@ public class AggregateAnalysisNode {
             // 综合评估
             EvaluationBO evaluation = multimodalAnalysisService.comprehensiveEvaluate(
                     question,
-                    answerText,
                     visionResult,
                     audioResult,
                     evaluationPrompt

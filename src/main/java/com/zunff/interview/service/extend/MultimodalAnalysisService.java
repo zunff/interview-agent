@@ -1,5 +1,6 @@
 package com.zunff.interview.service.extend;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
@@ -103,15 +104,20 @@ public class MultimodalAnalysisService {
         }
     }
 
+    public AudioAnalysisResult analyzeAudio(String audioBase64) {
+        return analyzeAudio(audioBase64, null);
+    }
+
     /**
      * 分析音频
      * 步骤1: 使用 Spring AI AudioTranscriptionModel 转录语音
      * 步骤2: 使用文本模型分析情感语调
      *
      * @param audioBase64 Base64编码的音频数据
+     * @param audioText 音频文本
      * @return 分析结果
      */
-    public AudioAnalysisResult analyzeAudio(String audioBase64) {
+    public AudioAnalysisResult analyzeAudio(String audioBase64, String audioText) {
         if (audioBase64 == null || audioBase64.isEmpty()) {
             log.info("音频数据为空，跳过ASR转录");
             return AudioAnalysisResult.empty();
@@ -126,17 +132,21 @@ public class MultimodalAnalysisService {
 
         try {
             // Step 1: 使用 Spring AI AudioTranscriptionModel 转录
-            byte[] audioData = Base64.getDecoder().decode(audioBase64);
-            ByteArrayResource audioResource = new ByteArrayResource(audioData);
-            log.info("ASR转录请求：音频数据大小={} bytes，开始调用转录模型", audioData.length);
+            String transcribedText;
+            if (StrUtil.isNotBlank(audioText)) {
+                transcribedText = audioText;
+            } else {
+                byte[] audioData = Base64.getDecoder().decode(audioBase64);
+                ByteArrayResource audioResource = new ByteArrayResource(audioData);
+                log.info("ASR转录请求：音频数据大小={} bytes，开始调用转录模型", audioData.length);
 
-            AudioTranscriptionResponse response = transcriptionModel.call(
-                    new AudioTranscriptionPrompt(audioResource));
+                AudioTranscriptionResponse response = transcriptionModel.call(
+                        new AudioTranscriptionPrompt(audioResource));
 
-            String transcribedText = response.getResult().getOutput();
-            log.info("ASR转录完成，文本长度: {}，转录内容: {}", transcribedText != null ? transcribedText.length() : 0,
-                    transcribedText != null ? transcribedText.substring(0, Math.min(100, transcribedText.length())) : "null");
-
+                transcribedText = response.getResult().getOutput();
+                log.info("ASR转录完成，文本长度: {}，转录内容: {}", transcribedText != null ? transcribedText.length() : 0,
+                        transcribedText != null ? transcribedText.substring(0, Math.min(100, transcribedText.length())) : "null");
+            }
             // Step 2: 使用文本模型分析情感语调
             return analyzeAudioEmotion(transcribedText);
 
@@ -175,25 +185,12 @@ public class MultimodalAnalysisService {
     }
 
     /**
-     * 综合多模态评估
-     * 结合文本回答、视频分析、音频分析进行综合评估
-     */
-    public EvaluationBO comprehensiveEvaluate(
-            String question,
-            String answerText,
-            VisionAnalysisResult visionResult,
-            AudioAnalysisResult audioResult) {
-        return comprehensiveEvaluate(question, answerText, visionResult, audioResult, "evaluation");
-    }
-
-    /**
      * 综合多模态评估（支持自定义评估模板）
      * 结合文本回答、视频分析、音频分析进行综合评估
      * @param evaluationPromptName 评估 Prompt 模板名称
      */
     public EvaluationBO comprehensiveEvaluate(
             String question,
-            String answerText,
             VisionAnalysisResult visionResult,
             AudioAnalysisResult audioResult,
             String evaluationPromptName) {
@@ -205,7 +202,7 @@ public class MultimodalAnalysisService {
 
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("问题：").append(question).append("\n\n");
-        userPrompt.append("回答内容：").append(answerText).append("\n\n");
+        userPrompt.append("回答内容：").append(audioResult.getTranscribedText()).append("\n\n");
         userPrompt.append("视频分析结果：\n");
         userPrompt.append("- 表情得分：").append(visionResult.getEmotionScore()).append("\n");
         userPrompt.append("- 肢体语言得分：").append(visionResult.getBodyLanguageScore()).append("\n");

@@ -19,13 +19,14 @@
 | 大语言模型 | 面试问题生成、答案评估、情感分析 |
 | 视觉模型 | 视频帧表情识别、肢体语言分析 |
 | 语音模型 | 实时 ASR 语音转文字 |
+| TTS 语音合成 | Qwen-TTS-Realtime WebSocket 流式合成，Opus 格式输出 |
 
 ## 核心功能
 
 - **智能面试流程**: 根据简历和岗位自动生成针对性问题，支持技术基础、项目经验、业务理解、软技能等多维度考察
 - **多分支追问策略**: 根据回答质量动态选择追问策略（普通追问/低分深入/高分挑战）
 - **并行多模态评估**: 视觉分析（表情/肢体语言）与音频分析（语调情感/流畅度）并行执行
-- **实时交互**: WebSocket 实时推送问题，缓存视频帧和音频流，回答完成后批量分析
+- **实时交互**: WebSocket 实时推送问题，TTS 语音合成通过 BinaryMessage 流式推送 Opus 音频，缓存视频帧和音频流
 
 ## 整体架构
 
@@ -161,10 +162,10 @@ sequenceDiagram
 
     C->>S: WebSocket 连接 ws://localhost:8080/ws/interview/{sessionId}
     S->>C: new_question (第1题)
-    S->>C: audio_question_start (语音问题开始)
-    
-    loop 语音问题传输
-        S->>C: audio_question_chunk (音频块)
+    S->>C: audio_question_start (语音问题开始，format: opus)
+
+    loop 语音问题传输（Binary Frame）
+        S-->>C: audio_question_chunk (Opus 二进制音频帧)
     end
     
     S->>C: audio_question_end (语音问题结束)
@@ -179,7 +180,7 @@ sequenceDiagram
     S->>S: 多模态分析（视觉+音频并行）
     S->>C: evaluation_result
     S->>C: new_question (下一题或追问)
-    S->>C: audio_question_start (下一题语音开始)
+    S->>C: audio_question_start (下一题语音开始，format: opus)
     
     ... 重复直到面试结束 ...
     

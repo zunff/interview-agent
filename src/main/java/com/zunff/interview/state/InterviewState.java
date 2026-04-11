@@ -93,9 +93,6 @@ public class InterviewState extends AgentState {
     public static final String CONSECUTIVE_LLM_FAILURES = "consecutiveLLMFailures";
     public static final String MAX_LLM_FAILURES = "maxLLMFailures";                // 默认3
 
-    // ========== 等待状态 ==========
-    public static final String WAITING_FOR_ANSWER = "waitingForAnswer";           // 是否正在等待答案
-
     /**
      * LastValue Reducer: 新值覆盖旧值
      */
@@ -118,7 +115,8 @@ public class InterviewState extends AgentState {
         SCHEMA.put(EMOTION_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(BODY_LANGUAGE_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(VOICE_TONE_SCORES, Channels.appender(ArrayList::new));
-        SCHEMA.put(ANSWER_FRAMES, Channels.appender(ArrayList::new));
+        // ANSWER_FRAMES 使用 base（覆盖语义），因为每次回答的视频帧是独立的
+        SCHEMA.put(ANSWER_FRAMES, Channels.base(new LastValueReducer<>(), ArrayList::new));
         SCHEMA.put(TECHNICAL_ROUND_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(BUSINESS_ROUND_SCORES, Channels.appender(ArrayList::new));
 
@@ -164,9 +162,6 @@ public class InterviewState extends AgentState {
         SCHEMA.put(CONSECUTIVE_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(MAX_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 3));
 
-        // 等待状态
-        SCHEMA.put(WAITING_FOR_ANSWER, Channels.base(new LastValueReducer<>(), () -> false));
-
         // 上下文信息也使用 base
         SCHEMA.put(RESUME, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(JOB_INFO, Channels.base(new LastValueReducer<>(), () -> ""));
@@ -206,6 +201,14 @@ public class InterviewState extends AgentState {
 
     public String answerText() {
         return (String) data().getOrDefault(ANSWER_TEXT, "");
+    }
+
+    /**
+     * 获取当前回答的视频帧列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> answerFrames() {
+        return (List<String>) data().getOrDefault(ANSWER_FRAMES, new ArrayList<>());
     }
 
     public int followUpCount() {
@@ -497,15 +500,5 @@ public class InterviewState extends AgentState {
      */
     public boolean isLLMCircuitBroken() {
         return consecutiveLLMFailures() >= maxLLMFailures();
-    }
-
-    // ========== 等待状态便捷方法 ==========
-
-    /**
-     * 是否正在等待答案
-     */
-    public boolean isWaitingForAnswer() {
-        Object value = data().get(WAITING_FOR_ANSWER);
-        return Boolean.TRUE.equals(value);
     }
 }

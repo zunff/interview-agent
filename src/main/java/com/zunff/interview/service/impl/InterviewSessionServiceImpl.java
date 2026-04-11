@@ -82,6 +82,20 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
 
     @Override
     @Transactional
+    public void disconnectSession(String sessionId) {
+        InterviewSession session = getBySessionId(sessionId);
+        if (session != null) {
+            session.setStatus(InterviewSession.Status.DISCONNECTED.name());
+            session.setEndTime(LocalDateTime.now());
+            updateById(session);
+            videoStreamService.clearSession(sessionId);
+            audioStreamService.clearSession(sessionId);
+            log.info("面试会话 {} 已标记为断连状态", sessionId);
+        }
+    }
+
+    @Override
+    @Transactional
     public void saveReport(String sessionId, String report) {
         InterviewSession session = getBySessionId(sessionId);
         if (session != null) {

@@ -31,11 +31,8 @@ public class VisionAnalysisNode {
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
         log.info("开始视觉帧分析");
 
-        @SuppressWarnings("unchecked")
-        List<String> answerFrames = (List<String>) state.data().getOrDefault(
-                InterviewState.ANSWER_FRAMES,
-                List.of()
-        );
+        List<String> answerFrames = state.answerFrames();
+        log.info("视觉分析节点获取到 {} 帧数据", answerFrames.size());
 
         try {
             VisionAnalysisResult visionResult = multimodalAnalysisService.analyzeVideoFrames(answerFrames);

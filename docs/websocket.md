@@ -2,7 +2,7 @@
 
 ## 连接信息
 
-**连接地址**: `ws://localhost:8080/ws/interview/{sessionId}`
+**连接地址**: `ws://localhost:8080/ws/interview`
 
 所有消息格式统一为：
 ```json
@@ -13,7 +13,60 @@
 }
 ```
 
+## 交互流程
+
+```
+客户端                                        服务端
+  |                                            |
+  |-------- WebSocket 连接 ------------------>|
+  |                                            |
+  |-------- start_interview ------------------>|
+  |         (resume, jobInfo, ...)             |
+  |                                            |
+  |<-------- session_created ------------------|
+  |         (sessionId)                        |
+  |                                            |
+  |<-------- new_question ---------------------|
+  |         (问题内容 + TTS 音频)              |
+  |                                            |
+  |-------- video_frame (持续) --------------->|
+  |-------- audio_chunk (持续) --------------->|
+  |                                            |
+  |-------- answer_complete ------------------>|
+  |                                            |
+  |<-------- answer_received ------------------|
+  |<-------- evaluation_result ----------------|
+  |<-------- new_question (下一题) ------------|
+  |         (或 final_report，面试结束)        |
+  |                                            |
+  | ... 循环直到面试结束 ...                   |
+  |                                            |
+```
+
 ## 客户端 → 服务端
+
+### start_interview - 启动面试
+
+**用途**：创建面试会话并启动图执行
+
+**请求参数**：
+```json
+{
+  "type": "start_interview",
+  "resume": "简历文本内容",
+  "jobInfo": "Java初级后端",
+  "maxQuestions": 10,
+  "maxFollowUps": 2
+}
+```
+
+**说明**：
+- `resume`（必填）：候选人简历文本
+- `jobInfo`（必填）：目标岗位信息
+- `maxQuestions`（可选，默认 10）：最大问题数
+- `maxFollowUps`（可选，默认 2）：每题最大追问数
+- 发送后服务端会先返回 `session_created`，然后异步执行图生成第一道题
+- 第一道题通过 `new_question` 推送，同时推送 TTS 语音
 
 ### video_frame - 发送视频帧
 
@@ -23,7 +76,6 @@
 ```json
 {
   "type": "video_frame",
-  "sessionId": "interview-xxx",
   "frame": "base64编码的图片数据"
 }
 ```
@@ -40,13 +92,12 @@
 ```json
 {
   "type": "audio_chunk",
-  "sessionId": "interview-xxx",
   "audio": "base64编码的音频数据"
 }
 ```
 
 **说明**：
-- `audio`: Base64 编码的音频数据（PCM/WAV 格式）
+- `audio`: Base64 编码的音频数据（Opus 格式）
 - 音频块会被缓存拼接，在 `answer_complete` 时取出进行语音分析
 
 ### answer_complete - 回答完成信号
@@ -56,8 +107,7 @@
 **请求参数**：
 ```json
 {
-  "type": "answer_complete",
-  "sessionId": "interview-xxx"
+  "type": "answer_complete"
 }
 ```
 
@@ -67,6 +117,23 @@
 - 分析完成后会推送 `evaluation_result` 和 `new_question`（或 `final_report`）
 
 ## 服务端 → 客户端
+
+### session_created - 会话创建成功
+
+**响应格式**：
+```json
+{
+  "type": "session_created",
+  "payload": {
+    "sessionId": "dce43fc34e0a4221"
+  },
+  "timestamp": 1699999999999
+}
+```
+
+**说明**：
+- 收到 `start_interview` 后立即返回，包含分配的 sessionId
+- 随后服务端异步执行图，生成第一道题后推送 `new_question`
 
 ### answer_received - 回答已接收确认
 
@@ -179,38 +246,27 @@
 {
   "type": "audio_question_start",
   "payload": {
-    "questionIndex": 1,
-    "totalChunks": 10
+    "format": "opus"
   },
   "timestamp": 1699999999999
 }
 ```
 
 **说明**：
-- 语音问题合成开始时推送
-- `questionIndex`: 问题序号
-- `totalChunks`: 预计的音频块数量
+- 语音问题合成开始时推送（使用 Qwen-TTS-Realtime WebSocket 模式）
+- `format`: 音频格式（Opus，24kHz）
 
 ### audio_question_chunk - 语音问题音频块
 
-**响应格式**：
-```json
-{
-  "type": "audio_question_chunk",
-  "payload": {
-    "questionIndex": 1,
-    "chunkIndex": 1,
-    "totalChunks": 10,
-    "audio": "base64编码的音频数据"
-  },
-  "timestamp": 1699999999999
-}
-```
+**传输方式**: WebSocket Binary Frame（非 JSON 文本消息）
 
 **说明**：
-- 语音问题的音频数据分片
-- `chunkIndex`: 当前音频块索引（从1开始）
-- `audio`: Base64编码的音频数据
+- 服务端通过 **WebSocket BinaryMessage** 直接发送原始 Opus 音频字节流
+- 每个二进制帧为一个音频分片，客户端应按序拼接
+- 音频格式：Opus，采样率 24000Hz
+- 客户端可使用 Opus 解码器或直接播放
+
+> **注意**：此消息不再以 JSON 文本形式发送，而是直接作为二进制帧传输，以减少 Base64 编码开销和延迟。
 
 ### audio_question_end - 语音问题结束
 
@@ -219,15 +275,14 @@
 {
   "type": "audio_question_end",
   "payload": {
-    "questionIndex": 1,
-    "totalChunks": 10
+    "sessionId": "interview-xxx"
   },
   "timestamp": 1699999999999
 }
 ```
 
 **说明**：
-- 语音问题合成完成时推送
+- 语音问题合成完成时推送（所有二进制音频帧已发送完毕）
 
 ### audio_question_error - 语音问题错误
 
@@ -236,7 +291,6 @@
 {
   "type": "audio_question_error",
   "payload": {
-    "questionIndex": 1,
     "message": "语音合成失败: xxx"
   },
   "timestamp": 1699999999999
@@ -244,7 +298,7 @@
 ```
 
 **说明**：
-- 语音问题合成过程中发生错误时推送
+- 语音问题合成过程中发生错误时推送（降级为纯文字模式）
 
 ### error - 错误消息
 
@@ -258,4 +312,3 @@
   "timestamp": 1699999999999
 }
 ```
-

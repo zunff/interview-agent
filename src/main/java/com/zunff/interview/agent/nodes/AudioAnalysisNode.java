@@ -32,6 +32,9 @@ public class AudioAnalysisNode {
 
         String answerAudio = (String) state.data().get(InterviewState.ANSWER_AUDIO);
         String existingAnswerText = state.answerText();
+        log.info("音频分析节点：音频数据存在={}, 文本存在={}",
+                answerAudio != null && !answerAudio.isEmpty(),
+                existingAnswerText != null && !existingAnswerText.isEmpty());
 
         try {
             AudioAnalysisResult audioResult = multimodalAnalysisService.analyzeAudio(answerAudio);

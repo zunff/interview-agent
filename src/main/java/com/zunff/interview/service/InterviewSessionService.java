@@ -30,6 +30,11 @@ public interface InterviewSessionService extends IService<InterviewSession> {
     void endSession(String sessionId);
 
     /**
+     * 标记会话为断连状态并清理缓存
+     */
+    void disconnectSession(String sessionId);
+
+    /**
      * 保存最终报告
      */
     void saveReport(String sessionId, String report);

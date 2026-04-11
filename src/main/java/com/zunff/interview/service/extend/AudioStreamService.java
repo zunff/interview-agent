@@ -37,7 +37,7 @@ public class AudioStreamService {
             }
             buffer.write(audioData, 0, audioData.length);
         }
-        log.debug("会话 {} 积累音频块，当前大小: {} bytes", sessionId, getBufferSize(sessionId));
+        log.trace("会话 {} 积累音频块，当前大小: {} bytes", sessionId, getBufferSize(sessionId));
     }
 
     /**

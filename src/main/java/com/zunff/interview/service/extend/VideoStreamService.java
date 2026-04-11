@@ -41,7 +41,7 @@ public class VideoStreamService {
         );
 
         buffer.addFrame(base64Frame);
-        log.debug("会话 {} 接收到视频帧，当前缓冲区大小: {}", sessionId, buffer.size());
+        log.trace("会话 {} 接收到视频帧，当前缓冲区大小: {}", sessionId, buffer.size());
     }
 
     /**
