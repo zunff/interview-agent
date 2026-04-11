@@ -1,8 +1,8 @@
-package com.zunff.interview.service;
+package com.zunff.interview.service.extend;
 
+import com.zunff.interview.config.VideoConfig;
 import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,19 +14,18 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class VideoStreamService {
 
-    @Value("${interview.video.analysis-interval:5000}")
-    private long analysisIntervalMs;
-
-    @Value("${interview.video.max-frames-per-analysis:10}")
-    private int maxFramesPerAnalysis;
+    private final long analysisIntervalMs;
+    private final int maxFramesPerAnalysis;
 
     private final MultimodalAnalysisService multimodalAnalysisService;
 
     /** 每个会话的帧缓冲区 */
     private final Map<String, FrameBuffer> sessionBuffers = new ConcurrentHashMap<>();
 
-    public VideoStreamService(MultimodalAnalysisService multimodalAnalysisService) {
+    public VideoStreamService(MultimodalAnalysisService multimodalAnalysisService, VideoConfig videoConfig) {
         this.multimodalAnalysisService = multimodalAnalysisService;
+        this.analysisIntervalMs = videoConfig.getAnalysisInterval();
+        this.maxFramesPerAnalysis = videoConfig.getMaxFramesPerAnalysis();
     }
 
     /**

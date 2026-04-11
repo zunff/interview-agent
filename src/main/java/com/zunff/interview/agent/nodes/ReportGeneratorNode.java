@@ -1,7 +1,7 @@
 package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
-import com.zunff.interview.service.PromptTemplateService;
+import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

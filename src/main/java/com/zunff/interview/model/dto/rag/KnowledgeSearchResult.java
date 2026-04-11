@@ -1,25 +1,22 @@
-package com.zunff.interview.model.entity;
+package com.zunff.interview.model.dto.rag;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 面试知识库实体
+ * 知识库检索结果
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("interview_knowledge")
-public class InterviewKnowledgeEntity {
+public class KnowledgeSearchResult {
 
-    @TableId(type = IdType.AUTO)
+    /**
+     * 知识库ID
+     */
     private Long id;
 
     /**
@@ -33,7 +30,7 @@ public class InterviewKnowledgeEntity {
     private String answer;
 
     /**
-     * 面试类型：技术面/业务面/HR面试
+     * 面试类型
      */
     private String questionType;
 
@@ -58,13 +55,7 @@ public class InterviewKnowledgeEntity {
     private String difficulty;
 
     /**
-     * 来源
+     * 相似度得分
      */
-    private String source;
-
-    /**
-     * 标签
-     */
-    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
-    private String[] tags;
+    private double similarityScore;
 }

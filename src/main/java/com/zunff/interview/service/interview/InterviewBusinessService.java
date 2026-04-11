@@ -1,16 +1,21 @@
-package com.zunff.interview.service;
+package com.zunff.interview.service.interview;
 
 import com.zunff.interview.agent.nodes.QuestionGeneratorNode;
 import com.zunff.interview.common.exception.BusinessException;
 import com.zunff.interview.constant.QuestionType;
-import com.zunff.interview.model.dto.request.StartInterviewRequest;
-import com.zunff.interview.model.dto.request.SubmitAnswerRequest;
-import com.zunff.interview.model.dto.response.InterviewAnswerResponse;
-import com.zunff.interview.model.dto.response.InterviewStartResponse;
-import com.zunff.interview.model.dto.response.ReportResponse;
-import com.zunff.interview.model.dto.response.SessionResponse;
-import com.zunff.interview.model.dto.websocket.QuestionMessage;
-import com.zunff.interview.model.entity.InterviewSessionEntity;
+import com.zunff.interview.model.request.StartInterviewRequest;
+import com.zunff.interview.model.request.SubmitAnswerRequest;
+import com.zunff.interview.model.response.InterviewAnswerResponse;
+import com.zunff.interview.model.response.InterviewStartResponse;
+import com.zunff.interview.model.response.ReportResponse;
+import com.zunff.interview.model.response.SessionResponse;
+import com.zunff.interview.model.websocket.QuestionMessage;
+import com.zunff.interview.model.entity.InterviewSession;
+import com.zunff.interview.service.AnswerRecordService;
+import com.zunff.interview.service.EvaluationRecordService;
+import com.zunff.interview.service.InterviewSessionService;
+import com.zunff.interview.service.extend.MultimodalAnalysisService;
+import com.zunff.interview.service.extend.VideoStreamService;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +45,8 @@ public class InterviewBusinessService {
     private final VideoStreamService videoStreamService;
     private final MultimodalAnalysisService multimodalAnalysisService;
     private final QuestionGeneratorNode questionGeneratorNode;
+    private final AnswerRecordService answerRecordService;
+    private final EvaluationRecordService evaluationRecordService;
 
     public InterviewBusinessService(
             CompiledGraph<InterviewState> interviewAgent,
@@ -47,13 +54,17 @@ public class InterviewBusinessService {
             @Lazy InterviewWebSocketHandler webSocketHandler,
             VideoStreamService videoStreamService,
             MultimodalAnalysisService multimodalAnalysisService,
-            QuestionGeneratorNode questionGeneratorNode) {
+            QuestionGeneratorNode questionGeneratorNode,
+            AnswerRecordService answerRecordService,
+            EvaluationRecordService evaluationRecordService) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
         this.videoStreamService = videoStreamService;
         this.multimodalAnalysisService = multimodalAnalysisService;
         this.questionGeneratorNode = questionGeneratorNode;
+        this.answerRecordService = answerRecordService;
+        this.evaluationRecordService = evaluationRecordService;
     }
 
     /**
@@ -89,7 +100,7 @@ public class InterviewBusinessService {
             String questionType = result.map(InterviewState::questionType).orElse(QuestionType.TECHNICAL_BASIC.getDisplayName());
             int questionIndex = result.map(InterviewState::questionIndex).orElse(1);
 
-            sessionService.updateStatus(session.getSessionId(), InterviewSessionEntity.Status.IN_PROGRESS.name());
+            sessionService.updateStatus(session.getSessionId(), InterviewSession.Status.IN_PROGRESS.name());
 
             // 推送问题到前端
             if (!currentQuestion.isEmpty()) {
@@ -103,7 +114,6 @@ public class InterviewBusinessService {
 
             return InterviewStartResponse.builder()
                     .sessionId(session.getSessionId())
-                    .status("started")
                     .question(InterviewStartResponse.QuestionInfo.builder()
                             .content(currentQuestion)
                             .type(questionType)
@@ -161,6 +171,17 @@ public class InterviewBusinessService {
 
             log.info("评估完成，综合得分: {}, 是否需要追问: {}", evaluation.getOverallScore(), evaluation.isNeedFollowUp());
 
+            // 记录回答
+            answerRecordService.recordAnswer(
+                    sessionId,
+                    currentState.questionIndex(),
+                    question,
+                    answerText
+            );
+
+            // 保存评估结果
+            evaluationRecordService.saveEvaluation(sessionId, evaluation);
+
             // 更新状态
             Map<String, Object> stateUpdate = new HashMap<>();
             stateUpdate.put(InterviewState.ANSWER_TEXT, answerText);
@@ -201,7 +222,7 @@ public class InterviewBusinessService {
                                 .build());
             }
 
-            log.info("生成新问题成功: {}", newQuestion.substring(0, Math.min(50, newQuestion.length())) + "...");
+            log.info("生成新问题成功: {}", newQuestion != null ? newQuestion.substring(0, Math.min(50, newQuestion.length())) + "..." : "null");
 
             return InterviewAnswerResponse.continueWith(newQuestion, newQuestionType, newQuestionIndex);
 
@@ -245,6 +266,10 @@ public class InterviewBusinessService {
             String report = snapshot != null && snapshot.state() != null
                     ? snapshot.state().getFinalReport()
                     : "";
+
+            // 计算平均分
+            Double averageScore = evaluationRecordService.calculateAverageScore(sessionId);
+            log.info("面试平均分: {}", averageScore);
 
             sessionService.endSession(sessionId);
             sessionService.saveReport(sessionId, report);

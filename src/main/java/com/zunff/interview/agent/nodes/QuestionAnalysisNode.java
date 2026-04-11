@@ -1,12 +1,14 @@
 package com.zunff.interview.agent.nodes;
 
-import com.zunff.interview.service.ReportGeneratorService;
+import com.zunff.interview.service.interview.ReportGeneratorService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -39,10 +41,10 @@ public class QuestionAnalysisNode {
 
                     // 将分析结果添加到状态（用于最终报告）
                     @SuppressWarnings("unchecked")
-                    java.util.List<Map<String, Object>> analyses = (java.util.List<Map<String, Object>>)
-                            state.data().getOrDefault("questionAnalyses", new java.util.ArrayList<>());
+                    List<Map<String, Object>> analyses = (List<Map<String, Object>>)
+                            state.data().getOrDefault("questionAnalyses", new ArrayList<>());
 
-                    java.util.List<Map<String, Object>> newAnalyses = new java.util.ArrayList<>(analyses);
+                    List<Map<String, Object>> newAnalyses = new ArrayList<>(analyses);
                     Map<String, Object> analysis = new HashMap<>();
                     analysis.put("question", question);
                     analysis.put("questionType", questionType);

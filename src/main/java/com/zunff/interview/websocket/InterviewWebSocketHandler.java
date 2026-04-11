@@ -3,14 +3,14 @@ package com.zunff.interview.websocket;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.request.SubmitAnswerRequest;
-import com.zunff.interview.model.dto.websocket.QuestionMessage;
-import com.zunff.interview.model.dto.websocket.ReportMessage;
-import com.zunff.interview.model.dto.websocket.WebSocketMessage;
-import com.zunff.interview.service.AudioStreamService;
-import com.zunff.interview.service.InterviewBusinessService;
-import com.zunff.interview.service.TtsService;
-import com.zunff.interview.service.VideoStreamService;
+import com.zunff.interview.model.request.SubmitAnswerRequest;
+import com.zunff.interview.model.websocket.QuestionMessage;
+import com.zunff.interview.model.websocket.ReportMessage;
+import com.zunff.interview.model.websocket.WebSocketMessage;
+import com.zunff.interview.service.extend.AudioStreamService;
+import com.zunff.interview.service.interview.InterviewBusinessService;
+import com.zunff.interview.service.extend.TtsService;
+import com.zunff.interview.service.extend.VideoStreamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +22,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -99,7 +100,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private void handleAudioChunk(String sessionId, JSONObject data) {
         String audioBase64 = data.getStr("audio");
         if (audioBase64 != null && !audioBase64.isEmpty()) {
-            byte[] audioData = java.util.Base64.getDecoder().decode(audioBase64);
+            byte[] audioData = Base64.getDecoder().decode(audioBase64);
             audioStreamService.appendChunk(sessionId, audioData);
             log.debug("缓存音频块，会话: {}, 当前缓冲: {} bytes", sessionId, audioStreamService.getBufferSize(sessionId));
         }
@@ -116,7 +117,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         String audioBase64 = null;
         byte[] audioData = audioStreamService.getCompleteAudio(sessionId);
         if (audioData != null) {
-            audioBase64 = java.util.Base64.getEncoder().encodeToString(audioData);
+            audioBase64 = Base64.getEncoder().encodeToString(audioData);
             log.info("从缓存取到音频数据，大小: {} bytes", audioData.length);
         }
 

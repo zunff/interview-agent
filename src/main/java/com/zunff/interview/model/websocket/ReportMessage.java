@@ -1,4 +1,4 @@
-package com.zunff.interview.model.dto.websocket;
+package com.zunff.interview.model.websocket;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

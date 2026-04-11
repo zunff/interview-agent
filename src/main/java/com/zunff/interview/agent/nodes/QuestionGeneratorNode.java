@@ -4,16 +4,16 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.config.KnowledgeConfig;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
-import com.zunff.interview.model.dto.KnowledgeSearchResult;
-import com.zunff.interview.service.InterviewKnowledgeService;
-import com.zunff.interview.service.PromptTemplateService;
+import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
+import com.zunff.interview.service.interview.InterviewKnowledgeService;
+import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -35,9 +35,11 @@ public class QuestionGeneratorNode {
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
     private final InterviewKnowledgeService knowledgeService;
+    private final KnowledgeConfig knowledgeConfig;
 
-    @Value("${interview.knowledge.enabled:true}")
-    private boolean knowledgeEnabled;
+    private boolean isKnowledgeEnabled() {
+        return knowledgeConfig.isEnabled();
+    }
 
     /**
      * 执行问题生成
@@ -86,7 +88,7 @@ public class QuestionGeneratorNode {
 
         // 从知识库检索参考题目
         String referenceContext = "";
-        if (knowledgeEnabled) {
+        if (isKnowledgeEnabled()) {
             referenceContext = searchReferenceQuestions(jobInfo, round);
             if (!referenceContext.isEmpty()) {
                 userPrompt.append("\n--- 可选参考题目（仅供参考，请生成新的问题）---\n");

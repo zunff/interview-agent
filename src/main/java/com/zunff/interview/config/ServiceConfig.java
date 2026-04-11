@@ -2,13 +2,12 @@ package com.zunff.interview.config;
 
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
 import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionModel;
-import com.zunff.interview.service.MultimodalAnalysisService;
-import com.zunff.interview.service.PromptTemplateService;
-import com.zunff.interview.service.VideoStreamService;
+import com.zunff.interview.service.extend.MultimodalAnalysisService;
+import com.zunff.interview.service.extend.PromptTemplateService;
+import com.zunff.interview.service.extend.VideoStreamService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -41,7 +40,8 @@ public class ServiceConfig {
     @Bean
     public ChatClient visionChatClient(
             ChatModel chatModel,
-            @Value("${spring.ai.dashscope.vision.model}") String visionModel) {
+            VisionConfig visionConfig) {
+        String visionModel = visionConfig.getModel();
         log.info("初始化视觉 ChatClient，模型: {}", visionModel);
         DashScopeChatOptions visionOptions = new DashScopeChatOptions();
         visionOptions.setModel(visionModel);
@@ -60,17 +60,17 @@ public class ServiceConfig {
             ChatClient visionChatClient,
             AudioTranscriptionModel transcriptionModel,
             PromptTemplateService promptTemplateService,
-            @Value("${interview.multimodal.enabled:true}") boolean multimodalEnabled) {
+            MultimodalConfig multimodalConfig) {
         return new MultimodalAnalysisService(
                 textChatClient,
                 visionChatClient,
                 transcriptionModel,
                 promptTemplateService,
-                multimodalEnabled);
+                multimodalConfig.isEnabled());
     }
 
     @Bean
-    public VideoStreamService videoStreamService(MultimodalAnalysisService multimodalAnalysisService) {
-        return new VideoStreamService(multimodalAnalysisService);
+    public VideoStreamService videoStreamService(MultimodalAnalysisService multimodalAnalysisService, VideoConfig videoConfig) {
+        return new VideoStreamService(multimodalAnalysisService, videoConfig);
     }
 }

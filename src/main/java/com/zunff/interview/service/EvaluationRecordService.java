@@ -2,19 +2,12 @@ package com.zunff.interview.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.entity.EvaluationRecordEntity;
-
-import java.util.List;
+import com.zunff.interview.model.entity.EvaluationRecord;
 
 /**
  * 评估记录服务接口
  */
-public interface EvaluationRecordService extends IService<EvaluationRecordEntity> {
-
-    /**
-     * 根据会话ID获取所有评估
-     */
-    List<EvaluationRecordEntity> getBySessionId(String sessionId);
+public interface EvaluationRecordService extends IService<EvaluationRecord> {
 
     /**
      * 保存评估结果

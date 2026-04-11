@@ -1,9 +1,10 @@
-package com.zunff.interview.service;
+package com.zunff.interview.service.interview;
 
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.zunff.interview.model.dto.KnowledgeSearchRequest;
-import com.zunff.interview.model.dto.KnowledgeSearchResult;
+import com.zunff.interview.model.dto.rag.KnowledgeSearchRequest;
+import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
+import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;

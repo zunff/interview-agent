@@ -1,12 +1,14 @@
 package com.zunff.interview.model.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 评估记录实体
@@ -16,7 +18,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @TableName("evaluation_record")
-public class EvaluationRecordEntity {
+public class EvaluationRecord {
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -58,12 +60,12 @@ public class EvaluationRecordEntity {
     private Integer overallScore;
 
     /** 优点 (JSON) */
-    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
-    private Object strengths;
+    @TableField(typeHandler = JacksonTypeHandler.class)
+    private List<String> strengths;
 
     /** 不足 (JSON) */
-    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
-    private Object weaknesses;
+    @TableField(typeHandler = JacksonTypeHandler.class)
+    private List<String> weaknesses;
 
     /** 详细评估 */
     private String detailedEvaluation;

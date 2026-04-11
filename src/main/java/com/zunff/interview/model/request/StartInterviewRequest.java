@@ -1,4 +1,4 @@
-package com.zunff.interview.model.dto.request;
+package com.zunff.interview.model.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;

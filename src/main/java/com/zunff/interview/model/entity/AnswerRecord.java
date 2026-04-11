@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @TableName("answer_record")
-public class AnswerRecordEntity {
+public class AnswerRecord {
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -27,15 +27,11 @@ public class AnswerRecordEntity {
     /** 问题索引 */
     private Integer questionIndex;
 
+    /** 问题内容 */
+    private String question;
+
     /** 回答文本 */
     private String answerText;
-
-    /** 音频数据 (Base64) */
-    private String answerAudio;
-
-    /** 视频帧数据 (JSON) */
-    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
-    private Object answerFrames;
 
     /** 时间戳 */
     @TableField(fill = FieldFill.INSERT)

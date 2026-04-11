@@ -1,27 +1,16 @@
 package com.zunff.interview.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.zunff.interview.model.entity.AnswerRecordEntity;
-
-import java.util.List;
+import com.zunff.interview.model.entity.AnswerRecord;
 
 /**
  * 回答记录服务接口
  */
-public interface AnswerRecordService extends IService<AnswerRecordEntity> {
-
-    /**
-     * 根据会话ID获取所有回答
-     */
-    List<AnswerRecordEntity> getBySessionId(String sessionId);
+public interface AnswerRecordService extends IService<AnswerRecord> {
 
     /**
      * 记录回答
      */
-    void recordAnswer(String sessionId, int questionIndex, String answerText, String answerAudio, Object answerFrames);
+    void recordAnswer(String sessionId, int questionIndex, String question, String answerText);
 
-    /**
-     * 统计会话的回答数量
-     */
-    long countBySessionId(String sessionId);
 }

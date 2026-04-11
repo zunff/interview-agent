@@ -20,14 +20,14 @@ spring:
       api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
-          model: qwen-plus
+          model: qwen3.5-plus
           temperature: 0.7
       vision:
-        model: qwen3.5-omni-plus-2026-03-15
+        model: qwen3.5-omni-plus
       audio:
         transcription:
           options:
-            model: qwen3-asr-flash-realtime-2026-02-10
+            model: qwen3-asr-flash
             format: wav
             sample-rate: 16000
       embedding:
@@ -35,9 +35,7 @@ spring:
       # TTS 语音合成配置
       tts:
         model: qwen3-tts-flash
-        voice: Cherry
-        language-type: Chinese
-        enabled: true
+        voice: Ethan
     # 向量存储配置 (pgvector)
     vectorstore:
       pgvector:

@@ -1,4 +1,4 @@
-package com.zunff.interview.model.dto.response;
+package com.zunff.interview.model.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -18,9 +18,6 @@ public class InterviewStartResponse {
 
     @Schema(description = "面试会话ID", example = "interview-123e4567-e89b-12d3-a456-426614174000")
     private String sessionId;
-
-    @Schema(description = "会话状态", example = "started")
-    private String status;
 
     @Schema(description = "第一个面试问题")
     private QuestionInfo question;

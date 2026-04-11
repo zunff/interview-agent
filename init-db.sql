@@ -25,9 +25,8 @@ CREATE TABLE IF NOT EXISTS answer_record (
     id SERIAL PRIMARY KEY,
     session_id VARCHAR(32) REFERENCES interview_session(session_id) ON DELETE CASCADE,
     question_index INT,
+    question TEXT,
     answer_text TEXT,
-    answer_audio TEXT,
-    answer_frames JSONB,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

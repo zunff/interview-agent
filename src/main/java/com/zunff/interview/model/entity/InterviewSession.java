@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @TableName("interview_session")
-public class InterviewSessionEntity {
+public class InterviewSession {
 
     @TableId(type = IdType.AUTO)
     private Long id;

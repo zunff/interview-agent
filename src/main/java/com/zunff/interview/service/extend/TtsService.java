@@ -1,14 +1,13 @@
-package com.zunff.interview.service;
+package com.zunff.interview.service.extend;
 
 import com.alibaba.dashscope.aigc.multimodalconversation.AudioParameters;
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversation;
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationParam;
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationResult;
-import com.zunff.interview.model.dto.websocket.WebSocketMessage;
-import com.zunff.interview.websocket.InterviewWebSocketHandler;
+import com.zunff.interview.config.TtsConfig;
+import com.zunff.interview.model.websocket.WebSocketMessage;
 import io.reactivex.Flowable;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -29,15 +28,11 @@ public class TtsService {
     private final String voice;
     private final boolean enabled;
 
-    public TtsService(
-            @Value("${spring.ai.dashscope.api-key}") String apiKey,
-            @Value("${spring.ai.dashscope.tts.model:qwen3-tts-flash}") String model,
-            @Value("${spring.ai.dashscope.tts.voice:Cherry}") String voice,
-            @Value("${interview.tts.enabled:true}") boolean enabled) {
-        this.apiKey = apiKey;
-        this.model = model;
-        this.voice = voice;
-        this.enabled = enabled;
+    public TtsService(TtsConfig ttsConfig) {
+        this.apiKey = ttsConfig.getApiKey();
+        this.model = ttsConfig.getModel();
+        this.voice = ttsConfig.getVoice();
+        this.enabled = ttsConfig.isEnabled();
         log.info("TtsService 初始化: model={}, voice={}, enabled={}", model, voice, enabled);
     }
 

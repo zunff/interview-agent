@@ -1,4 +1,4 @@
-package com.zunff.interview.service;
+package com.zunff.interview.service.extend;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PromptTemplateService {
 
     private static final String PROMPTS_DIR = "prompts/";
+    private static final String PROMPT_EXTENSION = ".prompt";
 
     /** Prompt 缓存 */
     private final Map<String, String> promptCache = new ConcurrentHashMap<>();
@@ -68,7 +69,7 @@ public class PromptTemplateService {
 
     private String loadPrompt(String name) {
         try {
-            ClassPathResource resource = new ClassPathResource(PROMPTS_DIR + name + ".st");
+            ClassPathResource resource = new ClassPathResource(PROMPTS_DIR + name + PROMPT_EXTENSION);
             if (!resource.exists()) {
                 throw new RuntimeException("Prompt template not found: " + name);
             }

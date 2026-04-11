@@ -5,7 +5,7 @@ import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.service.PromptTemplateService;
+import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +13,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -67,7 +68,7 @@ public class FollowUpDecisionNode {
             userPrompt.append("- 流畅度：").append(evaluation.getFluency()).append("\n");
             userPrompt.append("- 自信度：").append(evaluation.getConfidence()).append("\n");
 
-            java.util.List<String> weaknesses = evaluation.getWeaknesses();
+           List<String> weaknesses = evaluation.getWeaknesses();
             if (weaknesses != null && !weaknesses.isEmpty()) {
                 userPrompt.append("- 不足之处：").append(String.join("、", weaknesses)).append("\n");
             }

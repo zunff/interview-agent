@@ -1,13 +1,13 @@
 package com.zunff.interview.controller;
 
 import com.zunff.interview.common.response.ApiResponse;
-import com.zunff.interview.model.dto.request.StartInterviewRequest;
-import com.zunff.interview.model.dto.request.SubmitAnswerRequest;
-import com.zunff.interview.model.dto.response.InterviewAnswerResponse;
-import com.zunff.interview.model.dto.response.InterviewStartResponse;
-import com.zunff.interview.model.dto.response.ReportResponse;
-import com.zunff.interview.model.dto.response.SessionResponse;
-import com.zunff.interview.service.InterviewBusinessService;
+import com.zunff.interview.model.request.StartInterviewRequest;
+import com.zunff.interview.model.request.SubmitAnswerRequest;
+import com.zunff.interview.model.response.InterviewAnswerResponse;
+import com.zunff.interview.model.response.InterviewStartResponse;
+import com.zunff.interview.model.response.ReportResponse;
+import com.zunff.interview.model.response.SessionResponse;
+import com.zunff.interview.service.interview.InterviewBusinessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,9 +29,6 @@ public class InterviewController {
 
     private final InterviewBusinessService interviewBusinessService;
 
-    /**
-     * 开始面试
-     */
     @Operation(summary = "开始面试", description = "根据简历和岗位信息创建新的面试会话")
     @PostMapping("/start")
     public ApiResponse<InterviewStartResponse> startInterview(@Valid @RequestBody StartInterviewRequest request) {
@@ -40,9 +37,7 @@ public class InterviewController {
         return ApiResponse.success(response);
     }
 
-    /**
-     * 提交答案
-     */
+
     @Operation(summary = "【测试用】提交答案", description = "测试时通过 HTTP 提交文本答案，生产环境使用 WebSocket 的 answer_complete 信号")
     @PostMapping("/answer")
     public ApiResponse<InterviewAnswerResponse> submitAnswer(@Valid @RequestBody SubmitAnswerRequest request) {
@@ -51,9 +46,7 @@ public class InterviewController {
         return ApiResponse.success(response);
     }
 
-    /**
-     * 获取会话状态
-     */
+
     @Operation(summary = "获取会话状态", description = "获取当前面试会话的状态信息")
     @GetMapping("/session/{sessionId}")
     public ApiResponse<SessionResponse> getSession(
@@ -62,9 +55,7 @@ public class InterviewController {
         return ApiResponse.success(response);
     }
 
-    /**
-     * 结束面试
-     */
+
     @Operation(summary = "结束面试", description = "结束当前面试会话并生成评估报告")
     @PostMapping("/end/{sessionId}")
     public ApiResponse<ReportResponse> endInterview(
@@ -74,9 +65,6 @@ public class InterviewController {
         return ApiResponse.success(response);
     }
 
-    /**
-     * 获取面试报告
-     */
     @Operation(summary = "获取面试报告", description = "获取已完成面试的评估报告")
     @GetMapping("/report/{sessionId}")
     public ApiResponse<ReportResponse> getReport(

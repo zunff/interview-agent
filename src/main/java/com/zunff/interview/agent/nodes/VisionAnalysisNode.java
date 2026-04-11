@@ -2,7 +2,7 @@ package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
-import com.zunff.interview.service.MultimodalAnalysisService;
+import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
