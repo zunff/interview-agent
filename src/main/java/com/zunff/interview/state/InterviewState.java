@@ -28,6 +28,8 @@ public class InterviewState extends AgentState {
     public static final String RESUME = "resume";
     public static final String JOB_INFO = "jobInfo";
     public static final String SESSION_ID = "sessionId";
+    public static final String CANDIDATE_PROFILE = "candidateProfile";
+    public static final String SELF_INTRO = "selfIntro";
 
     // ========== 问题管理 ==========
     public static final String QUESTIONS = "questions";
@@ -166,6 +168,10 @@ public class InterviewState extends AgentState {
         SCHEMA.put(RESUME, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(JOB_INFO, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(SESSION_ID, Channels.base(new LastValueReducer<>(), () -> ""));
+
+        // 候选人画像（简历 + 自我介绍综合分析）
+        SCHEMA.put(CANDIDATE_PROFILE, Channels.base(new LastValueReducer<>(), () -> ""));
+        SCHEMA.put(SELF_INTRO, Channels.base(new LastValueReducer<>(), () -> ""));
     }
 
     public InterviewState(Map<String, Object> initData) {
@@ -184,6 +190,14 @@ public class InterviewState extends AgentState {
 
     public String sessionId() {
         return (String) data().getOrDefault(SESSION_ID, "");
+    }
+
+    public String candidateProfile() {
+        return (String) data().getOrDefault(CANDIDATE_PROFILE, "");
+    }
+
+    public String selfIntro() {
+        return (String) data().getOrDefault(SELF_INTRO, "");
     }
 
     public int questionIndex() {

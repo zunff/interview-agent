@@ -13,6 +13,8 @@ public final class NodeNames {
     // ========== 主图节点 ==========
     public static final String INIT = "init";
     public static final String JOB_ANALYSIS = "jobAnalysis";
+    public static final String SELF_INTRO = "selfIntro";
+    public static final String PROFILE_ANALYSIS = "profileAnalysis";
     public static final String GENERATE_QUESTION = "generateQuestion";
     public static final String ASK_QUESTION = "askQuestion";
     public static final String FOLLOW_UP_DECISION = "followUpDecision";

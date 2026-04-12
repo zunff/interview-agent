@@ -2,8 +2,10 @@ package com.zunff.interview.agent.graph;
 
 import com.zunff.interview.agent.nodes.InitInterviewNode;
 import com.zunff.interview.agent.nodes.JobAnalysisNode;
+import com.zunff.interview.agent.nodes.ProfileAnalysisNode;
 import com.zunff.interview.agent.nodes.ReportGeneratorNode;
 import com.zunff.interview.agent.nodes.RoundTransitionNode;
+import com.zunff.interview.agent.nodes.SelfIntroNode;
 import com.zunff.interview.agent.router.RoundTransitionRouter;
 import com.zunff.interview.config.GraphConfigProperties;
 import com.zunff.interview.constant.InterviewRound;
@@ -30,10 +32,11 @@ import static org.bsc.langgraph4j.StateGraph.START;
  * 面试 Agent 主图配置
  *
  * 架构:
- * START -> init -> jobAnalysis -> technicalRound(子图) -> roundTransition -> businessRound(子图) -> generateReport -> END
+ * START → init → jobAnalysis → selfIntro(interrupt) → profileAnalysis → technicalRound → roundTransition → businessRound → generateReport → END
  *
+ * 自我介绍环节：SelfIntroNode 只标记阶段，前端自行引导，interrupt 等待回答
+ * ProfileAnalysisNode：一次 LLM 调用综合分析简历 + 自我介绍，生成统一候选人画像
  * 子图使用 addSubGraph() 合并到主图，状态共享
- * interruptsAfter 在主图编译时设置，子图节点合并后可直接暂停
  */
 @Slf4j
 @Configuration
@@ -41,6 +44,8 @@ public class InterviewAgentGraph {
 
     private final InitInterviewNode initInterviewNode;
     private final JobAnalysisNode jobAnalysisNode;
+    private final SelfIntroNode selfIntroNode;
+    private final ProfileAnalysisNode profileAnalysisNode;
     private final ReportGeneratorNode reportGeneratorNode;
     private final RoundTransitionNode roundTransitionNode;
     private final RoundTransitionRouter roundTransitionRouter;
@@ -50,6 +55,8 @@ public class InterviewAgentGraph {
     public InterviewAgentGraph(
             InitInterviewNode initInterviewNode,
             JobAnalysisNode jobAnalysisNode,
+            SelfIntroNode selfIntroNode,
+            ProfileAnalysisNode profileAnalysisNode,
             ReportGeneratorNode reportGeneratorNode,
             RoundTransitionNode roundTransitionNode,
             RoundTransitionRouter roundTransitionRouter,
@@ -57,6 +64,8 @@ public class InterviewAgentGraph {
             GraphConfigProperties graphConfig) {
         this.initInterviewNode = initInterviewNode;
         this.jobAnalysisNode = jobAnalysisNode;
+        this.selfIntroNode = selfIntroNode;
+        this.profileAnalysisNode = profileAnalysisNode;
         this.reportGeneratorNode = reportGeneratorNode;
         this.roundTransitionNode = roundTransitionNode;
         this.roundTransitionRouter = roundTransitionRouter;
@@ -66,11 +75,10 @@ public class InterviewAgentGraph {
 
     /**
      * 创建面试 Agent 主图
-     * 使用 addSubGraph() 合并子图，状态共享
      */
     @Bean
     public CompiledGraph<InterviewState> interviewAgent() throws GraphStateException {
-        log.info("初始化面试 Agent 主图（子图架构 + 岗位分析）");
+        log.info("初始化面试 Agent 主图");
 
         // 获取子图的 StateGraph（未编译）
         StateGraph<InterviewState> technicalSubgraph = interviewRoundGraph.createGraph(InterviewRound.TECHNICAL);
@@ -84,6 +92,8 @@ public class InterviewAgentGraph {
                 // ========== 添加节点 ==========
                 .addNode(NodeNames.INIT, initInterviewNode::execute)
                 .addNode(NodeNames.JOB_ANALYSIS, jobAnalysisNode::execute)
+                .addNode(NodeNames.SELF_INTRO, selfIntroNode::execute)
+                .addNode(NodeNames.PROFILE_ANALYSIS, profileAnalysisNode::execute)
 
                 // 使用 addSubgraph() 合并子图（状态共享）
                 .addNode(NodeNames.TECHNICAL_ROUND, technicalSubgraph)
@@ -95,7 +105,11 @@ public class InterviewAgentGraph {
                 // ========== 定义边 ==========
                 .addEdge(START, NodeNames.INIT)
                 .addEdge(NodeNames.INIT, NodeNames.JOB_ANALYSIS)
-                .addEdge(NodeNames.JOB_ANALYSIS, NodeNames.TECHNICAL_ROUND)
+                .addEdge(NodeNames.JOB_ANALYSIS, NodeNames.SELF_INTRO)
+
+                // 自我介绍 → 画像分析 → 技术轮
+                .addEdge(NodeNames.SELF_INTRO, NodeNames.PROFILE_ANALYSIS)
+                .addEdge(NodeNames.PROFILE_ANALYSIS, NodeNames.TECHNICAL_ROUND)
 
                 // 技术轮完成后进入轮次切换
                 .addEdge(NodeNames.TECHNICAL_ROUND, NodeNames.ROUND_TRANSITION)
@@ -114,19 +128,17 @@ public class InterviewAgentGraph {
 
                 // 业务轮完成后生成报告
                 .addEdge(NodeNames.BUSINESS_ROUND, NodeNames.GENERATE_REPORT)
-
                 .addEdge(NodeNames.GENERATE_REPORT, END)
 
-                // 主图统一编译，设置 checkpointSaver 和 interruptsAfter
+                // 主图统一编译
                 .compile(CompileConfig.builder()
-                        .checkpointSaver(new MemorySaver())  // 只有主图有 MemorySaver
+                        .checkpointSaver(new MemorySaver())
                         .recursionLimit(graphConfig.getMainRecursionLimit())
-                        // 在主图编译时设置 interruptsAfter（子图节点格式：subgraphId-nodeId）
                         .interruptsAfter(Set.of(
+                                NodeNames.SELF_INTRO,  // 自我介绍需要等待回答
                                 NodeNames.TECHNICAL_ROUND + "-" + techAskQuestion,
                                 NodeNames.BUSINESS_ROUND + "-" + bizAskQuestion
                         ))
                         .build());
     }
-
 }
