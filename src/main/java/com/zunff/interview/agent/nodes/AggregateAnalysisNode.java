@@ -19,6 +19,8 @@ import java.util.concurrent.CompletableFuture;
  * 分析结果聚合节点
  * 聚合视觉分析和音频分析结果，进行综合评估
  * 作为并行分析分支的汇聚点
+ *
+ * 注意：只负责评分，追问决策由 FollowUpDecisionNode 处理
  */
 @Slf4j
 @Component
@@ -28,7 +30,7 @@ public class AggregateAnalysisNode {
     private final MultimodalAnalysisService multimodalAnalysisService;
 
     /**
-     * 执行分析结果聚合和综合评估
+     * 执行分析结果聚合和综合评估（只负责评分）
      */
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
         log.info("开始聚合分析结果并执行综合评估");
@@ -44,7 +46,7 @@ public class AggregateAnalysisNode {
             String evaluationPrompt = getEvaluationPromptByQuestionType(questionType);
             log.debug("选择评估模板: {} -> {}", questionType, evaluationPrompt);
 
-            // 综合评估
+            // 综合评估（只负责评分）
             EvaluationBO evaluation = multimodalAnalysisService.comprehensiveEvaluate(
                     question,
                     visionResult,
@@ -54,8 +56,6 @@ public class AggregateAnalysisNode {
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.CURRENT_EVALUATION, evaluation);
-            updates.put(InterviewState.NEED_FOLLOW_UP, evaluation.isNeedFollowUp());
-            updates.put(InterviewState.FOLLOW_UP_QUESTION, evaluation.getFollowUpSuggestion());
             CircuitBreakerHelper.recordSuccess(updates);
 
             // 传递多模态追问建议到状态
@@ -65,8 +65,7 @@ public class AggregateAnalysisNode {
                 log.debug("多模态建议: {}", evaluation.getModalityFollowUpSuggestion());
             }
 
-            log.info("综合评估完成，综合得分: {}, 是否需要追问: {}, 问题类型: {}",
-                    evaluation.getOverallScore(), evaluation.isNeedFollowUp(), questionType);
+            log.info("综合评估完成，综合得分: {}, 问题类型: {}", evaluation.getOverallScore(), questionType);
 
             return CompletableFuture.completedFuture(updates);
 
@@ -80,11 +79,10 @@ public class AggregateAnalysisNode {
                     .emotionScore(visionResult.getEmotionScore())
                     .bodyLanguageScore(visionResult.getBodyLanguageScore())
                     .voiceToneScore(audioResult.getVoiceToneScore())
-                    .overallScore(60).needFollowUp(false)
+                    .overallScore(60)
                     .detailedEvaluation("评估失败，使用默认评分")
                     .build();
             updates.put(InterviewState.CURRENT_EVALUATION, defaultEval);
-            updates.put(InterviewState.NEED_FOLLOW_UP, false);
             return CompletableFuture.completedFuture(updates);
         }
     }

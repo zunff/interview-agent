@@ -48,8 +48,6 @@
     "overallScore": 77,
     "strengths": ["回答内容准确", "逻辑清晰", "对核心概念理解深入"],
     "weaknesses": ["对部分扩展知识点了解不够深入"],
-    "needFollowUp": true,
-    "followUpSuggestion": "可以追问底层实现原理或性能优化方面的问题",
     "detailedEvaluation": "详细评价内容..."
 }
 ```
@@ -57,5 +55,4 @@
 ### 字段说明
 - 各项评分范围 0-100
 - `overallScore` 为综合得分，建议取各项平均
-- `needFollowUp` 表示是否需要追问以深入了解
 - `strengths` 和 `weaknesses` 为数组，列出 2-4 条

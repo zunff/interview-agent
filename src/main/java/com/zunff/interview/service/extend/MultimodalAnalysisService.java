@@ -5,6 +5,7 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.bo.FollowUpDecisionBO;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
@@ -192,6 +193,69 @@ public class MultimodalAnalysisService {
     }
 
     /**
+     * 追问决策
+     * 基于评估结果和多模态分析，独立判断是否需要追问
+     *
+     * @param question      当前问题
+     * @param answer        候选人回答
+     * @param evaluation    评估结果
+     * @param visionResult  视觉分析结果
+     * @param audioResult   音频分析结果
+     * @param followUpCount 已追问次数
+     * @param maxFollowUps  追问上限
+     * @return 追问决策结果
+     */
+    public FollowUpDecisionBO decideFollowUp(
+            String question,
+            String answer,
+            EvaluationBO evaluation,
+            VisionAnalysisResult visionResult,
+            AudioAnalysisResult audioResult,
+            int followUpCount,
+            int maxFollowUps) {
+
+        log.info("开始追问决策，当前追问次数: {}/{}", followUpCount, maxFollowUps);
+
+        String systemPrompt = promptTemplateService.getPrompt("followup-decision");
+
+        StringBuilder userPrompt = new StringBuilder();
+        userPrompt.append("## 问题内容\n").append(question).append("\n\n");
+        userPrompt.append("## 回答内容\n").append(answer).append("\n\n");
+        userPrompt.append("## 评估结果\n");
+        userPrompt.append("- 综合得分：").append(evaluation.getOverallScore()).append("\n");
+        userPrompt.append("- 优点：").append(String.join(", ", evaluation.getStrengths())).append("\n");
+        userPrompt.append("- 不足：").append(String.join(", ", evaluation.getWeaknesses())).append("\n\n");
+        userPrompt.append("## 多模态分析\n");
+        userPrompt.append("- 表情得分：").append(visionResult.getEmotionScore()).append("\n");
+        userPrompt.append("- 肢体语言得分：").append(visionResult.getBodyLanguageScore()).append("\n");
+        userPrompt.append("- 语音得分：").append(audioResult.getVoiceToneScore()).append("\n");
+        if (visionResult.isHasConcern() || audioResult.isHasConcern()) {
+            userPrompt.append("- 多模态异常：").append(buildModalityFollowUpSuggestion(visionResult, audioResult)).append("\n");
+        }
+        userPrompt.append("\n## 追问次数\n");
+        userPrompt.append("- 已追问次数：").append(followUpCount).append("\n");
+        userPrompt.append("- 追问上限：").append(maxFollowUps).append("\n");
+
+        try {
+            String response = textChatClient.prompt()
+                    .system(systemPrompt)
+                    .user(userPrompt.toString())
+                    .call()
+                    .content();
+
+            return parseFollowUpDecision(response);
+
+        } catch (Exception e) {
+            log.error("追问决策失败", e);
+            // 默认进入下一题
+            return FollowUpDecisionBO.builder()
+                    .decision("nextQuestion")
+                    .reason("追问决策失败，跳过追问")
+                    .build();
+        }
+    }
+
+    /**
      * 解析视频分析结果
      */
     private VisionAnalysisResult parseVisionAnalysisResult(String response) {
@@ -288,6 +352,32 @@ public class MultimodalAnalysisService {
         return "";
     }
 
+    /**
+     * 解析追问决策结果
+     */
+    private FollowUpDecisionBO parseFollowUpDecision(String response) {
+        try {
+            String jsonStr = extractJson(response);
+            JSONObject json = JSONUtil.parseObj(jsonStr);
+
+            String decision = json.getStr("decision", "nextQuestion");
+
+            return FollowUpDecisionBO.builder()
+                    .decision(decision)
+                    .followUpQuestion(json.getStr("followUpQuestion", ""))
+                    .reason(json.getStr("reason", ""))
+                    .followUpType(json.getStr("followUpType", ""))
+                    .build();
+
+        } catch (Exception e) {
+            log.error("解析追问决策结果失败: {}", e.getMessage());
+            return FollowUpDecisionBO.builder()
+                    .decision("nextQuestion")
+                    .reason("解析失败")
+                    .build();
+        }
+    }
+
     private EvaluationBO parseEvaluationBO(String response,
                                             VisionAnalysisResult visionResult,
                                             AudioAnalysisResult audioResult) {
@@ -310,8 +400,6 @@ public class MultimodalAnalysisService {
                     .overallScore(json.getInt("overallScore", 60))
                     .strengths(parseStringList(json, "strengths"))
                     .weaknesses(parseStringList(json, "weaknesses"))
-                    .needFollowUp(json.getBool("needFollowUp", false))
-                    .followUpSuggestion(json.getStr("followUpSuggestion", ""))
                     .detailedEvaluation(json.getStr("detailedEvaluation", ""))
                     .modalityFollowUpSuggestion(modalityFollowUpSuggestion)
                     .modalityConcern(modalityConcern)
@@ -327,7 +415,6 @@ public class MultimodalAnalysisService {
                     .bodyLanguageScore(visionResult.getBodyLanguageScore())
                     .voiceToneScore(audioResult.getVoiceToneScore())
                     .overallScore(60)
-                    .needFollowUp(false)
                     .build();
         }
     }

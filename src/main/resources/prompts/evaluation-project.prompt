@@ -55,8 +55,6 @@
     "overallScore": 82,
     "strengths": ["项目背景描述清晰", "技术选型有思考", "有量化的性能数据"],
     "weaknesses": ["个人贡献与团队成果有所混淆", "缺少对失败经验的反思"],
-    "needFollowUp": true,
-    "followUpSuggestion": "可以追问具体的技术实现细节，验证项目的真实性",
     "detailedEvaluation": "详细评价内容...",
     "starAnalysis": {
         "situation": "情境分析...",
@@ -71,5 +69,4 @@
 ### 字段说明
 - 各项评分范围 0-满分
 - `overallScore` 为综合得分（满分100），建议按权重计算
-- `needFollowUp` 表示是否需要追问验证项目真实性
 - `starAnalysis` 提供每个 STAR 要素的详细分析

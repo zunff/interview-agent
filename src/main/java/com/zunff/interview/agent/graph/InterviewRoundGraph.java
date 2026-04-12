@@ -128,7 +128,7 @@ public class InterviewRoundGraph {
                 .addEdge(analyzeVision, aggregateAnalysis)
                 .addEdge(analyzeAudio, aggregateAnalysis)
 
-                // 聚合后进行追问决策
+                // 聚合后进入追问决策节点
                 .addEdge(aggregateAnalysis, followUpDecision)
 
                 // ========== 条件路由：追问决策 ==========
@@ -152,6 +152,7 @@ public class InterviewRoundGraph {
 
     /**
      * 评估后的路由决策
+     * 只调用 Router 做保护性检查，LLM 决策由 FollowUpDecisionNode 完成
      */
     private String routeAfterEvaluation(InterviewState state, InterviewRound round) {
         String decision = evaluationRouter.route(state);

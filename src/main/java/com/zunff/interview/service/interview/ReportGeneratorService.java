@@ -92,7 +92,7 @@ public class ReportGeneratorService {
                 Map<String, Object> eval = evaluations.get(i);
                 report.append("**评估结果：**\n");
                 report.append("- 综合得分：").append(eval.getOrDefault("overallScore", "N/A")).append("\n");
-                report.append("- 是否需要追问：").append(eval.getOrDefault("needFollowUp", false)).append("\n\n");
+                report.append("- 路由决策：").append(eval.getOrDefault("decision", "nextQuestion")).append("\n\n");
             }
         }
 

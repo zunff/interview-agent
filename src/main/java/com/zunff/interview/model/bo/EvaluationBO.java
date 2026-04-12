@@ -64,12 +64,6 @@ public class EvaluationBO implements Serializable {
     /** 详细评价 */
     private String detailedEvaluation;
 
-    /** 是否需要追问 */
-    private boolean needFollowUp;
-
-    /** 追问建议 */
-    private String followUpSuggestion;
-
     /** 多模态追问建议（如"肢体语言紧张，建议追问自信度"） */
     private String modalityFollowUpSuggestion;
 

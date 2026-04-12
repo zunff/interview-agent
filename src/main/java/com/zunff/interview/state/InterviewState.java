@@ -55,8 +55,8 @@ public class InterviewState extends AgentState {
 
     // ========== 追问控制 ==========
     public static final String FOLLOW_UP_COUNT = "followUpCount";
-    public static final String NEED_FOLLOW_UP = "needFollowUp";
     public static final String FOLLOW_UP_QUESTION = "followUpQuestion";
+    public static final String DECISION = "decision";  // 路由决策: followUp/deepDive/challengeMode/nextQuestion
 
     // ========== 最终报告 ==========
     public static final String FINAL_REPORT = "finalReport";
@@ -134,8 +134,8 @@ public class InterviewState extends AgentState {
         SCHEMA.put(ANSWER_AUDIO, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(CURRENT_EVALUATION, Channels.base(new LastValueReducer<>(), EvaluationBO::new));
         SCHEMA.put(FOLLOW_UP_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));
-        SCHEMA.put(NEED_FOLLOW_UP, Channels.base(new LastValueReducer<>(), () -> false));
         SCHEMA.put(FOLLOW_UP_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
+        SCHEMA.put(DECISION, Channels.base(new LastValueReducer<>(), () -> "nextQuestion"));
         SCHEMA.put(FINAL_REPORT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(IS_FINISHED, Channels.base(new LastValueReducer<>(), () -> false));
         SCHEMA.put(MAX_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 10));
@@ -230,9 +230,11 @@ public class InterviewState extends AgentState {
         return value instanceof Number ? ((Number) value).intValue() : 0;
     }
 
-    public boolean needFollowUp() {
-        Object value = data().get(NEED_FOLLOW_UP);
-        return Boolean.TRUE.equals(value);
+    /**
+     * 获取路由决策
+     */
+    public String decision() {
+        return (String) data().getOrDefault(DECISION, "nextQuestion");
     }
 
     public int maxQuestions() {

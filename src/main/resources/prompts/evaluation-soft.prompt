@@ -57,8 +57,6 @@
     "overallScore": 83,
     "strengths": ["表达清晰有条理", "有良好的团队协作意识", "表现出较强的学习能力"],
     "weaknesses": ["面对失败时的反思不够深入", "主动性方面体现不够充分"],
-    "needFollowUp": true,
-    "followUpSuggestion": "可以追问具体的团队冲突案例或学习经历",
     "detailedEvaluation": "详细评价内容...",
     "culturalFit": {
         "fitScore": 80,

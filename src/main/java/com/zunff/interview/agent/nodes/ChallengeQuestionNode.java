@@ -68,8 +68,8 @@ public class ChallengeQuestionNode {
             log.error("生成挑战问题失败", e);
             Map<String, Object> updates = new HashMap<>();
             CircuitBreakerHelper.handleFailure(state, updates, e);
-            // 失败时使用普通追问
-            updates.put(InterviewState.NEED_FOLLOW_UP, false);
+            // 失败时进入下一题
+            updates.put(InterviewState.DECISION, "nextQuestion");
             return CompletableFuture.completedFuture(updates);
         }
     }

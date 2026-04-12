@@ -49,8 +49,6 @@
     "overallScore": 81,
     "strengths": ["业务理解深入", "问题分析有逻辑", "方案考虑全面"],
     "weaknesses": ["对数据指标设计不够具体", "缺少对风险的考虑"],
-    "needFollowUp": true,
-    "followUpSuggestion": "可以追问具体的业务指标设计或竞品分析",
     "detailedEvaluation": "详细评价内容...",
     "businessInsight": "候选人对业务的核心洞察..."
 }

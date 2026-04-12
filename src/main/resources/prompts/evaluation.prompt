@@ -15,10 +15,8 @@
     "overallScore": 77,
     "strengths": ["回答内容准确", "逻辑清晰"],
     "weaknesses": ["表达略显紧张"],
-    "needFollowUp": true,
-    "followUpSuggestion": "可以追问具体实现细节",
     "detailedEvaluation": "详细评价内容..."
 }
 
 各项评分范围 0-100。
-needFollowUp 表示是否需要追问以深入了解。
+overallScore 为综合得分，建议取各项平均。
