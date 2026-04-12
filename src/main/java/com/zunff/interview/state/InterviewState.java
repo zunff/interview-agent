@@ -346,14 +346,24 @@ public class InterviewState extends AgentState {
 
     /**
      * 获取当前轮次的追问上限
+     * 优先使用轮次特定配置，否则使用通用配置
      */
     public int maxFollowUpsForCurrentRound() {
+        // 先检查通用配置
+        int defaultMaxFollowUps = maxFollowUps();
+
         if (isTechnicalRound()) {
             Object value = data().get(MAX_FOLLOW_UPS_TECHNICAL);
-            return value instanceof Number ? ((Number) value).intValue() : 3;
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            return defaultMaxFollowUps; // 使用通用配置作为默认值
         } else {
             Object value = data().get(MAX_FOLLOW_UPS_BUSINESS);
-            return value instanceof Number ? ((Number) value).intValue() : 2;
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            return defaultMaxFollowUps; // 使用通用配置作为默认值
         }
     }
 
