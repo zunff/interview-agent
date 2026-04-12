@@ -68,15 +68,17 @@ public class InterviewBusinessService {
      * @return 图执行结果，如果失败返回 null
      */
     public InterviewState executeInterviewGraph(String sessionId, String resume, String jobInfo,
-                                                 int maxQuestions, int maxFollowUps) {
+                                                 int maxTechnicalQuestions, int maxBusinessQuestions, int maxFollowUps) {
         log.info("开始执行面试图，sessionId: {}, 简历长度: {}, 岗位: {}", sessionId, resume.length(), jobInfo);
 
         Map<String, Object> initialState = new HashMap<>();
         initialState.put(InterviewState.SESSION_ID, sessionId);
         initialState.put(InterviewState.RESUME, resume);
         initialState.put(InterviewState.JOB_INFO, jobInfo);
-        initialState.put(InterviewState.MAX_QUESTIONS, maxQuestions);
-        initialState.put(InterviewState.MAX_FOLLOW_UPS, maxFollowUps);
+        initialState.put(InterviewState.MAX_TECHNICAL_QUESTIONS, maxTechnicalQuestions);
+        initialState.put(InterviewState.MAX_BUSINESS_QUESTIONS, maxBusinessQuestions);
+        initialState.put(InterviewState.MAX_FOLLOW_UPS_TECHNICAL, maxFollowUps);
+        initialState.put(InterviewState.MAX_FOLLOW_UPS_BUSINESS, maxFollowUps);
 
         RunnableConfig config = RunnableConfig.builder()
                 .threadId(sessionId)

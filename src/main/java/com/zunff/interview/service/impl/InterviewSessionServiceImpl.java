@@ -29,14 +29,15 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
     @Override
     @Transactional
     public InterviewSession createSession(String resume, String jobInfo,
-                                          int maxQuestions, int maxFollowUps) {
+                                          int maxTechnicalQuestions, int maxBusinessQuestions, int maxFollowUps) {
         String sessionId = IdUtil.fastSimpleUUID().substring(0, 16);
 
         InterviewSession session = InterviewSession.builder()
                 .sessionId(sessionId)
                 .resume(resume)
                 .jobInfo(jobInfo)
-                .maxQuestions(maxQuestions)
+                .maxTechnicalQuestions(maxTechnicalQuestions)
+                .maxBusinessQuestions(maxBusinessQuestions)
                 .maxFollowUps(maxFollowUps)
                 .currentQuestionIndex(0)
                 .status(InterviewSession.Status.WAITING.name())

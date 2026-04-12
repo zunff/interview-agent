@@ -77,8 +77,6 @@ public class InterviewState extends AgentState {
     public static final String MODALITY_CONCERN = "modalityConcern";
 
     // ========== 配置参数 ==========
-    public static final String MAX_QUESTIONS = "maxQuestions";
-    public static final String MAX_FOLLOW_UPS = "maxFollowUps";
     public static final String MAX_TECHNICAL_QUESTIONS = "maxTechnicalQuestions";  // 默认6
     public static final String MAX_BUSINESS_QUESTIONS = "maxBusinessQuestions";    // 默认4
     public static final String ROUND_PASS_SCORE = "roundPassScore";                // 默认75
@@ -138,8 +136,6 @@ public class InterviewState extends AgentState {
         SCHEMA.put(DECISION, Channels.base(new LastValueReducer<>(), () -> "nextQuestion"));
         SCHEMA.put(FINAL_REPORT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(IS_FINISHED, Channels.base(new LastValueReducer<>(), () -> false));
-        SCHEMA.put(MAX_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 10));
-        SCHEMA.put(MAX_FOLLOW_UPS, Channels.base(new LastValueReducer<>(), () -> 2));
         SCHEMA.put(MAX_TECHNICAL_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 6));
         SCHEMA.put(MAX_BUSINESS_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 4));
         SCHEMA.put(ROUND_PASS_SCORE, Channels.base(new LastValueReducer<>(), () -> 75));
@@ -235,16 +231,6 @@ public class InterviewState extends AgentState {
      */
     public String decision() {
         return (String) data().getOrDefault(DECISION, "nextQuestion");
-    }
-
-    public int maxQuestions() {
-        Object value = data().get(MAX_QUESTIONS);
-        return value instanceof Number ? ((Number) value).intValue() : 10;
-    }
-
-    public int maxFollowUps() {
-        Object value = data().get(MAX_FOLLOW_UPS);
-        return value instanceof Number ? ((Number) value).intValue() : 2;
     }
 
     public boolean isFinished() {
@@ -362,25 +348,11 @@ public class InterviewState extends AgentState {
 
     /**
      * 获取当前轮次的追问上限
-     * 优先使用轮次特定配置，否则使用通用配置
      */
     public int maxFollowUpsForCurrentRound() {
-        // 先检查通用配置
-        int defaultMaxFollowUps = maxFollowUps();
-
-        if (isTechnicalRound()) {
-            Object value = data().get(MAX_FOLLOW_UPS_TECHNICAL);
-            if (value instanceof Number) {
-                return ((Number) value).intValue();
-            }
-            return defaultMaxFollowUps; // 使用通用配置作为默认值
-        } else {
-            Object value = data().get(MAX_FOLLOW_UPS_BUSINESS);
-            if (value instanceof Number) {
-                return ((Number) value).intValue();
-            }
-            return defaultMaxFollowUps; // 使用通用配置作为默认值
-        }
+        String key = isTechnicalRound() ? MAX_FOLLOW_UPS_TECHNICAL : MAX_FOLLOW_UPS_BUSINESS;
+        Object value = data().get(key);
+        return value instanceof Number ? ((Number) value).intValue() : 2;
     }
 
     /**

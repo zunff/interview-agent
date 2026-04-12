@@ -30,8 +30,11 @@ public class InterviewSession {
     /** 岗位信息 */
     private String jobInfo;
 
-    /** 最大问题数 */
-    private Integer maxQuestions;
+    /** 技术轮最大问题数 */
+    private Integer maxTechnicalQuestions;
+
+    /** 业务轮最大问题数 */
+    private Integer maxBusinessQuestions;
 
     /** 每题最大追问数 */
     private Integer maxFollowUps;

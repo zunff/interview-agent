@@ -118,7 +118,8 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private void handleStartInterview(WebSocketSession wsSession, JSONObject data) {
         String resume = data.getStr("resume");
         String jobInfo = data.getStr("jobInfo");
-        int maxQuestions = data.getInt("maxQuestions", 10);
+        int maxTechnicalQuestions = data.getInt("maxTechnicalQuestions", 6);
+        int maxBusinessQuestions = data.getInt("maxBusinessQuestions", 4);
         int maxFollowUps = data.getInt("maxFollowUps", 2);
 
         if (resume == null || resume.isEmpty() || jobInfo == null || jobInfo.isEmpty()) {
@@ -129,7 +130,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         log.info("收到 start_interview 请求，简历长度: {}, 岗位: {}", resume.length(), jobInfo);
 
         // 创建会话
-        InterviewSession session = sessionService.createSession(resume, jobInfo, maxQuestions, maxFollowUps);
+        InterviewSession session = sessionService.createSession(resume, jobInfo, maxTechnicalQuestions, maxBusinessQuestions, maxFollowUps);
         String sessionId = session.getSessionId();
 
         // 建立映射
@@ -146,7 +147,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         Thread.ofVirtual().name("interview-start-" + sessionId).start(() -> {
             try {
                 InterviewState result = interviewBusinessService.executeInterviewGraph(
-                        sessionId, resume, jobInfo, maxQuestions, maxFollowUps);
+                        sessionId, resume, jobInfo, maxTechnicalQuestions, maxBusinessQuestions, maxFollowUps);
 
                 if (result == null) {
                     sendErrorMessage(sessionId, "面试启动失败");

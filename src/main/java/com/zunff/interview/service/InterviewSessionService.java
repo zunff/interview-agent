@@ -12,7 +12,7 @@ public interface InterviewSessionService extends IService<InterviewSession> {
      * 创建新的面试会话
      */
     InterviewSession createSession(String resume, String jobInfo,
-                                   int maxQuestions, int maxFollowUps);
+                                   int maxTechnicalQuestions, int maxBusinessQuestions, int maxFollowUps);
 
     /**
      * 根据会话ID获取会话

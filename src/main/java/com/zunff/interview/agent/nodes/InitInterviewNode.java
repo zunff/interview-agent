@@ -35,14 +35,6 @@ public class InitInterviewNode {
         updates.put(InterviewState.BUSINESS_QUESTIONS_DONE, 0);
         updates.put(InterviewState.CONSECUTIVE_HIGH_SCORES, 0);
 
-        // 设置默认配置
-        if (state.data().get(InterviewState.MAX_QUESTIONS) == null) {
-            updates.put(InterviewState.MAX_QUESTIONS, 10);
-        }
-        if (state.data().get(InterviewState.MAX_FOLLOW_UPS) == null) {
-            updates.put(InterviewState.MAX_FOLLOW_UPS, 2);
-        }
-
         return CompletableFuture.completedFuture(updates);
     }
 }
