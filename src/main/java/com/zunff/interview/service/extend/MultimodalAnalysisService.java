@@ -84,8 +84,20 @@ public class MultimodalAnalysisService {
         }
     }
 
-    public AudioAnalysisResult analyzeAudio(String audioBase64) {
-        return analyzeAudio(audioBase64, null);
+    public String parseTranscribedText(String audioBase64) {
+        if (audioBase64 == null || audioBase64.isEmpty()) {
+            return "";
+        }
+        log.info("开始分析音频数据，音频Base64长度: {}", audioBase64.length());
+        if (!multimodalEnabled) {
+            log.debug("多模态分析已禁用，返回默认结果");
+            return "";
+        }
+
+        // Step 1: 使用 DashScope SDK AsrRealtimeService 转录
+        byte[] audioData = Base64.getDecoder().decode(audioBase64);
+        log.info("ASR转录请求：音频数据大小={} bytes，开始调用 asr", audioData.length);
+        return asrRealtimeService.transcribe(audioData);
     }
 
     /**
@@ -94,35 +106,16 @@ public class MultimodalAnalysisService {
      * 步骤2: 使用文本模型分析情感语调
      *
      * @param audioBase64 Base64编码的音频数据
-     * @param audioText 音频文本
      * @return 分析结果
      */
-    public AudioAnalysisResult analyzeAudio(String audioBase64, String audioText) {
-        if (audioBase64 == null || audioBase64.isEmpty()) {
-            log.info("音频数据为空，跳过ASR转录");
-            return AudioAnalysisResult.empty();
-        }
+    public AudioAnalysisResult analyzeAudio(String audioBase64) {
 
-        log.info("开始分析音频数据，音频Base64长度: {}", audioBase64.length());
-
-        if (!multimodalEnabled) {
-            log.debug("多模态分析已禁用，返回默认结果");
+        String transcribedText = parseTranscribedText(audioBase64);
+        if (StrUtil.isBlank(transcribedText)) {
             return AudioAnalysisResult.defaultResult();
         }
-
         try {
-            // Step 1: 使用 DashScope SDK AsrRealtimeService 转录
-            String transcribedText;
-            if (StrUtil.isNotBlank(audioText)) {
-                transcribedText = audioText;
-            } else {
-                byte[] audioData = Base64.getDecoder().decode(audioBase64);
-                log.info("ASR转录请求：音频数据大小={} bytes，开始调用 qwen3-asr-flash-realtime", audioData.length);
-
-                transcribedText = asrRealtimeService.transcribe(audioData);
-                log.info("ASR转录完成，文本长度: {}，转录内容: {}", transcribedText != null ? transcribedText.length() : 0,
-                        transcribedText != null ? transcribedText.substring(0, Math.min(100, transcribedText.length())) : "null");
-            }
+            log.info("ASR转录完成，文本长度: {}，转录内容: {}", transcribedText.length(), transcribedText.substring(0, Math.min(100, transcribedText.length())));
             // Step 2: 使用文本模型分析情感语调
             return analyzeAudioEmotion(transcribedText);
 
@@ -138,10 +131,6 @@ public class MultimodalAnalysisService {
      * @return 音频分析结果
      */
     private AudioAnalysisResult analyzeAudioEmotion(String transcribedText) {
-        if (transcribedText == null || transcribedText.isEmpty()) {
-            return AudioAnalysisResult.defaultResult();
-        }
-
         try {
             // 从模板加载情感分析 prompt
             String prompt = promptTemplateService.getPrompt("audio-emotion-analysis",

@@ -31,7 +31,7 @@ public class ReportGeneratorNode {
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
         log.info("开始生成面试报告");
 
-        String resume = state.resume();
+        String candidateProfile = state.candidateProfile();
         String jobInfo = state.jobInfo();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> evaluations = (List<Map<String, Object>>) state.data()
@@ -70,7 +70,7 @@ public class ReportGeneratorNode {
 
         // 构建用户提示
         StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("## 候选人简历\n").append(resume).append("\n\n");
+        userPrompt.append("## 候选人画像\n").append(candidateProfile).append("\n\n");
         userPrompt.append("## 应聘岗位\n").append(jobInfo).append("\n\n");
 
         // 轮次表现

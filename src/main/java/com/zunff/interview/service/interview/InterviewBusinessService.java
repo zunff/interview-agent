@@ -3,6 +3,7 @@ package com.zunff.interview.service.interview;
 import com.zunff.interview.common.exception.BusinessException;
 import com.zunff.interview.constant.NodeNames;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.response.InterviewAnswerResponse;
 import com.zunff.interview.model.response.ReportResponse;
@@ -12,6 +13,7 @@ import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.service.AnswerRecordService;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
+import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -42,25 +44,28 @@ public class InterviewBusinessService {
     private final InterviewWebSocketHandler webSocketHandler;
     private final AnswerRecordService answerRecordService;
     private final EvaluationRecordService evaluationRecordService;
+    private final MultimodalAnalysisService multimodalAnalysisService;
 
     public InterviewBusinessService(
             CompiledGraph<InterviewState> interviewAgent,
             InterviewSessionService sessionService,
             @Lazy InterviewWebSocketHandler webSocketHandler,
             AnswerRecordService answerRecordService,
-            EvaluationRecordService evaluationRecordService) {
+            EvaluationRecordService evaluationRecordService,
+            MultimodalAnalysisService multimodalAnalysisService) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
         this.answerRecordService = answerRecordService;
         this.evaluationRecordService = evaluationRecordService;
+        this.multimodalAnalysisService = multimodalAnalysisService;
     }
 
     /**
-     * 创建会话并执行面试图，返回第一道题的信息
+     * 创建会话并执行面试图
      * 供 WebSocket handler 调用
      *
-     * @return 图执行结果（包含第一道题），如果失败返回 null
+     * @return 图执行结果，如果失败返回 null
      */
     public InterviewState executeInterviewGraph(String sessionId, String resume, String jobInfo,
                                                  int maxQuestions, int maxFollowUps) {
@@ -193,20 +198,10 @@ public class InterviewBusinessService {
                 return InterviewAnswerResponse.finishedWith(finalState.getFinalReport());
             }
 
-            // 获取新问题并推送
+            // 新问题由 AskQuestionNode 统一推送，此处只返回响应
             String newQuestion = finalState.currentQuestion();
             String newQuestionType = finalState.questionType();
             int newQuestionIndex = finalState.questionIndex();
-
-            if (newQuestion != null && !newQuestion.isEmpty()) {
-                webSocketHandler.sendQuestion(sessionId,
-                        QuestionMessage.builder()
-                                .content(newQuestion)
-                                .questionType(newQuestionType)
-                                .questionIndex(newQuestionIndex)
-                                .build());
-                log.info("新问题已推送: {}", newQuestion.substring(0, Math.min(50, newQuestion.length())) + "...");
-            }
 
             return InterviewAnswerResponse.continueWith(newQuestion, newQuestionType, newQuestionIndex);
 
@@ -298,6 +293,46 @@ public class InterviewBusinessService {
         } catch (Exception e) {
             log.error("获取报告失败", e);
             throw new BusinessException(1005, "获取报告失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 自我介绍完成后恢复图执行
+     * 流程：Asr 转写 → 更新状态 → 恢复图（profileAnalysis → technicalRound）→ 推送第一道技术题
+     *
+     * @param sessionId  面试会话ID
+     * @param audioBase64 自我介绍音频（Base64）
+     */
+    public void resumeFromSelfIntro(String sessionId, String audioBase64) {
+        log.info("开始自我介绍恢复流程，sessionId: {}", sessionId);
+
+        try {
+            RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
+
+            // 1. Asr 转写自我介绍音频
+            String transcribedText = multimodalAnalysisService.parseTranscribedText(audioBase64);
+
+            // 2. 更新状态：写入自我介绍文本（不需要视频帧）
+            Map<String, Object> stateUpdate = new HashMap<>();
+            stateUpdate.put(InterviewState.SELF_INTRO, transcribedText);
+            if (audioBase64 != null) {
+                stateUpdate.put(InterviewState.ANSWER_AUDIO, audioBase64);
+            }
+            interviewAgent.updateState(config, stateUpdate);
+
+            // 3. 恢复图执行: profileAnalysis → technicalRound → pause at askQuestion
+            Optional<InterviewState> result = interviewAgent.invoke(GraphInput.resume(), config);
+
+            if (result.isEmpty()) {
+                throw new BusinessException(1004, "自我介绍后图执行未返回结果");
+            }
+
+            sessionService.updateStatus(sessionId, InterviewSession.Status.IN_PROGRESS.name());
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("自我介绍恢复流程失败", e);
+            throw new BusinessException(1004, "自我介绍处理失败: " + e.getMessage());
         }
     }
 }

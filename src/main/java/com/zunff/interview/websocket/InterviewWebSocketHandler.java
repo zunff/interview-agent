@@ -79,7 +79,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
         switch (type) {
             case "start_interview" -> handleStartInterview(session, data);
-            case "video_frame", "audio_chunk", "answer_complete" -> {
+            case "video_frame", "audio_chunk", "answer_complete", "self_intro_complete" -> {
                 String interviewSessionId = resolveInterviewSessionId(session, data);
                 if (interviewSessionId == null) {
                     sendErrorMessage(session, "未找到面试会话，请先发送 start_interview");
@@ -88,6 +88,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
                 switch (type) {
                     case "video_frame" -> handleVideoFrame(interviewSessionId, data);
                     case "audio_chunk" -> handleAudioChunk(interviewSessionId, data);
+                    case "self_intro_complete" -> handleSelfIntroComplete(interviewSessionId);
                     case "answer_complete" -> handleAnswerComplete(interviewSessionId);
                 }
             }
@@ -149,19 +150,6 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
                 if (result == null) {
                     sendErrorMessage(sessionId, "面试启动失败");
-                    return;
-                }
-
-                String currentQuestion = result.currentQuestion();
-                String questionType = result.questionType();
-                int questionIndex = result.questionIndex();
-
-                if (currentQuestion != null && !currentQuestion.isEmpty()) {
-                    sendQuestion(sessionId, QuestionMessage.builder()
-                            .content(currentQuestion)
-                            .questionType(questionType)
-                            .questionIndex(questionIndex)
-                            .build());
                 }
             } catch (Exception e) {
                 log.error("异步启动面试失败，sessionId: {}", sessionId, e);
@@ -183,6 +171,26 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
             byte[] audioData = Base64.getDecoder().decode(audioBase64);
             audioStreamService.appendChunk(sessionId, audioData);
             log.trace("缓存音频块，会话: {}, 当前缓冲: {} bytes", sessionId, audioStreamService.getBufferSize(sessionId));
+        }
+    }
+
+    private void handleSelfIntroComplete(String sessionId) {
+        log.info("收到 self_intro_complete 信号，会话: {}", sessionId);
+
+        String audioBase64 = null;
+        byte[] audioData = audioStreamService.getCompleteAudio(sessionId);
+        if (audioData != null) {
+            audioBase64 = Base64.getEncoder().encodeToString(audioData);
+            log.info("自我介绍音频数据大小: {} bytes", audioData.length);
+        }
+
+        sendAnswerReceived(sessionId);
+
+        try {
+            interviewBusinessService.resumeFromSelfIntro(sessionId, audioBase64);
+        } catch (Exception e) {
+            log.error("自我介绍处理失败，会话: {}", sessionId, e);
+            sendErrorMessage(sessionId, "自我介绍处理失败: " + e.getMessage());
         }
     }
 
@@ -296,7 +304,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         ));
     }
 
-    private <T> void sendMessage(String sessionId, WebSocketMessage<T> message) {
+    public  <T> void sendMessage(String sessionId, WebSocketMessage<T> message) {
         WebSocketSession session = sessions.get(sessionId);
         if (session != null && session.isOpen()) {
             try {

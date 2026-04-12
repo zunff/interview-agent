@@ -1,6 +1,7 @@
 package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
@@ -62,7 +63,7 @@ public class DeepDiveNode {
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.CURRENT_QUESTION, deepDiveQuestion);
-            updates.put(InterviewState.QUESTION_TYPE, "深入追问");
+            updates.put(InterviewState.QUESTION_TYPE, QuestionType.DEEP_DIVE.getDisplayName());
             updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
             CircuitBreakerHelper.recordSuccess(updates);
 

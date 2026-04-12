@@ -10,7 +10,6 @@ import com.zunff.interview.agent.nodes.GenerateFollowUpNode;
 import com.zunff.interview.agent.nodes.QuestionGeneratorNode;
 import com.zunff.interview.agent.nodes.VisionAnalysisNode;
 import com.zunff.interview.agent.router.EvaluationRouter;
-import com.zunff.interview.config.GraphConfigProperties;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.NodeNames;
 import com.zunff.interview.constant.RouteDecision;
@@ -63,8 +62,7 @@ public class InterviewRoundGraph {
             AggregateAnalysisNode aggregateAnalysisNode,
             FollowUpDecisionNode followUpDecisionNode,
             ChallengeQuestionNode challengeQuestionNode,
-            DeepDiveNode deepDiveNode,
-            GraphConfigProperties graphConfig) {
+            DeepDiveNode deepDiveNode) {
         this.questionGeneratorNode = questionGeneratorNode;
         this.askQuestionNode = askQuestionNode;
         this.generateFollowUpNode = generateFollowUpNode;

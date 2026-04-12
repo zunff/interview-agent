@@ -29,7 +29,7 @@ public class ProfileAnalysisNode {
         log.info("开始生成候选人画像");
 
         String resume = state.resume();
-        String selfIntro = state.answerText();
+        String selfIntro = state.selfIntro();
         String jobInfo = state.jobInfo();
 
         if ((selfIntro == null || selfIntro.isEmpty()) && (resume == null || resume.isEmpty())) {

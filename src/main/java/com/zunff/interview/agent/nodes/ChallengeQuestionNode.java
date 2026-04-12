@@ -1,6 +1,7 @@
 package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
@@ -55,7 +56,7 @@ public class ChallengeQuestionNode {
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.CURRENT_QUESTION, challengeQuestion);
-            updates.put(InterviewState.QUESTION_TYPE, "挑战题");
+            updates.put(InterviewState.QUESTION_TYPE, QuestionType.CHALLENGE_QUESTION.getDisplayName());
             updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
             CircuitBreakerHelper.recordSuccess(updates);
 

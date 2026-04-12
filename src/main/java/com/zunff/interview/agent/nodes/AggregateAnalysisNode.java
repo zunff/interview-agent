@@ -34,7 +34,6 @@ public class AggregateAnalysisNode {
         log.info("开始聚合分析结果并执行综合评估");
 
         String question = state.currentQuestion();
-        String answerText = state.answerText();
         String questionType = state.questionType();
 
         VisionAnalysisResult visionResult = state.visionAnalysisResult();

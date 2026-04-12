@@ -21,7 +21,10 @@ public enum QuestionType {
     PROFESSIONALISM("职业素养"),
 
     // ========== 通用类型 ==========
-    FOLLOW_UP("追问");
+    FOLLOW_UP("追问"),
+    CHALLENGE_QUESTION("挑战题"),
+    DEEP_DIVE("深入追问"),
+    ;
 
     private final String displayName;
 

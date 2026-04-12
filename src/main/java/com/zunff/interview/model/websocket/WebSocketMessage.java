@@ -60,5 +60,7 @@ public class WebSocketMessage<T> {
         public static final String AUDIO_QUESTION_ERROR = "audio_question_error";
         /** 会话创建成功 */
         public static final String SESSION_CREATED = "session_created";
+        /** 自我介绍阶段信号 */
+        public static final String SELF_INTRO = "self_intro";
     }
 }

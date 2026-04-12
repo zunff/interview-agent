@@ -47,7 +47,7 @@ public class QuestionGeneratorNode {
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
         log.info("开始生成面试问题，当前轮次: {}, 问题索引: {}", state.currentRound(), state.questionIndex());
 
-        String resume = state.resume();
+        String candidateProfile = state.candidateProfile();
         String jobInfo = state.jobInfo();
         List<String> previousQuestions = state.questions();
         int questionIndex = state.questionIndex();
@@ -59,7 +59,7 @@ public class QuestionGeneratorNode {
 
         // 构建用户提示
         StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("候选人简历：\n").append(resume).append("\n\n");
+        userPrompt.append("候选人画像：\n").append(candidateProfile).append("\n\n");
         userPrompt.append("应聘岗位：\n").append(jobInfo).append("\n\n");
         userPrompt.append("当前轮次：").append(round.getDisplayName()).append("\n\n");
 
@@ -124,7 +124,7 @@ public class QuestionGeneratorNode {
             Map<String, Object> updates = new HashMap<>();
             // 返回默认问题
             updates.put(InterviewState.CURRENT_QUESTION, "请简单介绍一下你的技术背景和项目经验。");
-            updates.put(InterviewState.QUESTION_TYPE, "项目经验");
+            updates.put(InterviewState.QUESTION_TYPE, QuestionType.PROJECT_EXPERIENCE.getDisplayName());
             updates.put(InterviewState.QUESTION_INDEX, questionIndex + 1);
             updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
             CircuitBreakerHelper.handleFailure(state, updates, e);
