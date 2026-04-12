@@ -4,17 +4,11 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionModel;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
-import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.content.Media;
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.util.MimeTypeUtils;
 
 import java.util.ArrayList;
 import java.util.Base64;
@@ -25,35 +19,35 @@ import java.util.Map;
  * 多模态分析服务
  * 使用 Spring AI 调用通义千问模型进行视频帧和音频分析
  *
- * 模型分工（独立 ChatClient Bean，避免 Builder 共享污染）：
+ * 模型分工：
  * - textChatClient (qwen-plus): 文本评估 + 语音情感分析
- * - visionChatClient (qwen3.5-omni-plus): 视频帧分析
- * - transcriptionModel (Spring AI Alibaba): 语音转录 ASR
+ * - qwenOmniService (DashScope SDK): 视频帧分析 qwen3.5-omni-plus
+ * - asrRealtimeService (DashScope SDK): 语音转录 qwen3-asr-flash-realtime
  */
 @Slf4j
 public class MultimodalAnalysisService {
 
     private final ChatClient textChatClient;                  // 文本评估 + 情感分析
-    private final ChatClient visionChatClient;                // 视觉分析
-    private final AudioTranscriptionModel transcriptionModel; // 语音转录 (Spring AI Alibaba)
+    private final QwenOmniService qwenOmniService;            // 视觉分析 (DashScope SDK)
+    private final AsrRealtimeService asrRealtimeService;      // 语音转录 (DashScope SDK)
     private final PromptTemplateService promptTemplateService;
     private final boolean multimodalEnabled;
 
     public MultimodalAnalysisService(ChatClient textChatClient,
-                                      ChatClient visionChatClient,
-                                      AudioTranscriptionModel transcriptionModel,
+                                      QwenOmniService qwenOmniService,
+                                      AsrRealtimeService asrRealtimeService,
                                       PromptTemplateService promptTemplateService,
                                       boolean multimodalEnabled) {
         this.textChatClient = textChatClient;
-        this.visionChatClient = visionChatClient;
-        this.transcriptionModel = transcriptionModel;
+        this.qwenOmniService = qwenOmniService;
+        this.asrRealtimeService = asrRealtimeService;
         this.promptTemplateService = promptTemplateService;
         this.multimodalEnabled = multimodalEnabled;
     }
 
     /**
      * 分析视频帧
-     * 使用视觉模型 qwen-image-2.0-pro
+     * 使用 DashScope SDK 调用 Qwen-Omni 模型 (qwen3.5-omni-plus)
      *
      * @param base64Frames Base64编码的视频帧列表
      * @return 分析结果
@@ -64,7 +58,7 @@ public class MultimodalAnalysisService {
             return VisionAnalysisResult.empty();
         }
 
-        log.info("开始分析 {} 帧视频数据，使用视觉模型", base64Frames.size());
+        log.info("开始分析 {} 帧视频数据，使用 Qwen-Omni 模型", base64Frames.size());
 
         if (!multimodalEnabled) {
             log.debug("多模态分析已禁用，返回默认结果");
@@ -80,22 +74,8 @@ public class MultimodalAnalysisService {
             // 从模板加载 prompt
             String prompt = promptTemplateService.getPrompt("video-analysis");
 
-            // 构建 Media 对象列表
-            List<Media> mediaList = new ArrayList<>();
-            for (String frame : framesToAnalyze) {
-                byte[] imageBytes = Base64.getDecoder().decode(frame);
-                ByteArrayResource resource = new ByteArrayResource(imageBytes);
-                mediaList.add(new Media(MimeTypeUtils.IMAGE_JPEG, resource));
-            }
-
-            // 使用视觉模型 ChatClient（独立 Bean，不会污染文本模型）
-            String response = visionChatClient.prompt()
-                    .user(userSpec -> {
-                        userSpec.text(prompt);
-                        userSpec.media(mediaList.toArray(new Media[0]));
-                    })
-                    .call()
-                    .content();
+            // 使用 QwenOmniService 分析图片列表
+            String response = qwenOmniService.analyzeImages(framesToAnalyze, prompt);
 
             return parseVisionAnalysisResult(response);
 
@@ -110,7 +90,7 @@ public class MultimodalAnalysisService {
 
     /**
      * 分析音频
-     * 步骤1: 使用 Spring AI AudioTranscriptionModel 转录语音
+     * 步骤1: 使用 DashScope SDK AsrRealtimeService 转录语音
      * 步骤2: 使用文本模型分析情感语调
      *
      * @param audioBase64 Base64编码的音频数据
@@ -131,19 +111,15 @@ public class MultimodalAnalysisService {
         }
 
         try {
-            // Step 1: 使用 Spring AI AudioTranscriptionModel 转录
+            // Step 1: 使用 DashScope SDK AsrRealtimeService 转录
             String transcribedText;
             if (StrUtil.isNotBlank(audioText)) {
                 transcribedText = audioText;
             } else {
                 byte[] audioData = Base64.getDecoder().decode(audioBase64);
-                ByteArrayResource audioResource = new ByteArrayResource(audioData);
-                log.info("ASR转录请求：音频数据大小={} bytes，开始调用转录模型", audioData.length);
+                log.info("ASR转录请求：音频数据大小={} bytes，开始调用 qwen3-asr-flash-realtime", audioData.length);
 
-                AudioTranscriptionResponse response = transcriptionModel.call(
-                        new AudioTranscriptionPrompt(audioResource));
-
-                transcribedText = response.getResult().getOutput();
+                transcribedText = asrRealtimeService.transcribe(audioData);
                 log.info("ASR转录完成，文本长度: {}，转录内容: {}", transcribedText != null ? transcribedText.length() : 0,
                         transcribedText != null ? transcribedText.substring(0, Math.min(100, transcribedText.length())) : "null");
             }

@@ -2,6 +2,7 @@ package com.zunff.interview.service.extend;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.template.st.StTemplateRenderer;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Prompt 模板管理服务
  * 统一管理和加载 prompt 模板文件
+ *
+ * 使用 '<' 和 '>' 作为变量分隔符，避免与 JSON 花括号冲突
+ * 模板变量语法: <变量名>
  */
 @Slf4j
 @Service
@@ -23,6 +27,12 @@ public class PromptTemplateService {
 
     /** Prompt 缓存 */
     private final Map<String, String> promptCache = new ConcurrentHashMap<>();
+
+    /** 自定义渲染器：使用 <变量名> 语法 */
+    private final StTemplateRenderer renderer = StTemplateRenderer.builder()
+            .startDelimiterToken('<')
+            .endDelimiterToken('>')
+            .build();
 
     /**
      * 获取 prompt 模板（无变量替换）
@@ -46,7 +56,10 @@ public class PromptTemplateService {
         if (variables == null || variables.isEmpty()) {
             return template;
         }
-        PromptTemplate promptTemplate = new PromptTemplate(template);
+        PromptTemplate promptTemplate = PromptTemplate.builder()
+                .renderer(renderer)
+                .template(template)
+                .build();
         return promptTemplate.render(variables);
     }
 

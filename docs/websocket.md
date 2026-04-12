@@ -97,8 +97,9 @@
 ```
 
 **说明**：
-- `audio`: Base64 编码的音频数据（Opus 格式）
+- `audio`: Base64 编码的音频数据（PCM 格式，16kHz，16bit，单声道）
 - 音频块会被缓存拼接，在 `answer_complete` 时取出进行语音分析
+- 前端应使用 AudioContext 将录制的音频解码为 PCM 格式发送
 
 ### answer_complete - 回答完成信号
 

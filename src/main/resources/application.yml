@@ -6,9 +6,6 @@ spring:
 
   # Spring AI 通用配置（不含模型，模型在 profile 中指定）
   ai:
-    model:
-      audio:
-        transcription: dashscope
     retry:
       max-attempts: 3
       backoff:

@@ -1,9 +1,9 @@
 package com.zunff.interview.config;
 
-import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
-import com.alibaba.cloud.ai.dashscope.audio.transcription.AudioTranscriptionModel;
+import com.zunff.interview.service.extend.AsrRealtimeService;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.service.extend.PromptTemplateService;
+import com.zunff.interview.service.extend.QwenOmniService;
 import com.zunff.interview.service.extend.VideoStreamService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -29,42 +29,39 @@ public class ServiceConfig {
      */
     @Bean
     public ChatClient textChatClient(ChatModel chatModel) {
-        log.info("初始化文本 ChatClient，模型: qwen-plus");
+        log.info("初始化文本 ChatClient，模型: {}", chatModel.getDefaultOptions().getModel());
         return ChatClient.create(chatModel);
     }
 
     /**
-     * 视觉模型 ChatClient (qwen3.5-omni-plus)
-     * 用于视频帧分析，独立 Bean 避免污染文本模型
+     * Qwen-Omni 多模态服务 (qwen3.5-omni-plus)
+     * 使用 DashScope OpenAI 兼容 API，用于视频帧分析
      */
     @Bean
-    public ChatClient visionChatClient(
-            ChatModel chatModel,
-            VisionConfig visionConfig) {
-        String visionModel = visionConfig.getModel();
-        log.info("初始化视觉 ChatClient，模型: {}", visionModel);
-        DashScopeChatOptions visionOptions = new DashScopeChatOptions();
-        visionOptions.setModel(visionModel);
-        return ChatClient.builder(chatModel)
-                .defaultOptions(visionOptions)
-                .build();
+    public QwenOmniService qwenOmniService(VisionConfig visionConfig) {
+        log.info("初始化 QwenOmniService，模型: {}, baseUrl: {}",
+                visionConfig.getModel(), visionConfig.getBaseUrl());
+        return new QwenOmniService(
+                visionConfig.getApiKey(),
+                visionConfig.getModel(),
+                visionConfig.getBaseUrl());
     }
 
     /**
      * 多模态分析服务
-     * 注入独立的 ChatClient Bean，避免 Builder 共享污染
+     * 使用 QwenOmniService (DashScope SDK) 进行视觉分析
      */
     @Bean
     public MultimodalAnalysisService multimodalAnalysisService(
             ChatClient textChatClient,
-            ChatClient visionChatClient,
-            AudioTranscriptionModel transcriptionModel,
+            QwenOmniService qwenOmniService,
+            AsrRealtimeService asrRealtimeService,
             PromptTemplateService promptTemplateService,
             MultimodalConfig multimodalConfig) {
         return new MultimodalAnalysisService(
                 textChatClient,
-                visionChatClient,
-                transcriptionModel,
+                qwenOmniService,
+                asrRealtimeService,
                 promptTemplateService,
                 multimodalConfig.isEnabled());
     }
