@@ -1,14 +1,12 @@
 package com.zunff.interview.agent.graph;
 
-import com.zunff.interview.agent.nodes.AggregateAnalysisNode;
 import com.zunff.interview.agent.nodes.AskQuestionNode;
-import com.zunff.interview.agent.nodes.AudioAnalysisNode;
 import com.zunff.interview.agent.nodes.ChallengeQuestionNode;
+import com.zunff.interview.agent.nodes.ComprehensiveEvaluationNode;
 import com.zunff.interview.agent.nodes.DeepDiveNode;
 import com.zunff.interview.agent.nodes.FollowUpDecisionNode;
 import com.zunff.interview.agent.nodes.GenerateFollowUpNode;
 import com.zunff.interview.agent.nodes.QuestionGeneratorNode;
-import com.zunff.interview.agent.nodes.VisionAnalysisNode;
 import com.zunff.interview.agent.router.EvaluationRouter;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.NodeNames;
@@ -42,10 +40,8 @@ public class InterviewRoundGraph {
     private final GenerateFollowUpNode generateFollowUpNode;
     private final EvaluationRouter evaluationRouter;
 
-    // 并行分析节点
-    private final VisionAnalysisNode visionAnalysisNode;
-    private final AudioAnalysisNode audioAnalysisNode;
-    private final AggregateAnalysisNode aggregateAnalysisNode;
+    // Omni多模态综合评估节点（替代并行三分支）
+    private final ComprehensiveEvaluationNode comprehensiveEvaluationNode;
 
     // 条件分支节点
     private final FollowUpDecisionNode followUpDecisionNode;
@@ -57,9 +53,7 @@ public class InterviewRoundGraph {
             AskQuestionNode askQuestionNode,
             GenerateFollowUpNode generateFollowUpNode,
             EvaluationRouter evaluationRouter,
-            VisionAnalysisNode visionAnalysisNode,
-            AudioAnalysisNode audioAnalysisNode,
-            AggregateAnalysisNode aggregateAnalysisNode,
+            ComprehensiveEvaluationNode comprehensiveEvaluationNode,
             FollowUpDecisionNode followUpDecisionNode,
             ChallengeQuestionNode challengeQuestionNode,
             DeepDiveNode deepDiveNode) {
@@ -67,9 +61,7 @@ public class InterviewRoundGraph {
         this.askQuestionNode = askQuestionNode;
         this.generateFollowUpNode = generateFollowUpNode;
         this.evaluationRouter = evaluationRouter;
-        this.visionAnalysisNode = visionAnalysisNode;
-        this.audioAnalysisNode = audioAnalysisNode;
-        this.aggregateAnalysisNode = aggregateAnalysisNode;
+        this.comprehensiveEvaluationNode = comprehensiveEvaluationNode;
         this.followUpDecisionNode = followUpDecisionNode;
         this.challengeQuestionNode = challengeQuestionNode;
         this.deepDiveNode = deepDiveNode;
@@ -91,10 +83,8 @@ public class InterviewRoundGraph {
         String followUpDecision = prefix + NodeNames.FOLLOW_UP_DECISION;
         String generateFollowUp = prefix + NodeNames.GENERATE_FOLLOW_UP;
 
-        // 并行分析节点
-        String analyzeVision = prefix + NodeNames.ANALYZE_VISION;
-        String analyzeAudio = prefix + NodeNames.ANALYZE_AUDIO;
-        String aggregateAnalysis = prefix + NodeNames.AGGREGATE_ANALYSIS;
+        // Omni多模态综合评估节点
+        String comprehensiveEval = prefix + NodeNames.COMPREHENSIVE_EVALUATION;
 
         // 条件分支节点
         String generateChallenge = prefix + NodeNames.GENERATE_CHALLENGE;
@@ -106,10 +96,8 @@ public class InterviewRoundGraph {
                 .addNode(generateQuestion, questionGeneratorNode::execute)
                 .addNode(askQuestion, askQuestionNode::execute)
 
-                // 并行分析节点
-                .addNode(analyzeVision, visionAnalysisNode::execute)
-                .addNode(analyzeAudio, audioAnalysisNode::execute)
-                .addNode(aggregateAnalysis, aggregateAnalysisNode::execute)
+                // Omni多模态综合评估（单节点替代并行三分支）
+                .addNode(comprehensiveEval, comprehensiveEvaluationNode::execute)
 
                 // 条件分支节点
                 .addNode(followUpDecision, followUpDecisionNode::execute)
@@ -120,16 +108,12 @@ public class InterviewRoundGraph {
                 // ========== 定义边 ==========
                 .addEdge(START, generateQuestion)
                 .addEdge(generateQuestion, askQuestion)
-                // 恢复执行后进入视觉和音频分析（并行分支）
-                .addEdge(askQuestion, analyzeVision)
-                .addEdge(askQuestion, analyzeAudio)
 
-                // 并行分支：两者都进入聚合节点
-                .addEdge(analyzeVision, aggregateAnalysis)
-                .addEdge(analyzeAudio, aggregateAnalysis)
+                // 恢复执行后直接进入综合评估
+                .addEdge(askQuestion, comprehensiveEval)
 
-                // 聚合后进入追问决策节点
-                .addEdge(aggregateAnalysis, followUpDecision)
+                // 综合评估后进入追问决策
+                .addEdge(comprehensiveEval, followUpDecision)
 
                 // ========== 条件路由：追问决策 ==========
                 .addConditionalEdges(

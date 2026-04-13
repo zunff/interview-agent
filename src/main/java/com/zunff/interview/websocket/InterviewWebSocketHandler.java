@@ -15,6 +15,7 @@ import com.zunff.interview.service.extend.TtsRealtimeService;
 import com.zunff.interview.service.extend.VideoStreamService;
 import com.zunff.interview.service.interview.InterviewBusinessService;
 import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.utils.AudioUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -227,16 +228,42 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
         log.info("回答转录完成，文本长度: {}, 条目数: {}", transcribedText.length(), transcriptEntries.size());
 
-        // 获取视频帧
-        List<String> frames = videoStreamService.getFramesForAnalysis(sessionId);
-        log.info("从缓存取到 {} 帧视频数据", frames.size());
+        // 获取带时间戳的视频帧（用于Omni多模态综合分析）
+        var framesWithTs = videoStreamService.getFramesWithTimestamps(sessionId);
+        List<com.zunff.interview.model.dto.analysis.FrameWithTimestamp> dtoFrames = framesWithTs.stream()
+                .map(f -> com.zunff.interview.model.dto.analysis.FrameWithTimestamp.builder()
+                        .frame(f.frame())
+                        .timestampMs(f.timestampMs())
+                        .build())
+                .toList();
+        log.info("从缓存取到 {} 帧视频数据（带时间戳）", dtoFrames.size());
+
+        // 兼容旧字段：同时提取纯帧数据
+        List<String> frames = dtoFrames.stream()
+                .map(com.zunff.interview.model.dto.analysis.FrameWithTimestamp::getFrame)
+                .toList();
+
+        // 获取原始PCM音频并转换为WAV格式（用于Omni多模态综合分析）
+        String answerAudioBase64 = null;
+        byte[] pcmData = audioStreamService.getCompletePcmAudio(sessionId);
+        if (pcmData != null && pcmData.length > 0) {
+            // PCM → WAV（16kHz, 16bit, 单声道），然后Base64编码
+            byte[] wavData = AudioUtils.pcmToWav(pcmData, 16000, 16, 1);
+            answerAudioBase64 = Base64.getEncoder().encodeToString(wavData);
+            log.info("PCM→WAV转换完成，PCM: {} bytes, WAV: {} bytes", pcmData.length, wavData.length);
+        } else {
+            log.warn("无PCM音频数据，将跳过Omni音频分析");
+        }
 
         sendAnswerReceived(sessionId);
 
         SubmitAnswerRequest request = SubmitAnswerRequest.builder()
                 .sessionId(sessionId)
                 .answerText(transcribedText.isEmpty() ? null : transcribedText)
+                .answerAudio(answerAudioBase64)
                 .videoFrames(frames.isEmpty() ? null : String.join(",", frames))
+                .transcriptEntries(transcriptEntries)
+                .framesWithTimestamps(dtoFrames.isEmpty() ? null : dtoFrames)
                 .build();
 
         try {

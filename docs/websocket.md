@@ -42,6 +42,7 @@
   |-------- audio_start ---------------------->|
   |         (startTimestampMs)                 |
   |-------- video_frame (持续) ---------------->|
+  |         (frame + timestampMs)              |
   |-------- audio_chunk (持续) ---------------->|
   |                                            |
   |-------- answer_complete ------------------>|
@@ -95,8 +96,8 @@
 
 **说明**：
 - `frame`: Base64 编码的 JPEG/PNG 图片，建议每 2-3 秒发送一帧关键帧
-- `timestampMs`: 前端采集该帧时的UTC时间戳（毫秒），用于记录帧时间
-- 视频帧会被缓存，在 `answer_complete` 时批量取出进行视觉分析
+- `timestampMs`: **必填**，前端采集该帧时的 UTC 时间戳（毫秒），用于与语音转录时间对齐
+- 视频帧会被缓存，在 `answer_complete` 时批量取出进行 Omni 多模态综合评估
 
 ### audio_start - 开始录音
 
@@ -117,7 +118,7 @@
 
 ### audio_chunk - 发送音频块（实时ASR转录）
 
-**用途**：发送音频块（缓存，answer_complete 时批量分析）
+**用途**：发送音频块，同时进行实时 ASR 转录和 PCM 缓存
 
 **请求参数**：
 ```json
@@ -129,10 +130,11 @@
 
 **说明**：
 - `audio`: Base64 编码的音频数据（PCM 格式，16kHz，16bit，单声道）
-- 音频块会被**实时**发送给ASR模型进行转录，不再缓存原始音频
+- 音频块会被**实时**发送给 ASR 模型进行转录，同时缓存原始 PCM 字节
+- PCM 缓存用于 `answer_complete` 时转换为 WAV 格式，供 Omni 多模态综合评估使用
 - 前端应使用 AudioContext 将录制的音频解码为 PCM 格式发送
-- 必须先发送 `audio_start` 启动ASR连接，否则音频块会被丢弃
-- ASR模型会实时返回转录文本，服务端自动缓存带时间戳的转录条目
+- 必须先发送 `audio_start` 启动 ASR 连接，否则音频块会被丢弃
+- ASR 模型会实时返回转录文本，服务端自动缓存带时间戳的转录条目
 
 ### self_intro_complete - 自我介绍完成信号
 
@@ -147,7 +149,7 @@
 
 **说明**：
 - 发送此信号表示候选人已完成自我介绍
-- 服务端会停止ASR识别，获取实时转录结果，然后恢复图执行
+- 服务端会停止 ASR 识别，获取实时转录结果，然后恢复图执行
 - 处理完成后会推送 `new_question`（第一道技术题）
 - 此阶段不进行视觉分析，前端只需发送 `audio_start` + `audio_chunk`
 
@@ -164,7 +166,11 @@
 
 **说明**：
 - 发送此信号表示候选人已完成当前问题的回答
-- 服务端会停止ASR识别，获取实时转录结果和视频帧，进行多模态分析
+- 服务端会：
+  1. 停止 ASR 识别，获取实时转录结果（带时间戳）
+  2. 获取缓存的视频帧（带时间戳）
+  3. 获取缓存的 PCM 音频，转换为 WAV 格式
+  4. 调用 Qwen-Omni 模型进行综合评估（转录文本 + 关键帧 + 音频，一次调用）
 - 分析完成后会推送 `evaluation_result` 和 `new_question`（或 `final_report`）
 
 ## 服务端 → 客户端
@@ -201,8 +207,7 @@
 - 面试启动后推送，表示进入自我介绍阶段
 - 前端收到后展示自我介绍引导 UI
 - 自我介绍阶段只需发送 `audio_chunk`（语音），不需要 `video_frame`
-- 自我介绍完成后发送 `answer_complete`，流程与正常问答相同
-- 服务端完成 STT 转写和候选人画像分析后，推送第一道技术题
+- 自我介绍完成后发送 `self_intro_complete`
 
 ### answer_received - 回答已接收确认
 
@@ -276,20 +281,20 @@
 |------|------|------|
 | `questionIndex` | int | 问题序号 |
 | `question` | string | 问题内容 |
-| `answer` | string | 回答内容（语音转写结果） |
+| `answer` | string | 回答内容（ASR 转录结果） |
 | `accuracy` | int | 内容准确性得分 (0-100) |
 | `logic` | int | 逻辑清晰度得分 (0-100) |
 | `fluency` | int | 表达流畅度得分 (0-100) |
 | `confidence` | int | 自信程度得分 (0-100) |
-| `emotionScore` | int | 视频情感得分 (0-100) |
-| `bodyLanguageScore` | int | 肢体语言得分 (0-100) |
-| `voiceToneScore` | int | 语音语调得分 (0-100) |
-| `overallScore` | int | 综合得分 (0-100) |
+| `emotionScore` | int | 视频情感得分 (0-100)，由 Omni 从关键帧分析 |
+| `bodyLanguageScore` | int | 肢体语言得分 (0-100)，由 Omni 从关键帧分析 |
+| `voiceToneScore` | int | 语音语调得分 (0-100)，由 Omni 从原始音频分析 |
+| `overallScore` | int | 综合得分 (0-100)，按权重计算：语义75% + 语音15% + 视觉10% |
 | `strengths` | string[] | 优点列表 |
 | `weaknesses` | string[] | 不足列表 |
 | `detailedEvaluation` | string | 详细评价 |
 | `needFollowUp` | boolean | 是否需要追问（内部决策，不影响前端） |
-| `modalityConcern` | boolean | 是否存在多模态异常 |
+| `modalityConcern` | boolean | 是否存在多模态异常（任一维度得分 < 60） |
 
 ### final_report - 最终面试报告
 
@@ -381,3 +386,29 @@
   "timestamp": 1699999999999
 }
 ```
+
+## 评估流程说明
+
+### Omni 多模态综合评估
+
+当收到 `answer_complete` 后，服务端会进行一次 Omni 多模态综合评估：
+
+1. **数据收集**：
+   - 转录文本 + 每句话的时间戳（来自 Fun-ASR 实时转录）
+   - 关键帧截图 + 每帧的时间戳（来自前端 `video_frame`）
+   - 原始音频 PCM 数据（转为 WAV 格式）
+
+2. **一次调用 Qwen-Omni**：
+   - 将转录文本、关键帧、音频一起发送给 `qwen3.5-omni-plus` 模型
+   - 模型可以根据时间戳对应关系，交叉理解语音和视觉信号
+   - 例如：看到某时刻皱眉 + 听到该时刻停顿，综合判断为"犹豫"
+
+3. **评分权重**：
+   - 技术语义内容（准确性/深度/逻辑/表达）：**75%**
+   - 语音副语言（语气/语速/停顿/自信度）：**15%**
+   - 关键帧（表情/肢体语言）：**10%**
+
+4. **降级机制**：
+   - 若 `interview.multimodal.enabled=false` 或无音视频数据
+   - 自动降级为纯文本评估（使用 qwen-plus）
+   - 多模态分数字段返回默认值 70

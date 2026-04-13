@@ -37,40 +37,50 @@ public class OmniModalService {
     }
 
     /**
-     * 分析多张图片（作为视频帧序列）
+     * 多模态综合分析（视频帧 + 音频 + 文本）
+     * 将三种模态组合在一条消息的 content 数组中发送给 Qwen-Omni
      *
-     * @param base64Frames Base64 编码的图片列表
-     * @param prompt 提示词
+     * @param base64Frames  Base64 编码的视频帧列表
+     * @param base64WavAudio Base64 编码的 WAV 音频数据
+     * @param textPrompt    文本提示
      * @return 分析结果文本
      */
-    public String analyzeImages(List<String> base64Frames, String prompt) {
-        if (base64Frames == null || base64Frames.isEmpty()) {
-            log.warn("图片列表为空，跳过分析");
-            return "";
-        }
-
-        log.info("开始分析 {} 张图片", base64Frames.size());
+    public String analyzeMultimodal(List<String> base64Frames, String base64WavAudio, String textPrompt) {
+        log.info("开始多模态综合分析，视频帧: {}, 音频: {}",
+                base64Frames != null ? base64Frames.size() : 0,
+                base64WavAudio != null ? "有" : "无");
 
         try {
-            // 构建消息内容
             List<Object> content = new ArrayList<>();
 
-            // 添加图片（使用 video 类型传入图片列表，模拟视频帧）
-            // 根据 Qwen-Omni 文档，可以使用 type: "video" 传入图片列表
-            JSONArray videoFrames = new JSONArray();
-            for (String frame : base64Frames) {
-                videoFrames.put("data:image/jpeg;base64," + frame);
+            // 1. 视频帧（type: "video", video: [base64 images]）
+            if (base64Frames != null && !base64Frames.isEmpty()) {
+                JSONArray videoFrames = new JSONArray();
+                for (String frame : base64Frames) {
+                    videoFrames.put("data:image/jpeg;base64," + frame);
+                }
+                JSONObject videoContent = new JSONObject();
+                videoContent.set("type", "video");
+                videoContent.set("video", videoFrames);
+                content.add(videoContent);
             }
 
-            JSONObject videoContent = new JSONObject();
-            videoContent.set("type", "video");
-            videoContent.set("video", videoFrames);
-            content.add(videoContent);
+            // 2. 音频（type: "input_audio", input_audio: {data, format:"wav"}）
+            if (base64WavAudio != null && !base64WavAudio.isEmpty()) {
+                JSONObject inputAudio = new JSONObject();
+                inputAudio.set("data", "data:;base64," + base64WavAudio);
+                inputAudio.set("format", "wav");
 
-            // 添加文本提示
+                JSONObject audioContent = new JSONObject();
+                audioContent.set("type", "input_audio");
+                audioContent.set("input_audio", inputAudio);
+                content.add(audioContent);
+            }
+
+            // 3. 文本提示
             JSONObject textContent = new JSONObject();
             textContent.set("type", "text");
-            textContent.set("text", prompt);
+            textContent.set("text", textPrompt);
             content.add(textContent);
 
             // 构建请求
@@ -81,148 +91,8 @@ public class OmniModalService {
             return sendRequest(List.of(message));
 
         } catch (Exception e) {
-            log.error("图片分析失败", e);
-            throw new RuntimeException("图片分析失败", e);
-        }
-    }
-
-    /**
-     * 分析单张图片
-     *
-     * @param base64Image Base64 编码的图片
-     * @param prompt 提示词
-     * @return 分析结果文本
-     */
-    public String analyzeImage(String base64Image, String prompt) {
-        if (StrUtil.isBlank(base64Image)) {
-            log.warn("图片为空，跳过分析");
-            return "";
-        }
-
-        log.info("开始分析单张图片");
-
-        try {
-            List<Object> content = new ArrayList<>();
-
-            // 添加图片
-            JSONObject imageUrl = new JSONObject();
-            imageUrl.set("url", "data:image/jpeg;base64," + base64Image);
-
-            JSONObject imageContent = new JSONObject();
-            imageContent.set("type", "image_url");
-            imageContent.set("image_url", imageUrl);
-            content.add(imageContent);
-
-            // 添加文本提示
-            JSONObject textContent = new JSONObject();
-            textContent.set("type", "text");
-            textContent.set("text", prompt);
-            content.add(textContent);
-
-            // 构建请求
-            JSONObject message = new JSONObject();
-            message.set("role", "user");
-            message.set("content", content);
-
-            return sendRequest(List.of(message));
-
-        } catch (Exception e) {
-            log.error("图片分析失败", e);
-            throw new RuntimeException("图片分析失败", e);
-        }
-    }
-
-    /**
-     * 分析音频
-     *
-     * @param base64Audio Base64 编码的音频数据（原始音频，非 data URL 前缀）
-     * @param format 音频格式 (wav, mp3, etc.)
-     * @param prompt 提示词
-     * @return 分析结果文本
-     */
-    public String analyzeAudio(String base64Audio, String format, String prompt) {
-        if (StrUtil.isBlank(base64Audio)) {
-            log.warn("音频为空，跳过分析");
-            return "";
-        }
-
-        log.info("开始分析音频，格式: {}", format);
-
-        try {
-            List<Object> content = new ArrayList<>();
-
-            // 添加音频
-            JSONObject inputAudio = new JSONObject();
-            inputAudio.set("data", "data:;base64," + base64Audio);
-            inputAudio.set("format", format);
-
-            JSONObject audioContent = new JSONObject();
-            audioContent.set("type", "input_audio");
-            audioContent.set("input_audio", inputAudio);
-            content.add(audioContent);
-
-            // 添加文本提示
-            JSONObject textContent = new JSONObject();
-            textContent.set("type", "text");
-            textContent.set("text", prompt);
-            content.add(textContent);
-
-            // 构建请求
-            JSONObject message = new JSONObject();
-            message.set("role", "user");
-            message.set("content", content);
-
-            return sendRequest(List.of(message));
-
-        } catch (Exception e) {
-            log.error("音频分析失败", e);
-            throw new RuntimeException("音频分析失败", e);
-        }
-    }
-
-    /**
-     * 分析视频 URL
-     *
-     * @param videoUrl 视频 URL
-     * @param prompt 提示词
-     * @return 分析结果文本
-     */
-    public String analyzeVideoUrl(String videoUrl, String prompt) {
-        if (StrUtil.isBlank(videoUrl)) {
-            log.warn("视频 URL 为空，跳过分析");
-            return "";
-        }
-
-        log.info("开始分析视频 URL: {}", videoUrl);
-
-        try {
-            List<Object> content = new ArrayList<>();
-
-            // 添加视频
-            JSONObject videoUrlObj = new JSONObject();
-            videoUrlObj.set("url", videoUrl);
-
-            JSONObject videoContent = new JSONObject();
-            videoContent.set("type", "video_url");
-            videoContent.set("video_url", videoUrlObj);
-            content.add(videoContent);
-
-            // 添加文本提示
-            JSONObject textContent = new JSONObject();
-            textContent.set("type", "text");
-            textContent.set("text", prompt);
-            content.add(textContent);
-
-            // 构建请求
-            JSONObject message = new JSONObject();
-            message.set("role", "user");
-            message.set("content", content);
-
-            return sendRequest(List.of(message));
-
-        } catch (Exception e) {
-            log.error("视频分析失败", e);
-            throw new RuntimeException("视频分析失败", e);
+            log.error("多模态综合分析失败", e);
+            throw new RuntimeException("多模态综合分析失败", e);
         }
     }
 

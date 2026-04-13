@@ -16,16 +16,16 @@
 
 | 用途 | 说明 |
 |------|------|
-| 大语言模型 | 面试问题生成、答案评估、情感分析 |
-| 视觉模型 | 视频帧表情识别、肢体语言分析 |
-| 语音模型 | 实时 ASR 语音转文字（Fun-ASR-Realtime，支持句级时间戳） |
-| TTS 语音合成 | Qwen-TTS-Realtime WebSocket 流式合成，Opus 格式输出 |
+| 大语言模型 (qwen-plus) | 面试问题生成、追问决策 |
+| Omni 多模态模型 (qwen3.5-omni-plus) | 综合评估：视频帧+音频+文本一次调用 |
+| 语音模型 (Fun-ASR-Realtime) | 实时 ASR 语音转文字，支持句级时间戳 |
+| TTS 语音合成 (Qwen-TTS-Realtime) | WebSocket 流式合成，Opus 格式输出 |
 
 ## 核心功能
 
 - **智能面试流程**: 根据简历和岗位自动生成针对性问题，支持技术基础、项目经验、业务理解、软技能等多维度考察
 - **多分支追问策略**: 根据回答质量动态选择追问策略（普通追问/低分深入/高分挑战）
-- **并行多模态评估**: 视觉分析（表情/肢体语言）与音频分析（语调情感/流畅度）并行执行
+- **Omni 多模态综合评估**: 一次调用 Qwen-Omni 模型综合分析转录文本+时间戳、关键帧+时间戳、原始音频，按权重评分（语义75% / 语音副语言15% / 视觉10%）
 - **实时交互**: WebSocket 实时推送问题，TTS 语音合成通过 BinaryMessage 流式推送 Opus 音频，实时ASR转录（带时间戳缓存）
 
 ## 整体架构
@@ -55,7 +55,7 @@ graph TD
     REPORT --> END((END))
 ```
 
-### 子图架构（并行多模态分析 + 多分支追问）
+### 子图架构（Omni 综合评估 + 多分支追问）
 
 ```mermaid
 graph TD
@@ -65,15 +65,9 @@ graph TD
         direction TD
         GEN[QuestionGeneratorNode<br/>生成问题] --> ASK[AskQuestionNode<br/>记录问题]
 
-        ASK --> WAIT[WaitForAnswerNode<br/>等待回答]
+        ASK --> EVAL[ComprehensiveEvaluationNode<br/>Omni多模态综合评估]
 
-        WAIT --> VISION[VisionAnalysisNode<br/>视觉分析]
-        WAIT --> AUDIO[AudioAnalysisNode<br/>音频分析]
-
-        VISION --> AGG[AggregateAnalysisNode<br/>聚合评估]
-        AUDIO --> AGG
-
-        AGG --> DECISION{FollowUpDecisionNode<br/>追问决策}
+        EVAL --> DECISION{FollowUpDecisionNode<br/>追问决策}
 
         DECISION -->|得分 < 50| DEEP[DeepDiveNode<br/>深入追问]
         DECISION -->|得分 > 90| CHALLENGE[ChallengeQuestionNode<br/>挑战问题]
@@ -92,9 +86,18 @@ graph TD
 
 | 特性 | 说明 |
 |------|------|
-| **并行分析** | 视觉分析和音频分析同时执行，减少评估延迟 |
+| **Omni 综合评估** | 一次调用 Qwen-Omni 同时分析文本+音频+视频帧，模型可交叉理解多模态信号 |
+| **时间戳对齐** | 转录文本和关键帧都携带 UTC 时间戳，模型可根据时间对应关系综合判断 |
 | **多分支路由** | 根据得分动态选择追问策略（低分深入/高分挑战/普通追问） |
-| **条件聚合** | 多个分析节点完成后汇聚到聚合节点 |
+| **多模态降级** | multimodalEnabled=false 时自动降级为纯文本评估（qwen-plus） |
+
+### 评估权重
+
+| 维度 | 权重 | 数据来源 |
+|------|------|----------|
+| 技术语义内容（准确性/深度/逻辑/表达） | 75% | ASR 转录文本 |
+| 语音副语言（语气/语速/停顿/自信度） | 15% | 原始 PCM 音频（转 WAV） |
+| 关键帧（表情/肢体语言） | 10% | 视频帧截图 |
 
 ### 路由决策逻辑
 
@@ -116,14 +119,19 @@ graph TD
 | 业务轮完成 | 生成报告 |
 | 连续3次高分 (≥85分) | 提前结束 |
 
-### 多模态分析流水线
+### 多模态评估流水线
 
 ```mermaid
 graph LR
-    VIDEO["视频帧"] --> VISION["视觉模型"] --> SCORE1["表情/肢体语言评分"]
-    AUDIO["音频流"] --> ASR["Fun-ASR实时转录"] --> LLM["大语言模型"] --> SCORE2["语调情感分析"]
-    SCORE1 --> AGG["聚合评估"]
-    SCORE2 --> AGG
+    AUDIO["音频流"] --> ASR["Fun-ASR 实时转录"]
+    ASR --> ENTRIES["转录条目+时间戳"]
+    AUDIO --> PCM["PCM 原始字节缓存"]
+    PCM --> WAV["PCM→WAV 转换"]
+    VIDEO["视频帧+时间戳"] --> FRAMES["关键帧缓存"]
+    ENTRIES --> OMNI["Qwen-Omni 综合评估"]
+    WAV --> OMNI
+    FRAMES --> OMNI
+    OMNI --> SCORE["综合评分<br/>语义75% + 语音15% + 视觉10%"]
 ```
 
 ### 熔断与容错
@@ -167,24 +175,24 @@ sequenceDiagram
     loop 语音问题传输（Binary Frame）
         S-->>C: audio_question_chunk (Opus 二进制音频帧)
     end
-    
+
     S->>C: audio_question_end (语音问题结束)
-    
+
     loop 回答过程
         C->>S: audio_start (开始时间戳)
-        C->>S: video_frame (缓存)
-        C->>S: audio_chunk (实时ASR转录)
+        C->>S: video_frame (缓存+时间戳)
+        C->>S: audio_chunk (实时ASR转录+PCM缓存)
     end
-    
+
     C->>S: answer_complete
     S->>C: answer_received
-    S->>S: 多模态分析（视觉+音频并行）
+    S->>S: Omni综合评估（转录文本+关键帧+音频 一次调用）
     S->>C: evaluation_result
     S->>C: new_question (下一题或追问)
     S->>C: audio_question_start (下一题语音开始，format: opus)
-    
-    ... 重复直到面试结束 ...
-    
+
+    %% 重复直到面试结束
+
     S->>C: final_report
     C->>S: WebSocket 断开
 ```
@@ -196,11 +204,10 @@ src/main/java/com/zunff/interview/
 ├── agent/
 │   ├── graph/                           # LangGraph4j 图定义
 │   │   ├── InterviewAgentGraph.java     # 主图（岗位分析→技术轮→业务轮→报告）
-│   │   └── InterviewRoundGraph.java     # 轮次子图（并行分析+多分支追问）
+│   │   └── InterviewRoundGraph.java     # 轮次子图（综合评估+多分支追问）
 │   ├── nodes/                           # 图节点
-│   │   ├── VisionAnalysisNode.java      # 视觉分析节点
-│   │   ├── AudioAnalysisNode.java       # 音频分析节点
-│   │   ├── AggregateAnalysisNode.java   # 聚合评估节点
+│   │   ├── ComprehensiveEvaluationNode.java  # Omni多模态综合评估节点
+│   │   ├── FollowUpDecisionNode.java    # 追问决策节点
 │   │   ├── ChallengeQuestionNode.java   # 高分挑战节点
 │   │   ├── DeepDiveNode.java            # 低分深入追问节点
 │   │   └── ...
@@ -210,7 +217,15 @@ src/main/java/com/zunff/interview/
 ├── config/                              # 配置类
 ├── controller/                          # REST 控制器
 ├── model/                               # 数据模型
+│   └── dto/analysis/
+│       ├── TranscriptEntry.java         # 转录条目（文本+时间戳）
+│       └── FrameWithTimestamp.java      # 视频帧（Base64+时间戳）
 ├── service/                             # 业务服务
+│   └── extend/
+│       ├── MultimodalAnalysisService.java  # 多模态评估服务
+│       ├── OmniModalService.java        # Qwen-Omni API 封装
+│       ├── AudioStreamService.java      # 音频流（ASR转发+PCM缓存）
+│       └── VideoStreamService.java      # 视频帧缓存
 ├── state/
 │   └── InterviewState.java              # 面试状态定义
 └── websocket/                           # WebSocket 处理
@@ -239,6 +254,8 @@ interview:
     consecutive-high-for-early-end: 3  # 连续高分次数触发提前结束
     max-follow-ups-technical: 3  # 技术轮每题最大追问数
     max-follow-ups-business: 2   # 业务轮每题最大追问数
+  multimodal:
+    enabled: true                # 多模态评估开关（false 时降级为纯文本评估）
 
 spring:
   ai:

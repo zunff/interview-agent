@@ -4,9 +4,8 @@ import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
-import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
-import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
@@ -42,12 +41,9 @@ public class InterviewState extends AgentState {
     public static final String ANSWER_TEXT = "answerText";
     public static final String ANSWER_AUDIO = "answerAudio";
     public static final String ANSWER_FRAMES = "answerFrames";
+    public static final String ANSWER_FRAMES_WITH_TIMESTAMPS = "answerFramesWithTimestamps";
     public static final String CURRENT_EVALUATION = "currentEvaluation";
     public static final String EVALUATIONS = "evaluations";
-
-    // ========== 多模态分析中间结果 ==========
-    public static final String VISION_ANALYSIS_RESULT = "visionAnalysisResult";
-    public static final String AUDIO_ANALYSIS_RESULT = "audioAnalysisResult";
 
     // ========== 实时ASR转录结果 ==========
     public static final String TRANSCRIPT_ENTRIES = "transcriptEntries";
@@ -121,12 +117,9 @@ public class InterviewState extends AgentState {
         SCHEMA.put(VOICE_TONE_SCORES, Channels.appender(ArrayList::new));
         // ANSWER_FRAMES 使用 base（覆盖语义），因为每次回答的视频帧是独立的
         SCHEMA.put(ANSWER_FRAMES, Channels.base(new LastValueReducer<>(), ArrayList::new));
+        SCHEMA.put(ANSWER_FRAMES_WITH_TIMESTAMPS, Channels.base(new LastValueReducer<>(), ArrayList::new));
         SCHEMA.put(TECHNICAL_ROUND_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(BUSINESS_ROUND_SCORES, Channels.appender(ArrayList::new));
-
-        // 多模态分析中间结果
-        SCHEMA.put(VISION_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), VisionAnalysisResult::empty));
-        SCHEMA.put(AUDIO_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), AudioAnalysisResult::empty));
 
         // 实时ASR转录结果
         SCHEMA.put(TRANSCRIPT_ENTRIES, Channels.appender(ArrayList::new));
@@ -226,6 +219,14 @@ public class InterviewState extends AgentState {
     @SuppressWarnings("unchecked")
     public List<String> answerFrames() {
         return (List<String>) data().getOrDefault(ANSWER_FRAMES, new ArrayList<>());
+    }
+
+    /**
+     * 获取带时间戳的视频帧列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<FrameWithTimestamp> answerFramesWithTimestamps() {
+        return (List<FrameWithTimestamp>) data().getOrDefault(ANSWER_FRAMES_WITH_TIMESTAMPS, new ArrayList<>());
     }
 
     public int followUpCount() {
@@ -459,21 +460,6 @@ public class InterviewState extends AgentState {
 
     // ========== 多模态分析中间结果便捷方法 ==========
 
-    /**
-     * 获取视觉分析结果
-     */
-    public VisionAnalysisResult visionAnalysisResult() {
-        return (VisionAnalysisResult) data().getOrDefault(
-                VISION_ANALYSIS_RESULT, VisionAnalysisResult.empty());
-    }
-
-    /**
-     * 获取音频分析结果
-     */
-    public AudioAnalysisResult audioAnalysisResult() {
-        return (AudioAnalysisResult) data().getOrDefault(
-                AUDIO_ANALYSIS_RESULT, AudioAnalysisResult.empty());
-    }
 
     /**
      * 获取转录条目列表

@@ -3,8 +3,6 @@ package com.zunff.interview.agent.nodes;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.bo.FollowUpDecisionBO;
-import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
-import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -17,9 +15,10 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * 追问决策节点
- * 根据评估结果和多模态分析，直接输出路由决策
+ * 根据综合评估结果（EvaluationBO，已包含多模态分数字段）进行追问决策
  *
- * 使用独立的 followup-decision.prompt 进行追问决策
+ * 注意：多模态分析已在 ComprehensiveEvaluationNode 中一次性完成，
+ * 此处直接从 EvaluationBO 读取分数字段
  */
 @Slf4j
 @Component
@@ -39,9 +38,7 @@ public class FollowUpDecisionNode {
 
         String question = state.currentQuestion();
         EvaluationBO evaluation = state.getCurrentEvaluation();
-        VisionAnalysisResult visionResult = state.visionAnalysisResult();
-        AudioAnalysisResult audioResult = state.audioAnalysisResult();
-        String answerText = audioResult.getTranscribedText();
+        String answerText = state.answerText();
         int followUpCount = state.followUpCount();
         int maxFollowUps = state.maxFollowUpsForCurrentRound();
 
@@ -54,13 +51,12 @@ public class FollowUpDecisionNode {
         }
 
         try {
-            // 调用独立的追问决策方法
-            FollowUpDecisionBO decision = multimodalAnalysisService.decideFollowUp(
+            // 构建简化版的追问决策：直接使用 EvaluationBO 中的分数字段
+            // 不再需要单独的 VisionAnalysisResult 和 AudioAnalysisResult
+            FollowUpDecisionBO decision = multimodalAnalysisService.decideFollowUpSimple(
                     question,
                     answerText,
                     evaluation,
-                    visionResult,
-                    audioResult,
                     followUpCount,
                     maxFollowUps
             );

@@ -3,8 +3,8 @@ package com.zunff.interview.agent.nodes;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
-import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
+import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
+import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -12,45 +12,53 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 分析结果聚合节点
- * 聚合视觉分析和音频分析结果，进行综合评估
- * 作为并行分析分支的汇聚点
- *
- * 注意：只负责评分，追问决策由 FollowUpDecisionNode 处理
+ * Omni 多模态综合评估节点
+ * 一次性调用 Qwen-Omni 模型综合分析转录文本+时间戳、视频帧+时间戳、原始音频WAV
+ * 替代原有的 VisionAnalysisNode + AudioAnalysisNode + AggregateAnalysisNode 三节点流程
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class AggregateAnalysisNode {
+public class ComprehensiveEvaluationNode {
 
     private final MultimodalAnalysisService multimodalAnalysisService;
 
     /**
-     * 执行分析结果聚合和综合评估（只负责评分）
+     * 执行 Omni 多模态综合评估
      */
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
-        log.info("开始聚合分析结果并执行综合评估");
+        log.info("开始综合评估");
 
         String question = state.currentQuestion();
         String questionType = state.questionType();
+        String answerText = state.answerText();
+        List<TranscriptEntry> transcriptEntries = state.transcriptEntries();
+        List<FrameWithTimestamp> framesWithTimestamps = state.answerFramesWithTimestamps();
+        String answerAudio = (String) state.data().get(InterviewState.ANSWER_AUDIO);
 
-        VisionAnalysisResult visionResult = state.visionAnalysisResult();
-        AudioAnalysisResult audioResult = state.audioAnalysisResult();
+        log.info("评估数据：问题类型={}, 转录文本长度={}, 转录条目数={}, 视频帧数={}, 音频={}",
+                questionType,
+                answerText != null ? answerText.length() : 0,
+                transcriptEntries.size(),
+                framesWithTimestamps.size(),
+                answerAudio != null && !answerAudio.isEmpty() ? "有" : "无");
+
+        // 根据问题类型选择评估模板
+        String evaluationPrompt = getEvaluationPromptByQuestionType(questionType);
+        log.debug("选择评估模板: {} -> {}", questionType, evaluationPrompt);
 
         try {
-            // 根据问题类型选择评估模板
-            String evaluationPrompt = getEvaluationPromptByQuestionType(questionType);
-            log.debug("选择评估模板: {} -> {}", questionType, evaluationPrompt);
-
-            // 综合评估（只负责评分）
-            EvaluationBO evaluation = multimodalAnalysisService.comprehensiveEvaluate(
+            EvaluationBO evaluation = multimodalAnalysisService.comprehensiveOmniEvaluation(
                     question,
-                    visionResult,
-                    audioResult,
+                    answerText,
+                    transcriptEntries,
+                    framesWithTimestamps,
+                    answerAudio,
                     evaluationPrompt
             );
 
@@ -76,9 +84,7 @@ public class AggregateAnalysisNode {
             // 返回默认评估，继续流转
             EvaluationBO defaultEval = EvaluationBO.builder()
                     .accuracy(60).logic(60).fluency(60).confidence(60)
-                    .emotionScore(visionResult.getEmotionScore())
-                    .bodyLanguageScore(visionResult.getBodyLanguageScore())
-                    .voiceToneScore(audioResult.getVoiceToneScore())
+                    .emotionScore(70).bodyLanguageScore(70).voiceToneScore(70)
                     .overallScore(60)
                     .detailedEvaluation("评估失败，使用默认评分")
                     .build();
@@ -95,27 +101,22 @@ public class AggregateAnalysisNode {
             return "evaluation";
         }
 
-        // 技术基础类问题
         if (isTechnicalBasicQuestion(questionType)) {
             return "evaluation-technical";
         }
 
-        // 项目经验类问题
         if (isProjectQuestion(questionType)) {
             return "evaluation-project";
         }
 
-        // 业务场景类问题
         if (isBusinessQuestion(questionType)) {
             return "evaluation-business";
         }
 
-        // 软技能类问题
         if (isSoftSkillQuestion(questionType)) {
             return "evaluation-soft";
         }
 
-        // 默认使用通用评估模板
         return "evaluation";
     }
 

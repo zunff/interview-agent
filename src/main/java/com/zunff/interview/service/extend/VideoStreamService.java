@@ -1,7 +1,6 @@
 package com.zunff.interview.service.extend;
 
 import com.zunff.interview.config.VideoConfig;
-import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -9,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 视频流处理服务
- * 管理视频帧的缓冲和批量分析
+ * 管理视频帧的缓冲
  * 每帧携带前端传入的UTC时间戳
  */
 @Slf4j
@@ -18,13 +17,10 @@ public class VideoStreamService {
     private final long analysisIntervalMs;
     private final int maxFramesPerAnalysis;
 
-    private final MultimodalAnalysisService multimodalAnalysisService;
-
     /** 每个会话的帧缓冲区 */
     private final Map<String, FrameBuffer> sessionBuffers = new ConcurrentHashMap<>();
 
-    public VideoStreamService(MultimodalAnalysisService multimodalAnalysisService, VideoConfig videoConfig) {
-        this.multimodalAnalysisService = multimodalAnalysisService;
+    public VideoStreamService(VideoConfig videoConfig) {
         this.analysisIntervalMs = videoConfig.getAnalysisInterval();
         this.maxFramesPerAnalysis = videoConfig.getMaxFramesPerAnalysis();
     }
@@ -72,20 +68,6 @@ public class VideoStreamService {
             return Collections.emptyList();
         }
         return buffer.getFramesWithTimestamps();
-    }
-
-    /**
-     * 分析视频帧
-     *
-     * @param sessionId 会话ID
-     * @return 分析结果
-     */
-    public VisionAnalysisResult analyzeFrames(String sessionId) {
-        List<String> frames = getFramesForAnalysis(sessionId);
-        if (frames.isEmpty()) {
-            return VisionAnalysisResult.empty();
-        }
-        return multimodalAnalysisService.analyzeVideoFrames(frames);
     }
 
     /**

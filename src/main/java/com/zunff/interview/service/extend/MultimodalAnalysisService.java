@@ -5,29 +5,28 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.bo.FollowUpDecisionBO;
-import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
-import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
+import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
+import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 多模态分析服务
- * 使用 Spring AI 调用通义千问模型进行视频帧和音频分析
+ * 核心方法：comprehensiveOmniEvaluation() — 一次 Omni 调用综合评估
+ * 辅助方法：decideFollowUpSimple() — 基于评估结果进行追问决策
  *
  * 模型分工：
- * - textChatClient (qwen-plus): 文本评估 + 语音情感分析
- * - qwenOmniService (DashScope SDK): 视频帧分析 qwen3.5-omni-plus
- * - asrRealtimeService (DashScope SDK): 语音转录 qwen3-asr-flash-realtime
+ * - omniModalService (qwen3.5-omni-plus): Omni 多模态综合评估（视频帧+音频+文本）
+ * - textChatClient (qwen3.5-plus): 追问决策等文本任务
  */
 @Slf4j
 public class MultimodalAnalysisService {
 
-    private final ChatClient textChatClient;                  // 文本评估 + 情感分析
-    private final OmniModalService omniModalService;            // 视觉分析 (DashScope SDK)
+    private final ChatClient textChatClient;
+    private final OmniModalService omniModalService;
     private final PromptTemplateService promptTemplateService;
     private final boolean multimodalEnabled;
 
@@ -41,150 +40,135 @@ public class MultimodalAnalysisService {
         this.multimodalEnabled = multimodalEnabled;
     }
 
+    // ========== 核心方法 ==========
+
     /**
-     * 分析视频帧
-     * 使用 DashScope SDK 调用 Qwen-Omni 模型 (qwen3.5-omni-plus)
+     * Omni 多模态综合评估（一次性调用）
+     * 将转录文本+时间戳、视频帧+时间戳、原始音频WAV一起发给 Qwen-Omni 进行综合评估
+     * 当 multimodalEnabled=false 时，降级为纯文本评估（qwen-plus）
      *
-     * @param base64Frames Base64编码的视频帧列表
-     * @return 分析结果
+     * @param question              当前问题
+     * @param transcribedText       转录文本
+     * @param transcriptEntries     转录条目（带时间戳）
+     * @param framesWithTimestamps  视频帧（带时间戳）
+     * @param base64WavAudio        WAV音频（Base64编码）
+     * @param evaluationPromptName  评估Prompt模板名称
+     * @return 综合评估结果
      */
-    public VisionAnalysisResult analyzeVideoFrames(List<String> base64Frames) {
-        if (base64Frames == null || base64Frames.isEmpty()) {
-            log.info("视频帧数据为空，跳过视觉分析");
-            return VisionAnalysisResult.empty();
-        }
-
-        log.info("开始分析 {} 帧视频数据，使用 Qwen-Omni 模型", base64Frames.size());
-
-        if (!multimodalEnabled) {
-            log.debug("多模态分析已禁用，返回默认结果");
-            return VisionAnalysisResult.defaultResult();
-        }
-
-        try {
-            // 取前5帧进行分析
-            List<String> framesToAnalyze = base64Frames.size() > 5
-                    ? base64Frames.subList(0, 5)
-                    : base64Frames;
-
-            // 从模板加载 prompt
-            String prompt = promptTemplateService.getPrompt("video-analysis");
-
-            // 使用 QwenOmniService 分析图片列表
-            String response = omniModalService.analyzeImages(framesToAnalyze, prompt);
-
-            return parseVisionAnalysisResult(response);
-
-        } catch (Exception e) {
-            throw new RuntimeException("视频帧分析失败", e);
-        }
-    }
-
-
-    /**
-     * 从已有转录文本分析音频（只做情感分析，不再做ASR）
-     *
-     * @param transcribedText 已转录的文本
-     * @return 分析结果
-     */
-    public AudioAnalysisResult analyzeAudioFromTranscript(String transcribedText) {
-        if (transcribedText == null || transcribedText.isEmpty()) {
-            return AudioAnalysisResult.defaultResult();
-        }
-        try {
-            log.info("从转录文本进行音频情感分析，文本长度: {}", transcribedText.length());
-            return analyzeAudioEmotion(transcribedText);
-        } catch (Exception e) {
-            throw new RuntimeException("音频情感分析失败", e);
-        }
-    }
-
-    /**
-     * 使用文本模型分析转录文本的情感语调
-     *
-     * @param transcribedText 转录文本
-     * @return 音频分析结果
-     */
-    private AudioAnalysisResult analyzeAudioEmotion(String transcribedText) {
-        try {
-            // 从模板加载情感分析 prompt
-            String prompt = promptTemplateService.getPrompt("audio-emotion-analysis",
-                    Map.of("transcribedText", transcribedText));
-
-            // 直接使用文本模型 ChatClient（独立 Bean，模型已固定为 qwen-plus）
-            String response = textChatClient.prompt()
-                    .user(prompt)
-                    .call()
-                    .content();
-
-            return parseAudioAnalysisResult(response, transcribedText);
-
-        } catch (Exception e) {
-            throw new RuntimeException("音频情感分析失败", e);
-        }
-    }
-
-    /**
-     * 综合多模态评估（支持自定义评估模板）
-     * 结合文本回答、视频分析、音频分析进行综合评估
-     * @param evaluationPromptName 评估 Prompt 模板名称
-     */
-    public EvaluationBO comprehensiveEvaluate(
+    public EvaluationBO comprehensiveOmniEvaluation(
             String question,
-            VisionAnalysisResult visionResult,
-            AudioAnalysisResult audioResult,
+            String transcribedText,
+            List<TranscriptEntry> transcriptEntries,
+            List<FrameWithTimestamp> framesWithTimestamps,
+            String base64WavAudio,
             String evaluationPromptName) {
 
-        log.info("开始综合评估，使用模板: {}", evaluationPromptName);
+        boolean hasFrames = framesWithTimestamps != null && !framesWithTimestamps.isEmpty();
+        boolean hasAudio = base64WavAudio != null && !base64WavAudio.isEmpty();
 
-        // 从模板加载 system prompt
-        String systemPrompt = promptTemplateService.getPrompt(evaluationPromptName);
+        log.info("开始综合评估，multimodalEnabled={}, 视频帧: {}, 音频: {}, 转录条目: {}",
+                multimodalEnabled,
+                hasFrames ? framesWithTimestamps.size() : 0,
+                hasAudio ? "有" : "无",
+                transcriptEntries != null ? transcriptEntries.size() : 0);
 
-        StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("问题：").append(question).append("\n\n");
-        userPrompt.append("回答内容：").append(audioResult.getTranscribedText()).append("\n\n");
-        userPrompt.append("视频分析结果：\n");
-        userPrompt.append("- 表情得分：").append(visionResult.getEmotionScore()).append("\n");
-        userPrompt.append("- 肢体语言得分：").append(visionResult.getBodyLanguageScore()).append("\n");
-        userPrompt.append("- 表情分析：").append(visionResult.getEmotionAnalysis()).append("\n\n");
-        userPrompt.append("音频分析结果：\n");
-        userPrompt.append("- 语音得分：").append(audioResult.getVoiceToneScore()).append("\n");
-        userPrompt.append("- 语音分析：").append(audioResult.getToneAnalysis()).append("\n");
+        // multimodalEnabled=false 或无任何多模态数据时，降级为纯文本评估
+        if (!multimodalEnabled || (!hasFrames && !hasAudio)) {
+            log.info("多模态未启用或无多模态数据，使用纯文本评估");
+            return textOnlyEvaluation(question, transcribedText, evaluationPromptName);
+        }
 
         try {
-            // 直接使用文本模型 ChatClient（独立 Bean，模型已固定为 qwen-plus）
+            // 1. 加载评估 Prompt
+            String systemPrompt = promptTemplateService.getPrompt(evaluationPromptName + "-omni");
+
+            // 2. 构建用户 Prompt，包含问题、转录文本+时间戳、关键帧时间信息
+            StringBuilder userPrompt = new StringBuilder();
+            userPrompt.append("## 面试问题\n").append(question).append("\n\n");
+
+            // 添加转录文本和时间戳
+            userPrompt.append("## 候选人回答（转录文本+时间戳）\n");
+            if (transcriptEntries != null && !transcriptEntries.isEmpty()) {
+                for (TranscriptEntry entry : transcriptEntries) {
+                    userPrompt.append(String.format("[%d-%d] %s\n",
+                            entry.getStartTimeMs(), entry.getEndTimeMs(), entry.getText()));
+                }
+            } else if (transcribedText != null && !transcribedText.isEmpty()) {
+                userPrompt.append(transcribedText);
+            }
+            userPrompt.append("\n");
+
+            // 添加关键帧时间戳信息（用于和语音时间对齐）
+            if (hasFrames) {
+                userPrompt.append("## 关键视频帧时间戳（用于和语音时间对齐）\n");
+                for (FrameWithTimestamp f : framesWithTimestamps) {
+                    userPrompt.append(String.format("- 帧时间戳: %dms\n", f.getTimestampMs()));
+                }
+                userPrompt.append("\n");
+            }
+
+            // 3. 提取纯帧数据用于 Omni 调用
+            List<String> base64Frames = framesWithTimestamps.stream()
+                    .map(FrameWithTimestamp::getFrame)
+                    .toList();
+
+            // 4. 调用 OmniModalService 进行多模态综合分析
+            String response = omniModalService.analyzeMultimodal(base64Frames, base64WavAudio, userPrompt.toString());
+
+            // 5. 解析返回的 JSON
+            return parseOmniEvaluationResponse(response);
+
+        } catch (Exception e) {
+            log.error("Omni多模态综合评估失败", e);
+            throw new RuntimeException("Omni多模态综合评估失败", e);
+        }
+    }
+
+    /**
+     * 纯文本评估（降级方案）
+     * 使用 qwen-plus 文本模型进行评估，多模态分数字段返回默认值
+     */
+    private EvaluationBO textOnlyEvaluation(String question, String transcribedText, String evaluationPromptName) {
+        try {
+            // 加载旧的纯文本评估 prompt（不包含多模态指令）
+            String systemPrompt = promptTemplateService.getPrompt(evaluationPromptName + "-omni");
+
+            StringBuilder userPrompt = new StringBuilder();
+            userPrompt.append("## 面试问题\n").append(question).append("\n\n");
+            userPrompt.append("## 候选人回答（纯文本，无音视频数据）\n");
+            if (transcribedText != null && !transcribedText.isEmpty()) {
+                userPrompt.append(transcribedText);
+            }
+            userPrompt.append("\n\n注意：本次评估无音视频数据，请仅基于文本内容评分，多模态分数字段返回默认值70。");
+
             String response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt.toString())
                     .call()
                     .content();
 
-            return parseEvaluationBO(response, visionResult, audioResult);
+            return parseOmniEvaluationResponse(response);
 
         } catch (Exception e) {
-            throw new RuntimeException("综合评估失败", e);
+            log.error("纯文本评估失败", e);
+            throw new RuntimeException("纯文本评估失败", e);
         }
     }
 
     /**
-     * 追问决策
-     * 基于评估结果和多模态分析，独立判断是否需要追问
+     * 简化版追问决策（基于 EvaluationBO 中的多模态分数字段）
      *
      * @param question      当前问题
      * @param answer        候选人回答
-     * @param evaluation    评估结果
-     * @param visionResult  视觉分析结果
-     * @param audioResult   音频分析结果
+     * @param evaluation    评估结果（包含 emotionScore/bodyLanguageScore/voiceToneScore）
      * @param followUpCount 已追问次数
      * @param maxFollowUps  追问上限
      * @return 追问决策结果
      */
-    public FollowUpDecisionBO decideFollowUp(
+    public FollowUpDecisionBO decideFollowUpSimple(
             String question,
             String answer,
             EvaluationBO evaluation,
-            VisionAnalysisResult visionResult,
-            AudioAnalysisResult audioResult,
             int followUpCount,
             int maxFollowUps) {
 
@@ -200,11 +184,11 @@ public class MultimodalAnalysisService {
         userPrompt.append("- 优点：").append(String.join(", ", evaluation.getStrengths())).append("\n");
         userPrompt.append("- 不足：").append(String.join(", ", evaluation.getWeaknesses())).append("\n\n");
         userPrompt.append("## 多模态分析\n");
-        userPrompt.append("- 表情得分：").append(visionResult.getEmotionScore()).append("\n");
-        userPrompt.append("- 肢体语言得分：").append(visionResult.getBodyLanguageScore()).append("\n");
-        userPrompt.append("- 语音得分：").append(audioResult.getVoiceToneScore()).append("\n");
-        if (visionResult.isHasConcern() || audioResult.isHasConcern()) {
-            userPrompt.append("- 多模态异常：").append(buildModalityFollowUpSuggestion(visionResult, audioResult)).append("\n");
+        userPrompt.append("- 表情得分：").append(evaluation.getEmotionScore()).append("\n");
+        userPrompt.append("- 肢体语言得分：").append(evaluation.getBodyLanguageScore()).append("\n");
+        userPrompt.append("- 语音得分：").append(evaluation.getVoiceToneScore()).append("\n");
+        if (evaluation.getModalityFollowUpSuggestion() != null && !evaluation.getModalityFollowUpSuggestion().isEmpty()) {
+            userPrompt.append("- 多模态异常：").append(evaluation.getModalityFollowUpSuggestion()).append("\n");
         }
         userPrompt.append("\n## 追问次数\n");
         userPrompt.append("- 已追问次数：").append(followUpCount).append("\n");
@@ -221,7 +205,6 @@ public class MultimodalAnalysisService {
 
         } catch (Exception e) {
             log.error("追问决策失败", e);
-            // 默认进入下一题
             return FollowUpDecisionBO.builder()
                     .decision("nextQuestion")
                     .reason("追问决策失败，跳过追问")
@@ -229,101 +212,89 @@ public class MultimodalAnalysisService {
         }
     }
 
+    // ========== 解析方法 ==========
+
     /**
-     * 解析视频分析结果
+     * 解析 Omni 多模态评估响应
      */
-    private VisionAnalysisResult parseVisionAnalysisResult(String response) {
+    private EvaluationBO parseOmniEvaluationResponse(String response) {
         try {
             String jsonStr = extractJson(response);
-            JSONObject result = JSONUtil.parseObj(jsonStr);
+            JSONObject json = JSONUtil.parseObj(jsonStr);
 
-            int emotionScore = result.getInt("emotionScore", 70);
-            int bodyLanguageScore = result.getInt("bodyLanguageScore", 70);
-            String emotionAnalysis = result.getStr("emotionAnalysis", "分析完成");
-            String bodyLanguageAnalysis = result.getStr("bodyLanguageAnalysis", "分析完成");
+            // 提取多模态分数字段
+            int emotionScore = json.getInt("emotionScore", 70);
+            int bodyLanguageScore = json.getInt("bodyLanguageScore", 70);
+            int voiceToneScore = json.getInt("voiceToneScore", 70);
 
-            // 检测多模态异常
-            boolean hasConcern = emotionScore < 60 || bodyLanguageScore < 60;
-            String followUpSuggestion = generateVideoFollowUpSuggestion(emotionScore, bodyLanguageScore, emotionAnalysis, bodyLanguageAnalysis);
+            // 提取语义评分（根据问题类型不同字段名也不同，做兼容处理）
+            int accuracy = json.getInt("accuracy",
+                    json.getInt("businessAcumen",
+                            json.getInt("situationClarity",
+                                    json.getInt("communication", 70))));
 
-            return VisionAnalysisResult.builder()
+            int logic = json.getInt("depthAndBreadth",
+                    json.getInt("problemFraming",
+                            json.getInt("taskClarity",
+                                    json.getInt("collaboration", 70))));
+
+            int fluency = json.getInt("understandingAndApplication",
+                    json.getInt("analyticalFramework",
+                            json.getInt("actionSpecificity",
+                                    json.getInt("learnability", 70))));
+
+            int confidence = json.getInt("clarityAndExpression",
+                    json.getInt("solution",
+                            json.getInt("resultQuantification",
+                                    json.getInt("problemSolving", 70))));
+
+            return EvaluationBO.builder()
+                    .accuracy(accuracy)
+                    .logic(logic)
+                    .fluency(fluency)
+                    .confidence(confidence)
                     .emotionScore(emotionScore)
                     .bodyLanguageScore(bodyLanguageScore)
-                    .emotionAnalysis(emotionAnalysis)
-                    .bodyLanguageAnalysis(bodyLanguageAnalysis)
-                    .suggestions(parseStringList(result, "suggestions"))
-                    .followUpSuggestion(followUpSuggestion)
-                    .hasConcern(hasConcern)
+                    .voiceToneScore(voiceToneScore)
+                    .overallScore(json.getInt("overallScore", 70))
+                    .strengths(parseStringList(json, "strengths"))
+                    .weaknesses(parseStringList(json, "weaknesses"))
+                    .detailedEvaluation(json.getStr("detailedEvaluation", ""))
+                    .modalityFollowUpSuggestion(buildOmniFollowUpSuggestion(emotionScore, bodyLanguageScore, voiceToneScore))
+                    .modalityConcern(emotionScore < 60 || bodyLanguageScore < 60 || voiceToneScore < 60)
                     .build();
 
         } catch (Exception e) {
-            log.error("解析视频分析结果失败: {}", e.getMessage());
-            return VisionAnalysisResult.defaultResult();
+            log.error("解析Omni评估结果失败: {}", e.getMessage());
+            return EvaluationBO.builder()
+                    .accuracy(60).logic(60).fluency(60).confidence(60)
+                    .emotionScore(70).bodyLanguageScore(70).voiceToneScore(70)
+                    .overallScore(60)
+                    .build();
         }
     }
 
     /**
-     * 根据视频分析结果生成追问建议
+     * 根据多模态分值返回追问建议
      */
-    private String generateVideoFollowUpSuggestion(int emotionScore, int bodyLanguageScore,
-                                                    String emotionAnalysis, String bodyLanguageAnalysis) {
+    private String buildOmniFollowUpSuggestion(int emotionScore, int bodyLanguageScore, int voiceToneScore) {
         StringBuilder suggestion = new StringBuilder();
 
         if (emotionScore < 60) {
-            suggestion.append("表情得分较低(").append(emotionScore).append(")，").append(emotionAnalysis);
-            suggestion.append("，建议追问候选人是否对当前话题有顾虑或压力");
+            suggestion.append("表情得分较低(").append(emotionScore).append(")，可能存在紧张或不自信");
         }
 
         if (bodyLanguageScore < 60) {
             if (suggestion.length() > 0) suggestion.append("；");
-            suggestion.append("肢体语言得分较低(").append(bodyLanguageScore).append(")，").append(bodyLanguageAnalysis);
-            suggestion.append("，建议追问候选人的自信程度或沟通风格");
+            suggestion.append("肢体语言得分较低(").append(bodyLanguageScore).append(")，可能缺乏自信或沟通经验");
         }
 
-        return suggestion.length() > 0 ? suggestion.toString() : "";
-    }
-
-    /**
-     * 解析音频分析结果
-     */
-    private AudioAnalysisResult parseAudioAnalysisResult(String response, String transcribedText) {
-        try {
-            String jsonStr = extractJson(response);
-            JSONObject result = JSONUtil.parseObj(jsonStr);
-
-            int voiceToneScore = result.getInt("voiceToneScore", 70);
-            String toneAnalysis = result.getStr("toneAnalysis", "语音分析完成");
-            String emotionAnalysis = result.getStr("emotionAnalysis", "情感分析完成");
-
-            // 检测多模态异常
-            boolean hasConcern = voiceToneScore < 60;
-            String followUpSuggestion = generateAudioFollowUpSuggestion(voiceToneScore, toneAnalysis, emotionAnalysis);
-
-            return AudioAnalysisResult.builder()
-                    .voiceToneScore(voiceToneScore)
-                    .transcribedText(transcribedText)
-                    .toneAnalysis(toneAnalysis)
-                    .emotionAnalysis(emotionAnalysis)
-                    .suggestions(parseStringList(result, "suggestions"))
-                    .followUpSuggestion(followUpSuggestion)
-                    .hasConcern(hasConcern)
-                    .build();
-
-        } catch (Exception e) {
-            log.error("解析音频分析结果失败: {}", e.getMessage());
-            return AudioAnalysisResult.defaultResult();
-        }
-    }
-
-    /**
-     * 根据音频分析结果生成追问建议
-     */
-    private String generateAudioFollowUpSuggestion(int voiceToneScore, String toneAnalysis, String emotionAnalysis) {
         if (voiceToneScore < 60) {
-            return "语音语调得分较低(" + voiceToneScore + ")，" + toneAnalysis +
-                    "，建议追问候选人是否紧张或有表达困难";
+            if (suggestion.length() > 0) suggestion.append("；");
+            suggestion.append("语音得分较低(").append(voiceToneScore).append(")，可能语速不稳、语气不自信或有过多的停顿");
         }
-        return "";
+
+        return suggestion.toString();
     }
 
     /**
@@ -350,65 +321,6 @@ public class MultimodalAnalysisService {
                     .reason("解析失败")
                     .build();
         }
-    }
-
-    private EvaluationBO parseEvaluationBO(String response,
-                                            VisionAnalysisResult visionResult,
-                                            AudioAnalysisResult audioResult) {
-        try {
-            String jsonStr = extractJson(response);
-            JSONObject json = JSONUtil.parseObj(jsonStr);
-
-            // 生成多模态追问建议
-            String modalityFollowUpSuggestion = buildModalityFollowUpSuggestion(visionResult, audioResult);
-            boolean modalityConcern = visionResult.isHasConcern() || audioResult.isHasConcern();
-
-            return EvaluationBO.builder()
-                    .accuracy(json.getInt("accuracy", 60))
-                    .logic(json.getInt("logic", 60))
-                    .fluency(json.getInt("fluency", 60))
-                    .confidence(json.getInt("confidence", 60))
-                    .emotionScore(visionResult.getEmotionScore())
-                    .bodyLanguageScore(visionResult.getBodyLanguageScore())
-                    .voiceToneScore(audioResult.getVoiceToneScore())
-                    .overallScore(json.getInt("overallScore", 60))
-                    .strengths(parseStringList(json, "strengths"))
-                    .weaknesses(parseStringList(json, "weaknesses"))
-                    .detailedEvaluation(json.getStr("detailedEvaluation", ""))
-                    .modalityFollowUpSuggestion(modalityFollowUpSuggestion)
-                    .modalityConcern(modalityConcern)
-                    .build();
-        } catch (Exception e) {
-            log.error("解析评估结果失败: {}", e.getMessage());
-            return EvaluationBO.builder()
-                    .accuracy(60)
-                    .logic(60)
-                    .fluency(60)
-                    .confidence(60)
-                    .emotionScore(visionResult.getEmotionScore())
-                    .bodyLanguageScore(visionResult.getBodyLanguageScore())
-                    .voiceToneScore(audioResult.getVoiceToneScore())
-                    .overallScore(60)
-                    .build();
-        }
-    }
-
-    /**
-     * 构建多模态追问建议
-     */
-    private String buildModalityFollowUpSuggestion(VisionAnalysisResult visionResult, AudioAnalysisResult audioResult) {
-        StringBuilder suggestion = new StringBuilder();
-
-        if (visionResult.getFollowUpSuggestion() != null && !visionResult.getFollowUpSuggestion().isEmpty()) {
-            suggestion.append(visionResult.getFollowUpSuggestion());
-        }
-
-        if (audioResult.getFollowUpSuggestion() != null && !audioResult.getFollowUpSuggestion().isEmpty()) {
-            if (suggestion.length() > 0) suggestion.append("；");
-            suggestion.append(audioResult.getFollowUpSuggestion());
-        }
-
-        return suggestion.toString();
     }
 
     private List<String> parseStringList(JSONObject json, String key) {

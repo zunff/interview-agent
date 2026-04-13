@@ -34,6 +34,7 @@ public final class NodeNames {
     public static final String ANALYZE_VISION = "analyzeVision";
     public static final String ANALYZE_AUDIO = "analyzeAudio";
     public static final String AGGREGATE_ANALYSIS = "aggregateAnalysis";
+    public static final String COMPREHENSIVE_EVALUATION = "comprehensiveEvaluation";
     public static final String GENERATE_CHALLENGE = "generateChallenge";
     public static final String GENERATE_DEEP_DIVE = "generateDeepDive";
 }

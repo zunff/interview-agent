@@ -1,7 +1,6 @@
 package com.zunff.interview.service.interview;
 
 import com.zunff.interview.common.exception.BusinessException;
-import com.zunff.interview.constant.NodeNames;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
@@ -11,7 +10,6 @@ import com.zunff.interview.model.response.SessionResponse;
 import com.zunff.interview.service.AnswerRecordService;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
-import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +21,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.concurrent.ForkJoinPool;
 
 /**
  * 面试业务服务
@@ -38,21 +35,18 @@ public class InterviewBusinessService {
     private final InterviewWebSocketHandler webSocketHandler;
     private final AnswerRecordService answerRecordService;
     private final EvaluationRecordService evaluationRecordService;
-    private final MultimodalAnalysisService multimodalAnalysisService;
 
     public InterviewBusinessService(
             CompiledGraph<InterviewState> interviewAgent,
             InterviewSessionService sessionService,
             @Lazy InterviewWebSocketHandler webSocketHandler,
             AnswerRecordService answerRecordService,
-            EvaluationRecordService evaluationRecordService,
-            MultimodalAnalysisService multimodalAnalysisService) {
+            EvaluationRecordService evaluationRecordService) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
         this.answerRecordService = answerRecordService;
         this.evaluationRecordService = evaluationRecordService;
-        this.multimodalAnalysisService = multimodalAnalysisService;
     }
 
     /**
@@ -131,6 +125,21 @@ public class InterviewBusinessService {
                 stateUpdate.put(InterviewState.ANSWER_FRAMES, frames);
                 log.info("更新状态：ANSWER_FRAMES 包含 {} 帧", frames.size());
             }
+            // 带时间戳的视频帧（用于Omni多模态时间对齐分析）
+            if (request.getFramesWithTimestamps() != null && !request.getFramesWithTimestamps().isEmpty()) {
+                stateUpdate.put(InterviewState.ANSWER_FRAMES_WITH_TIMESTAMPS, request.getFramesWithTimestamps());
+                log.info("更新状态：ANSWER_FRAMES_WITH_TIMESTAMPS 包含 {} 帧", request.getFramesWithTimestamps().size());
+            }
+            // WAV音频数据（Base64编码）用于Omni多模态综合分析
+            if (request.getAnswerAudio() != null && !request.getAnswerAudio().isEmpty()) {
+                stateUpdate.put(InterviewState.ANSWER_AUDIO, request.getAnswerAudio());
+                log.info("更新状态：ANSWER_AUDIO 长度: {} chars", request.getAnswerAudio().length());
+            }
+            // 转录条目（带时间戳）用于Omni多模态综合分析
+            if (request.getTranscriptEntries() != null && !request.getTranscriptEntries().isEmpty()) {
+                stateUpdate.put(InterviewState.TRANSCRIPT_ENTRIES, request.getTranscriptEntries());
+                log.info("更新状态：TRANSCRIPT_ENTRIES 包含 {} 条", request.getTranscriptEntries().size());
+            }
             interviewAgent.updateState(config, stateUpdate);
 
             // 验证状态更新
@@ -139,17 +148,6 @@ public class InterviewBusinessService {
             log.info("验证：ANSWER_FRAMES 大小 = {}, ANSWER_TEXT 长度 = {}",
                     verifySnapshot.state().answerFrames().size(),
                     verifySnapshot.state().answerText().length());
-
-            // 配置并行执行器（子图节点格式：subgraphId-nodeId）
-            String prefix = currentState.isTechnicalRound() ? NodeNames.TECH_PREFIX : NodeNames.BIZ_PREFIX;
-            String subgraphNodeName = currentState.isTechnicalRound() ? NodeNames.TECHNICAL_ROUND : NodeNames.BUSINESS_ROUND;
-            String askQuestionNodeName = subgraphNodeName + "-" + prefix + NodeNames.ASK_QUESTION;
-            log.info("配置并行执行器，节点名称: {}", askQuestionNodeName);
-
-            config = RunnableConfig.builder()
-                    .threadId(sessionId)
-                    .addParallelNodeExecutor(askQuestionNodeName, ForkJoinPool.commonPool())
-                    .build();
 
             log.info("状态已更新，开始恢复图执行...");
 

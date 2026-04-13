@@ -88,7 +88,7 @@ public class AiServiceConfig {
     }
 
     @Bean
-    public VideoStreamService videoStreamService(MultimodalAnalysisService multimodalAnalysisService, VideoConfig videoConfig) {
-        return new VideoStreamService(multimodalAnalysisService, videoConfig);
+    public VideoStreamService videoStreamService(VideoConfig videoConfig) {
+        return new VideoStreamService(videoConfig);
     }
 }
