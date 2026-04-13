@@ -4,6 +4,7 @@ import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.model.dto.analysis.VisionAnalysisResult;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import lombok.Getter;
@@ -47,6 +48,9 @@ public class InterviewState extends AgentState {
     // ========== 多模态分析中间结果 ==========
     public static final String VISION_ANALYSIS_RESULT = "visionAnalysisResult";
     public static final String AUDIO_ANALYSIS_RESULT = "audioAnalysisResult";
+
+    // ========== 实时ASR转录结果 ==========
+    public static final String TRANSCRIPT_ENTRIES = "transcriptEntries";
 
     // ========== 实时多模态分析 ==========
     public static final String EMOTION_SCORES = "emotionScores";
@@ -123,6 +127,9 @@ public class InterviewState extends AgentState {
         // 多模态分析中间结果
         SCHEMA.put(VISION_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), VisionAnalysisResult::empty));
         SCHEMA.put(AUDIO_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), AudioAnalysisResult::empty));
+
+        // 实时ASR转录结果
+        SCHEMA.put(TRANSCRIPT_ENTRIES, Channels.appender(ArrayList::new));
 
         // 最后值类型：使用 base + LastValueReducer
         SCHEMA.put(QUESTION_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
@@ -466,6 +473,14 @@ public class InterviewState extends AgentState {
     public AudioAnalysisResult audioAnalysisResult() {
         return (AudioAnalysisResult) data().getOrDefault(
                 AUDIO_ANALYSIS_RESULT, AudioAnalysisResult.empty());
+    }
+
+    /**
+     * 获取转录条目列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<TranscriptEntry> transcriptEntries() {
+        return (List<TranscriptEntry>) data().getOrDefault(TRANSCRIPT_ENTRIES, new ArrayList<>());
     }
 
     /**

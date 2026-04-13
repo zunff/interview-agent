@@ -20,25 +20,10 @@ spring:
       api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
-          model: qwen-plus
+          model: qwen3.5-plus
           temperature: 0.7
-      vision:
-        model: qwen3.5-omni-plus
-        # base-url: https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选，默认已内置
-      # ASR 实时语音识别配置（DashScope SDK + qwen3-asr-flash-realtime）
-      asr:
-        model: qwen3-asr-flash-realtime
-        url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime
-        language: zh
-        input-audio-format: pcm
-        sample-rate: 16000
       embedding:
         model: text-embedding-v3
-      # TTS 语音合成配置（Realtime 模式）
-      tts:
-        model: qwen3-tts-flash-realtime
-        voice: Ethan
-        # url: wss://dashscope.aliyuncs.com/api-ws/v1/realtime  # 可选，默认已内置
     # 向量存储配置 (pgvector)
     vectorstore:
       pgvector:
@@ -46,6 +31,29 @@ spring:
         distance-type: COSINE_DISTANCE
         dimensions: 1024
         initialize-schema: true
+
+interview:
+  multimodal:
+    enabled: true                # 是否启用多模态分析
+    omni:
+      model: qwen3.5-omni-plus-2026-03-15
+    # ASR 实时语音识别配置（DashScope SDK + fun-asr-realtime）
+    asr:
+      model: fun-asr-realtime-2026-02-28
+      url: wss://dashscope.aliyuncs.com/api-ws/v1/inference
+      language: zh
+      input-audio-format: pcm
+      sample-rate: 16000
+      # 热词表ID（需在阿里云百炼平台创建热词表后填入）
+      # 创建方式：https://help.aliyun.com/zh/model-studio/custom-hot-words/
+      # 建议热词内容参考 docs/asr-vocabulary.txt
+      vocabulary-id:
+  tts:
+    enabled: true                # 是否启用语音提问
+    model: qwen3-asr-flash-realtime-2026-02-10
+    voice: Ethan
+  knowledge:
+    enabled: true                # 是否启用知识库检索
 
 # LangGraph4j 图配置
 langgraph4j:

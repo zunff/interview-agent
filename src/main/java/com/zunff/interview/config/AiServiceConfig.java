@@ -1,22 +1,23 @@
 package com.zunff.interview.config;
 
-import com.zunff.interview.service.extend.AsrRealtimeService;
-import com.zunff.interview.service.extend.MultimodalAnalysisService;
-import com.zunff.interview.service.extend.PromptTemplateService;
-import com.zunff.interview.service.extend.QwenOmniService;
-import com.zunff.interview.service.extend.VideoStreamService;
+import com.zunff.interview.service.extend.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 服务配置类
+ * AI 服务配置类
+ * 统一注册 ASR、TTS、视觉分析等 AI 服务的 Bean
  */
 @Slf4j
 @Configuration
-public class ServiceConfig {
+public class AiServiceConfig {
+
+    @Value("${spring.ai.dashscope.api-key}")
+    private String apiKey;
 
     @Bean
     public PromptTemplateService promptTemplateService() {
@@ -38,13 +39,35 @@ public class ServiceConfig {
      * 使用 DashScope OpenAI 兼容 API，用于视频帧分析
      */
     @Bean
-    public QwenOmniService qwenOmniService(VisionConfig visionConfig) {
+    public OmniModalService qwenOmniService(OmniModelConfig visionConfig) {
         log.info("初始化 QwenOmniService，模型: {}, baseUrl: {}",
                 visionConfig.getModel(), visionConfig.getBaseUrl());
-        return new QwenOmniService(
-                visionConfig.getApiKey(),
+        return new OmniModalService(
+                apiKey,
                 visionConfig.getModel(),
                 visionConfig.getBaseUrl());
+    }
+
+    /**
+     * ASR 实时语音识别服务 (fun-asr-realtime)
+     * 使用 DashScope SDK Recognition 进行流式语音转录
+     */
+    @Bean
+    public AsrRealtimeService asrRealtimeService(AsrConfig asrConfig) {
+        log.info("初始化 AsrRealtimeService，模型: {}, url: {}",
+                asrConfig.getModel(), asrConfig.getUrl());
+        return new AsrRealtimeService(apiKey, asrConfig);
+    }
+
+    /**
+     * TTS 语音合成服务 (qwen3-tts-flash-realtime)
+     * 使用 DashScope SDK QwenTtsRealtime 进行流式语音合成
+     */
+    @Bean
+    public TtsRealtimeService ttsRealtimeService(TtsConfig ttsConfig) {
+        log.info("初始化 TtsRealtimeService，模型: {}, voice: {}, enabled: {}",
+                ttsConfig.getModel(), ttsConfig.getVoice(), ttsConfig.isEnabled());
+        return new TtsRealtimeService(apiKey, ttsConfig);
     }
 
     /**
@@ -54,14 +77,12 @@ public class ServiceConfig {
     @Bean
     public MultimodalAnalysisService multimodalAnalysisService(
             ChatClient textChatClient,
-            QwenOmniService qwenOmniService,
-            AsrRealtimeService asrRealtimeService,
+            OmniModalService qwenOmniService,
             PromptTemplateService promptTemplateService,
             MultimodalConfig multimodalConfig) {
         return new MultimodalAnalysisService(
                 textChatClient,
                 qwenOmniService,
-                asrRealtimeService,
                 promptTemplateService,
                 multimodalConfig.isEnabled());
     }

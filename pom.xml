@@ -95,7 +95,7 @@
             <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
         </dependency>
 
-        <!-- DashScope SDK (Qwen-TTS 语音合成 + Qwen-ASR 实时语音识别，需 >= 2.22.5) -->
+        <!-- DashScope SDK (Qwen-TTS 语音合成 + Fun-ASR 实时语音识别，需 >= 2.22.5) -->
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>dashscope-sdk-java</artifactId>
@@ -205,16 +205,41 @@
                     </excludes>
                 </configuration>
             </plugin>
+
+            <!-- 1) 让 Maven 在构建开始时选中 JDK21 toolchain -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-toolchains-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>toolchain</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <toolchains>
+                        <jdk>
+                            <version>${java.version}</version>
+                            <vendor>any</vendor>
+                        </jdk>
+                    </toolchains>
+                </configuration>
+            </plugin>
+
+            <!-- 2) 编译插件：声明用 Java 21 语法/字节码 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <release>${java.version}</release>
                     <parameters>true</parameters>
                 </configuration>
             </plugin>
         </plugins>
     </build>
+
 
 </project>

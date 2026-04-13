@@ -1,5 +1,6 @@
 package com.zunff.interview.agent.nodes;
 
+import cn.hutool.core.util.StrUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
@@ -14,8 +15,8 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * 音频分析节点
- * 分析候选人的音频（语音转文字 + 情感分析）
- * 作为并行分析分支的一部分
+ * 分析候选人的音频（情感分析）
+ * ASR转录已在WebSocket层实时完成，此处只做情感分析
  */
 @Slf4j
 @Component
@@ -28,28 +29,26 @@ public class AudioAnalysisNode {
      * 执行音频分析
      */
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
-        log.info("开始音频分析");
+        log.info("开始音频分析（情感分析）");
 
-        String answerAudio = (String) state.data().get(InterviewState.ANSWER_AUDIO);
         String existingAnswerText = state.answerText();
-        log.info("音频分析节点：音频数据存在={}, 文本存在={}",
-                answerAudio != null && !answerAudio.isEmpty(),
-                existingAnswerText != null && !existingAnswerText.isEmpty());
+        log.info("音频分析节点：文本存在={}, 文本长度={}",
+                StrUtil.isNotEmpty(existingAnswerText),
+                existingAnswerText != null ? existingAnswerText.length() : 0);
 
         try {
-            AudioAnalysisResult audioResult = multimodalAnalysisService.analyzeAudio(answerAudio);
+            AudioAnalysisResult audioResult;
+            if (existingAnswerText != null && !existingAnswerText.isEmpty()) {
+                // 从已有转录文本做情感分析
+                audioResult = multimodalAnalysisService.analyzeAudioFromTranscript(existingAnswerText);
+            } else {
+                log.warn("无转录文本，使用默认音频分析结果");
+                audioResult = AudioAnalysisResult.defaultResult();
+            }
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.AUDIO_ANALYSIS_RESULT, audioResult);
             CircuitBreakerHelper.recordSuccess(updates);
-
-            // 如果前端没传文本，用服务端 STT 转写结果
-            if ((existingAnswerText == null || existingAnswerText.isEmpty())
-                    && audioResult.getTranscribedText() != null
-                    && !audioResult.getTranscribedText().isEmpty()) {
-                updates.put(InterviewState.ANSWER_TEXT, audioResult.getTranscribedText());
-                log.info("使用服务端 STT 转写结果作为回答文本，长度: {}", audioResult.getTranscribedText().length());
-            }
 
             log.info("音频分析完成，语音语调得分: {}", audioResult.getVoiceToneScore());
 

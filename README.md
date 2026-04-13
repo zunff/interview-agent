@@ -18,7 +18,7 @@
 |------|------|
 | 大语言模型 | 面试问题生成、答案评估、情感分析 |
 | 视觉模型 | 视频帧表情识别、肢体语言分析 |
-| 语音模型 | 实时 ASR 语音转文字 |
+| 语音模型 | 实时 ASR 语音转文字（Fun-ASR-Realtime，支持句级时间戳） |
 | TTS 语音合成 | Qwen-TTS-Realtime WebSocket 流式合成，Opus 格式输出 |
 
 ## 核心功能
@@ -26,7 +26,7 @@
 - **智能面试流程**: 根据简历和岗位自动生成针对性问题，支持技术基础、项目经验、业务理解、软技能等多维度考察
 - **多分支追问策略**: 根据回答质量动态选择追问策略（普通追问/低分深入/高分挑战）
 - **并行多模态评估**: 视觉分析（表情/肢体语言）与音频分析（语调情感/流畅度）并行执行
-- **实时交互**: WebSocket 实时推送问题，TTS 语音合成通过 BinaryMessage 流式推送 Opus 音频，缓存视频帧和音频流
+- **实时交互**: WebSocket 实时推送问题，TTS 语音合成通过 BinaryMessage 流式推送 Opus 音频，实时ASR转录（带时间戳缓存）
 
 ## 整体架构
 
@@ -121,7 +121,7 @@ graph TD
 ```mermaid
 graph LR
     VIDEO["视频帧"] --> VISION["视觉模型"] --> SCORE1["表情/肢体语言评分"]
-    AUDIO["音频数据"] --> ASR["语音模型转录"] --> LLM["大语言模型"] --> SCORE2["语调情感分析"]
+    AUDIO["音频流"] --> ASR["Fun-ASR实时转录"] --> LLM["大语言模型"] --> SCORE2["语调情感分析"]
     SCORE1 --> AGG["聚合评估"]
     SCORE2 --> AGG
 ```
@@ -135,7 +135,7 @@ graph LR
 
 ## 前后端交互
 
-系统采用 **REST API + WebSocket** 双通道通信：REST 处理核心流程控制，WebSocket 处理实时数据传输（视频帧缓存、音频流缓存）。
+系统采用 **REST API + WebSocket** 双通道通信：REST 处理核心流程控制，WebSocket 处理实时数据传输（视频帧缓存、实时ASR音频流转录）。
 
 ### REST API
 
@@ -171,8 +171,9 @@ sequenceDiagram
     S->>C: audio_question_end (语音问题结束)
     
     loop 回答过程
+        C->>S: audio_start (开始时间戳)
         C->>S: video_frame (缓存)
-        C->>S: audio_chunk (缓存)
+        C->>S: audio_chunk (实时ASR转录)
     end
     
     C->>S: answer_complete
@@ -238,7 +239,23 @@ interview:
     consecutive-high-for-early-end: 3  # 连续高分次数触发提前结束
     max-follow-ups-technical: 3  # 技术轮每题最大追问数
     max-follow-ups-business: 2   # 业务轮每题最大追问数
+
+spring:
+  ai:
+    dashscope:
+      asr:
+        model: fun-asr-realtime-2026-02-28    # ASR 模型
+        url: wss://dashscope.aliyuncs.com/api-ws/v1/inference
+        vocabulary-id:                         # 热词表ID（可选）
 ```
+
+### ASR 热词配置
+
+Fun-ASR 支持通过热词表提升程序员面试场景的识别准确率。使用步骤：
+
+1. 参考 [`docs/asr-vocabulary.txt`](./docs/asr-vocabulary.txt) 中的程序员面试热词
+2. 在[阿里云百炼平台](https://help.aliyun.com/zh/model-studio/custom-hot-words/)创建热词表，导入热词
+3. 将返回的热词表ID填入 `spring.ai.dashscope.asr.vocabulary-id` 配置项
 
 ## 参考资料
 

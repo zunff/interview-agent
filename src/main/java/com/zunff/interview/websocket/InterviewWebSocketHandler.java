@@ -2,8 +2,8 @@ package com.zunff.interview.websocket;
 
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.websocket.QuestionMessage;
@@ -11,7 +11,7 @@ import com.zunff.interview.model.websocket.ReportMessage;
 import com.zunff.interview.model.websocket.WebSocketMessage;
 import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.extend.AudioStreamService;
-import com.zunff.interview.service.extend.TtsService;
+import com.zunff.interview.service.extend.TtsRealtimeService;
 import com.zunff.interview.service.extend.VideoStreamService;
 import com.zunff.interview.service.interview.InterviewBusinessService;
 import com.zunff.interview.state.InterviewState;
@@ -39,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 1. 客户端连接 ws://host/ws/interview
  * 2. 发送 start_interview 消息（含简历、岗位信息）
  * 3. 服务端创建会话，异步执行图，推送 session_created + new_question + TTS
- * 4. 后续通过 video_frame / audio_chunk / answer_complete 交互
+ * 4. 后续通过 video_frame / audio_start / audio_chunk / answer_complete 交互
  */
 @Slf4j
 @Component
@@ -49,7 +49,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private final VideoStreamService videoStreamService;
     private final AudioStreamService audioStreamService;
     private final InterviewBusinessService interviewBusinessService;
-    private final TtsService ttsService;
+    private final TtsRealtimeService ttsRealtimeService;
     private final InterviewSessionService sessionService;
 
     /** 面试会话ID → WebSocket 会话 */
@@ -79,7 +79,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
         switch (type) {
             case "start_interview" -> handleStartInterview(session, data);
-            case "video_frame", "audio_chunk", "answer_complete", "self_intro_complete" -> {
+            case "video_frame", "audio_chunk", "audio_start", "answer_complete", "self_intro_complete" -> {
                 String interviewSessionId = resolveInterviewSessionId(session, data);
                 if (interviewSessionId == null) {
                     sendErrorMessage(session, "未找到面试会话，请先发送 start_interview");
@@ -87,6 +87,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
                 }
                 switch (type) {
                     case "video_frame" -> handleVideoFrame(interviewSessionId, data);
+                    case "audio_start" -> handleAudioStart(interviewSessionId, data);
                     case "audio_chunk" -> handleAudioChunk(interviewSessionId, data);
                     case "self_intro_complete" -> handleSelfIntroComplete(interviewSessionId);
                     case "answer_complete" -> handleAnswerComplete(interviewSessionId);
@@ -102,6 +103,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         if (interviewSessionId != null) {
             sessions.remove(interviewSessionId);
             interruptTtsThread(interviewSessionId);
+            audioStreamService.stopRealtimeAsr(interviewSessionId);
             sessionService.disconnectSession(interviewSessionId);
         }
         log.info("WebSocket 连接关闭: {}, 面试会话: {}, 状态: {}", session.getId(), interviewSessionId, status);
@@ -163,32 +165,52 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
     private void handleVideoFrame(String sessionId, JSONObject data) {
         String frameData = data.getStr("frame");
-        videoStreamService.handleVideoFrame(sessionId, frameData);
+        long timestampMs = data.getLong("timestampMs", System.currentTimeMillis());
+        videoStreamService.handleVideoFrame(sessionId, frameData, timestampMs);
     }
 
+    /**
+     * 处理 audio_start 消息
+     * 前端开始录音时发送，携带开始时间戳，启动实时ASR连接
+     */
+    private void handleAudioStart(String sessionId, JSONObject data) {
+        long startTimestampMs = data.getLong("startTimestampMs", System.currentTimeMillis());
+        log.info("收到 audio_start 信号，会话: {}, 开始时间戳: {}", sessionId, startTimestampMs);
+        try {
+            audioStreamService.startRealtimeAsr(sessionId, startTimestampMs);
+        } catch (Exception e) {
+            log.error("启动实时ASR失败，会话: {}", sessionId, e);
+            sendErrorMessage(sessionId, "启动语音识别失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理 audio_chunk 消息
+     * 前端持续发送音频块，直接转发给ASR实时转录
+     */
     private void handleAudioChunk(String sessionId, JSONObject data) {
         String audioBase64 = data.getStr("audio");
         if (audioBase64 != null && !audioBase64.isEmpty()) {
             byte[] audioData = Base64.getDecoder().decode(audioBase64);
             audioStreamService.appendChunk(sessionId, audioData);
-            log.trace("缓存音频块，会话: {}, 当前缓冲: {} bytes", sessionId, audioStreamService.getBufferSize(sessionId));
+            log.trace("转发音频块到ASR，会话: {}, 大小: {} bytes", sessionId, audioData.length);
         }
     }
 
     private void handleSelfIntroComplete(String sessionId) {
         log.info("收到 self_intro_complete 信号，会话: {}", sessionId);
 
-        String audioBase64 = null;
-        byte[] audioData = audioStreamService.getCompleteAudio(sessionId);
-        if (audioData != null) {
-            audioBase64 = Base64.getEncoder().encodeToString(audioData);
-            log.info("自我介绍音频数据大小: {} bytes", audioData.length);
-        }
+        // 停止ASR，获取转录结果
+        audioStreamService.stopRealtimeAsr(sessionId);
+        String transcribedText = audioStreamService.getCompleteTranscript(sessionId);
+        List<TranscriptEntry> transcriptEntries = audioStreamService.getTranscriptEntries(sessionId);
+
+        log.info("自我介绍转录完成，文本长度: {}, 条目数: {}", transcribedText.length(), transcriptEntries.size());
 
         sendAnswerReceived(sessionId);
 
         try {
-            interviewBusinessService.resumeFromSelfIntro(sessionId, audioBase64);
+            interviewBusinessService.resumeFromSelfIntro(sessionId, transcribedText);
         } catch (Exception e) {
             log.error("自我介绍处理失败，会话: {}", sessionId, e);
             sendErrorMessage(sessionId, "自我介绍处理失败: " + e.getMessage());
@@ -198,22 +220,23 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private void handleAnswerComplete(String sessionId) {
         log.info("收到 answer_complete 信号，会话: {}", sessionId);
 
+        // 停止ASR，获取转录结果
+        audioStreamService.stopRealtimeAsr(sessionId);
+        String transcribedText = audioStreamService.getCompleteTranscript(sessionId);
+        List<TranscriptEntry> transcriptEntries = audioStreamService.getTranscriptEntries(sessionId);
+
+        log.info("回答转录完成，文本长度: {}, 条目数: {}", transcribedText.length(), transcriptEntries.size());
+
+        // 获取视频帧
         List<String> frames = videoStreamService.getFramesForAnalysis(sessionId);
         log.info("从缓存取到 {} 帧视频数据", frames.size());
-
-        String audioBase64 = null;
-        byte[] audioData = audioStreamService.getCompleteAudio(sessionId);
-        if (audioData != null) {
-            audioBase64 = Base64.getEncoder().encodeToString(audioData);
-            log.info("从缓存取到音频数据，大小: {} bytes", audioData.length);
-        }
 
         sendAnswerReceived(sessionId);
 
         SubmitAnswerRequest request = SubmitAnswerRequest.builder()
                 .sessionId(sessionId)
+                .answerText(transcribedText.isEmpty() ? null : transcribedText)
                 .videoFrames(frames.isEmpty() ? null : String.join(",", frames))
-                .answerAudio(audioBase64)
                 .build();
 
         try {
@@ -242,7 +265,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
             interruptTtsThread(sessionId);
             Thread ttsThread = Thread.ofVirtual().name("tts-" + sessionId).unstarted(() -> {
                 try {
-                    ttsService.synthesizeAndStream(question.getContent(), sessionId, session);
+                    ttsRealtimeService.synthesizeAndStream(question.getContent(), sessionId, session);
                 } finally {
                     ttsThreads.remove(sessionId);
                 }

@@ -1,6 +1,5 @@
 package com.zunff.interview.service.extend;
 
-import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
@@ -12,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -29,19 +27,16 @@ import java.util.Map;
 public class MultimodalAnalysisService {
 
     private final ChatClient textChatClient;                  // 文本评估 + 情感分析
-    private final QwenOmniService qwenOmniService;            // 视觉分析 (DashScope SDK)
-    private final AsrRealtimeService asrRealtimeService;      // 语音转录 (DashScope SDK)
+    private final OmniModalService omniModalService;            // 视觉分析 (DashScope SDK)
     private final PromptTemplateService promptTemplateService;
     private final boolean multimodalEnabled;
 
     public MultimodalAnalysisService(ChatClient textChatClient,
-                                      QwenOmniService qwenOmniService,
-                                      AsrRealtimeService asrRealtimeService,
+                                      OmniModalService omniModalService,
                                       PromptTemplateService promptTemplateService,
                                       boolean multimodalEnabled) {
         this.textChatClient = textChatClient;
-        this.qwenOmniService = qwenOmniService;
-        this.asrRealtimeService = asrRealtimeService;
+        this.omniModalService = omniModalService;
         this.promptTemplateService = promptTemplateService;
         this.multimodalEnabled = multimodalEnabled;
     }
@@ -76,7 +71,7 @@ public class MultimodalAnalysisService {
             String prompt = promptTemplateService.getPrompt("video-analysis");
 
             // 使用 QwenOmniService 分析图片列表
-            String response = qwenOmniService.analyzeImages(framesToAnalyze, prompt);
+            String response = omniModalService.analyzeImages(framesToAnalyze, prompt);
 
             return parseVisionAnalysisResult(response);
 
@@ -85,43 +80,22 @@ public class MultimodalAnalysisService {
         }
     }
 
-    public String parseTranscribedText(String audioBase64) {
-        if (audioBase64 == null || audioBase64.isEmpty()) {
-            return "";
-        }
-        log.info("开始分析音频数据，音频Base64长度: {}", audioBase64.length());
-        if (!multimodalEnabled) {
-            log.debug("多模态分析已禁用，返回默认结果");
-            return "";
-        }
-
-        // Step 1: 使用 DashScope SDK AsrRealtimeService 转录
-        byte[] audioData = Base64.getDecoder().decode(audioBase64);
-        log.info("ASR转录请求：音频数据大小={} bytes，开始调用 asr", audioData.length);
-        return asrRealtimeService.transcribe(audioData);
-    }
 
     /**
-     * 分析音频
-     * 步骤1: 使用 DashScope SDK AsrRealtimeService 转录语音
-     * 步骤2: 使用文本模型分析情感语调
+     * 从已有转录文本分析音频（只做情感分析，不再做ASR）
      *
-     * @param audioBase64 Base64编码的音频数据
+     * @param transcribedText 已转录的文本
      * @return 分析结果
      */
-    public AudioAnalysisResult analyzeAudio(String audioBase64) {
-
-        String transcribedText = parseTranscribedText(audioBase64);
-        if (StrUtil.isBlank(transcribedText)) {
+    public AudioAnalysisResult analyzeAudioFromTranscript(String transcribedText) {
+        if (transcribedText == null || transcribedText.isEmpty()) {
             return AudioAnalysisResult.defaultResult();
         }
         try {
-            log.info("ASR转录完成，文本长度: {}，转录内容: {}", transcribedText.length(), transcribedText.substring(0, Math.min(100, transcribedText.length())));
-            // Step 2: 使用文本模型分析情感语调
+            log.info("从转录文本进行音频情感分析，文本长度: {}", transcribedText.length());
             return analyzeAudioEmotion(transcribedText);
-
         } catch (Exception e) {
-            throw new RuntimeException("音频分析失败", e);
+            throw new RuntimeException("音频情感分析失败", e);
         }
     }
 

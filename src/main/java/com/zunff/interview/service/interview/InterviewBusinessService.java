@@ -3,13 +3,11 @@ package com.zunff.interview.service.interview;
 import com.zunff.interview.common.exception.BusinessException;
 import com.zunff.interview.constant.NodeNames;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.analysis.AudioAnalysisResult;
+import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.response.InterviewAnswerResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;
-import com.zunff.interview.model.websocket.QuestionMessage;
-import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.service.AnswerRecordService;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
@@ -24,11 +22,7 @@ import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 
 /**
@@ -137,18 +131,14 @@ public class InterviewBusinessService {
                 stateUpdate.put(InterviewState.ANSWER_FRAMES, frames);
                 log.info("更新状态：ANSWER_FRAMES 包含 {} 帧", frames.size());
             }
-            if (request.getAnswerAudio() != null) {
-                stateUpdate.put(InterviewState.ANSWER_AUDIO, request.getAnswerAudio());
-                log.info("更新状态：ANSWER_AUDIO 长度 {}", request.getAnswerAudio().length());
-            }
             interviewAgent.updateState(config, stateUpdate);
 
             // 验证状态更新
             log.info("状态更新完成，验证状态...");
             StateSnapshot<InterviewState> verifySnapshot = interviewAgent.getState(config);
-            log.info("验证：ANSWER_FRAMES 大小 = {}, ANSWER_AUDIO 是否存在 = {}",
+            log.info("验证：ANSWER_FRAMES 大小 = {}, ANSWER_TEXT 长度 = {}",
                     verifySnapshot.state().answerFrames().size(),
-                    verifySnapshot.state().data().get(InterviewState.ANSWER_AUDIO) != null);
+                    verifySnapshot.state().answerText().length());
 
             // 配置并行执行器（子图节点格式：subgraphId-nodeId）
             String prefix = currentState.isTechnicalRound() ? NodeNames.TECH_PREFIX : NodeNames.BIZ_PREFIX;
@@ -300,29 +290,28 @@ public class InterviewBusinessService {
 
     /**
      * 自我介绍完成后恢复图执行
-     * 流程：Asr 转写 → 更新状态 → 恢复图（profileAnalysis → technicalRound）→ 推送第一道技术题
+     * 流程：更新状态 → 恢复图（profileAnalysis → technicalRound）→ 推送第一道技术题
+     * ASR转录已在WebSocket层实时完成
      *
-     * @param sessionId  面试会话ID
-     * @param audioBase64 自我介绍音频（Base64）
+     * @param sessionId       面试会话ID
+     * @param transcribedText 自我介绍转录文本
      */
-    public void resumeFromSelfIntro(String sessionId, String audioBase64) {
-        log.info("开始自我介绍恢复流程，sessionId: {}", sessionId);
+    public void resumeFromSelfIntro(String sessionId, String transcribedText) {
+        log.info("开始自我介绍恢复流程，sessionId: {}, 转录文本长度: {}", sessionId,
+                transcribedText != null ? transcribedText.length() : 0);
 
         try {
             RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
 
-            // 1. Asr 转写自我介绍音频
-            String transcribedText = multimodalAnalysisService.parseTranscribedText(audioBase64);
-
-            // 2. 更新状态：写入自我介绍文本（不需要视频帧）
+            // 更新状态：写入自我介绍文本和回答文本
             Map<String, Object> stateUpdate = new HashMap<>();
             stateUpdate.put(InterviewState.SELF_INTRO, transcribedText);
-            if (audioBase64 != null) {
-                stateUpdate.put(InterviewState.ANSWER_AUDIO, audioBase64);
+            if (transcribedText != null && !transcribedText.isEmpty()) {
+                stateUpdate.put(InterviewState.ANSWER_TEXT, transcribedText);
             }
             interviewAgent.updateState(config, stateUpdate);
 
-            // 3. 恢复图执行: profileAnalysis → technicalRound → pause at askQuestion
+            // 恢复图执行: profileAnalysis → technicalRound → pause at askQuestion
             Optional<InterviewState> result = interviewAgent.invoke(GraphInput.resume(), config);
 
             if (result.isEmpty()) {

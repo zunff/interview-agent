@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 视频流处理服务
  * 管理视频帧的缓冲和批量分析
+ * 每帧携带前端传入的UTC时间戳
  */
 @Slf4j
 public class VideoStreamService {
@@ -31,16 +32,17 @@ public class VideoStreamService {
     /**
      * 接收视频帧
      *
-     * @param sessionId   会话ID
-     * @param base64Frame Base64编码的视频帧
+     * @param sessionId    会话ID
+     * @param base64Frame  Base64编码的视频帧
+     * @param timestampMs  前端传入的UTC时间戳（ms）
      */
-    public void handleVideoFrame(String sessionId, String base64Frame) {
+    public void handleVideoFrame(String sessionId, String base64Frame, long timestampMs) {
         FrameBuffer buffer = sessionBuffers.computeIfAbsent(
                 sessionId,
                 k -> new FrameBuffer(analysisIntervalMs, maxFramesPerAnalysis)
         );
 
-        buffer.addFrame(base64Frame);
+        buffer.addFrame(base64Frame, timestampMs);
         log.trace("会话 {} 接收到视频帧，当前缓冲区大小: {}", sessionId, buffer.size());
     }
 
@@ -48,7 +50,7 @@ public class VideoStreamService {
      * 获取并清空帧缓冲区用于分析
      *
      * @param sessionId 会话ID
-     * @return 帧列表
+     * @return 帧列表（Base64编码）
      */
     public List<String> getFramesForAnalysis(String sessionId) {
         FrameBuffer buffer = sessionBuffers.get(sessionId);
@@ -56,6 +58,20 @@ public class VideoStreamService {
             return Collections.emptyList();
         }
         return buffer.getFramesForAnalysis();
+    }
+
+    /**
+     * 获取带时间戳的帧列表
+     *
+     * @param sessionId 会话ID
+     * @return 带时间戳的帧列表
+     */
+    public List<FrameWithTimestamp> getFramesWithTimestamps(String sessionId) {
+        FrameBuffer buffer = sessionBuffers.get(sessionId);
+        if (buffer == null) {
+            return Collections.emptyList();
+        }
+        return buffer.getFramesWithTimestamps();
     }
 
     /**
@@ -103,8 +119,8 @@ public class VideoStreamService {
             this.maxFrames = maxFrames;
         }
 
-        public synchronized void addFrame(String base64Frame) {
-            frames.offer(new FrameWithTimestamp(base64Frame, System.currentTimeMillis()));
+        public synchronized void addFrame(String base64Frame, long timestampMs) {
+            frames.offer(new FrameWithTimestamp(base64Frame, timestampMs));
 
             // 保持最大帧数限制
             while (frames.size() > maxFrames) {
@@ -128,7 +144,12 @@ public class VideoStreamService {
             }
             return result;
         }
+
+        public synchronized List<FrameWithTimestamp> getFramesWithTimestamps() {
+            lastAnalysisTime = System.currentTimeMillis();
+            return new ArrayList<>(frames);
+        }
     }
 
-    private record FrameWithTimestamp(String frame, long timestamp) {}
+    public record FrameWithTimestamp(String frame, long timestampMs) {}
 }

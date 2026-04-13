@@ -9,7 +9,6 @@ import cn.hutool.json.JSONUtil;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 
 /**
@@ -22,20 +21,15 @@ import java.util.List;
  * - 视频 (video_url 或图片列表)
  */
 @Slf4j
-public class QwenOmniService {
+public class OmniModalService {
 
-    private static final String DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
     private static final String CHAT_COMPLETIONS_ENDPOINT = "/chat/completions";
 
     private final String apiKey;
     private final String model;
     private final String baseUrl;
 
-    public QwenOmniService(String apiKey, String model) {
-        this(apiKey, model, DEFAULT_BASE_URL);
-    }
-
-    public QwenOmniService(String apiKey, String model, String baseUrl) {
+    public OmniModalService(String apiKey, String model, String baseUrl) {
         this.apiKey = apiKey;
         this.model = model;
         this.baseUrl = StrUtil.removeSuffix(baseUrl, "/");

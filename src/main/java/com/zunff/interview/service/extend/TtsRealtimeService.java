@@ -8,7 +8,6 @@ import com.google.gson.JsonObject;
 import com.zunff.interview.config.TtsConfig;
 import com.zunff.interview.model.websocket.WebSocketMessage;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -24,8 +23,7 @@ import java.util.concurrent.CountDownLatch;
  * 音频格式：Opus，通过 BinaryMessage 发送原始音频数据
  */
 @Slf4j
-@Service
-public class TtsService {
+public class TtsRealtimeService {
 
     private final String apiKey;
     private final String model;
@@ -33,8 +31,8 @@ public class TtsService {
     private final String url;
     private final boolean enabled;
 
-    public TtsService(TtsConfig ttsConfig) {
-        this.apiKey = ttsConfig.getApiKey();
+    public TtsRealtimeService(String apiKey, TtsConfig ttsConfig) {
+        this.apiKey = apiKey;
         this.model = ttsConfig.getModel();
         this.voice = ttsConfig.getVoice();
         this.url = ttsConfig.getUrl();
