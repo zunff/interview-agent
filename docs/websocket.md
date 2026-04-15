@@ -15,45 +15,52 @@
 
 ## 交互流程
 
-```
-客户端                                        服务端
-  |                                            |
-  |-------- WebSocket 连接 -------------------->|
-  |                                            |
-  |-------- start_interview ------------------>|
-  |         (resume, jobInfo, ...)             |
-  |                                            |
-  |<-------- session_created ------------------|
-  |         (sessionId)                        |
-  |                                            |
-  |<-------- self_intro -----------------------|
-  |         (自我介绍阶段信号)                    |
-  |                                            |
-  |-------- audio_start ---------------------->|
-  |         (startTimestampMs)                 |
-  |-------- audio_chunk (持续) ---------------->|
-  |                                            |
-  |-------- self_intro_complete -------------->|
-  |                                            |
-  |<-------- answer_received ------------------|
-  |<-------- new_question (第一道技术题) --------|
-  |         (问题内容 + TTS 音频)                |
-  |                                            |
-  |-------- audio_start ---------------------->|
-  |         (startTimestampMs)                 |
-  |-------- video_frame (持续) ---------------->|
-  |         (frame + timestampMs)              |
-  |-------- audio_chunk (持续) ---------------->|
-  |                                            |
-  |-------- answer_complete ------------------>|
-  |                                            |
-  |<-------- answer_received ------------------|
-  |<-------- evaluation_result ----------------|
-  |<-------- new_question (下一题) -------------|
-  |         (或 final_report，面试结束)           |
-  |                                            |
-  | ... 循环直到面试结束 ...                      |
-  |                                            |
+```mermaid
+sequenceDiagram
+    autonumber
+    participant 客户端
+    participant 服务端
+
+    %% 建立连接
+    客户端->>服务端: WebSocket 连接建立
+
+    %% 初始化面试
+    客户端->>服务端: start_interview<br/>(resume, jobInfo, ...)
+    服务端-->>客户端: session_created<br/>(sessionId)
+
+    %% 并行推送阶段信号
+    服务端-->>客户端: self_intro<br/>(自我介绍阶段信号)
+    服务端-->>客户端: job_analysis_complete<br/>(岗位分析完成信号)
+
+    %% 前端约束提示
+    note over 客户端,服务端: ⚠️ 前端需同时收到 self_intro 和 job_analysis_complete<br/>后，方可允许用户结束自我介绍
+
+    %% 自我介绍音频上传
+    客户端->>服务端: audio_start<br/>(startTimestampMs)
+    loop 持续推送
+        客户端->>服务端: audio_chunk
+    end
+    客户端->>服务端: self_intro_complete
+
+    %% 首题下发
+    服务端-->>客户端: answer_received
+    服务端-->>客户端: new_question（第一道技术题）<br/>(问题内容 + TTS 音频)
+
+    %% 答题环节（音视频+回答）
+    客户端->>服务端: audio_start<br/>(startTimestampMs)
+    loop 持续推送
+        客户端->>服务端: video_frame<br/>(frame + timestampMs)
+        客户端->>服务端: audio_chunk
+    end
+    客户端->>服务端: answer_complete
+
+    %% 评价与下一题
+    服务端-->>客户端: answer_received
+    服务端-->>客户端: evaluation_result
+    服务端-->>客户端: new_question（下一题）<br/>或 final_report（面试结束）
+
+    %% 循环结束
+    note over 客户端,服务端: 循环问答直至面试结束
 ```
 
 ## 客户端 → 服务端
@@ -208,6 +215,31 @@
 - 前端收到后展示自我介绍引导 UI
 - 自我介绍阶段只需发送 `audio_chunk`（语音），不需要 `video_frame`
 - 自我介绍完成后发送 `self_intro_complete`
+
+### job_analysis_complete - 岗位分析完成信号
+
+**响应格式**：
+```json
+{
+  "type": "job_analysis_complete",
+  "payload": {
+    "jobType": "均衡型",
+    "totalQuestions": 10
+  },
+  "timestamp": 1699999999999
+}
+```
+
+**字段说明**：
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `jobType` | string | 岗位类型（技术驱动型/业务驱动型/均衡型） |
+| `totalQuestions` | int | 动态分配的总问题数 |
+
+**说明**：
+- 岗位分析完成后推送，与 `self_intro` 并行发出
+- **前端必须同时收到 `self_intro` 和 `job_analysis_complete` 两个信号后，才允许用户点击结束自我介绍**，否则 `self_intro_complete` 会因岗位分析未完成而导致后续流程异常
+- 即使岗位分析失败（降级为默认配置），也会发送此信号，避免前端永久等待
 
 ### answer_received - 回答已接收确认
 

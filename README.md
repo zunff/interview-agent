@@ -30,7 +30,7 @@
 
 ## 整体架构
 
-系统采用 **LangGraph4j 主图 + 子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析→技术轮→业务轮→报告），每个轮次通过可复用的子图实例执行。
+系统采用 **LangGraph4j 主图 + 子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析 ‖ 自我介绍 → 技术轮 → 业务轮 → 报告），每个轮次通过可复用的子图实例执行。
 
 ```mermaid
 graph TD
@@ -39,7 +39,12 @@ graph TD
     subgraph 主图["InterviewAgentGraph"]
         direction TD
         INIT[InitInterviewNode<br/>初始化面试] --> JOB[JobAnalysisNode<br/>岗位分析]
-        JOB --> TECH[InterviewRoundGraph<br/>技术轮子图]
+        INIT --> SELF[SelfIntroNode<br/>自我介绍]
+
+        JOB --> PROFILE[ProfileAnalysisNode<br/>人物画像分析]
+        SELF --> PROFILE
+
+        PROFILE --> TECH[InterviewRoundGraph<br/>技术轮子图]
 
         TECH --> ROUTER{RoundTransitionNode<br/>轮次决策}
 
@@ -86,6 +91,7 @@ graph TD
 
 | 特性 | 说明 |
 |------|------|
+| **并行初始化** | 岗位分析与自我介绍并行执行，前端需同时收到两个完成信号后才可推进 |
 | **Omni 综合评估** | 一次调用 Qwen-Omni 同时分析文本+音频+视频帧，模型可交叉理解多模态信号 |
 | **时间戳对齐** | 转录文本和关键帧都携带 UTC 时间戳，模型可根据时间对应关系综合判断 |
 | **多分支路由** | 根据得分动态选择追问策略（低分深入/高分挑战/普通追问） |
@@ -168,33 +174,32 @@ sequenceDiagram
     participant C as 客户端
     participant S as 服务端
 
-    C->>S: WebSocket 连接 ws://localhost:8080/ws/interview/{sessionId}
-    S->>C: new_question (第1题)
-    S->>C: audio_question_start (语音问题开始，format: opus)
+    C->>S: start_interview (resume, jobInfo)
+    S->>C: session_created (sessionId)
 
-    loop 语音问题传输（Binary Frame）
-        S-->>C: audio_question_chunk (Opus 二进制音频帧)
+    par 并行阶段
+        S->>C: self_intro (自我介绍阶段信号)
+    and
+        S->>C: job_analysis_complete (岗位分析完成)
     end
 
-    S->>C: audio_question_end (语音问题结束)
+    Note over C: 必须同时收到 self_intro 和 job_analysis_complete<br/>才允许结束自我介绍
 
-    loop 回答过程
-        C->>S: audio_start (开始时间戳)
-        C->>S: video_frame (缓存+时间戳)
-        C->>S: audio_chunk (实时ASR转录+PCM缓存)
-    end
-
-    C->>S: answer_complete
+    C->>S: audio_start + audio_chunk
+    C->>S: self_intro_complete
     S->>C: answer_received
-    S->>S: Omni综合评估（转录文本+关键帧+音频 一次调用）
-    S->>C: evaluation_result
-    S->>C: new_question (下一题或追问)
-    S->>C: audio_question_start (下一题语音开始，format: opus)
+    S->>C: new_question (第1题) + TTS 音频
 
-    %% 重复直到面试结束
+    loop 回答循环
+        C->>S: audio_start + video_frame + audio_chunk
+        C->>S: answer_complete
+        S->>C: answer_received
+        S->>S: Omni综合评估（转录文本+关键帧+音频）
+        S->>C: evaluation_result
+        S->>C: new_question (下一题/追问) + TTS 音频
+    end
 
     S->>C: final_report
-    C->>S: WebSocket 断开
 ```
 
 ## 项目结构
@@ -203,7 +208,7 @@ sequenceDiagram
 src/main/java/com/zunff/interview/
 ├── agent/
 │   ├── graph/                           # LangGraph4j 图定义
-│   │   ├── InterviewAgentGraph.java     # 主图（岗位分析→技术轮→业务轮→报告）
+│   │   ├── InterviewAgentGraph.java     # 主图（岗位分析 ‖ 自我介绍 → 技术轮 → 业务轮 → 报告）
 │   │   └── InterviewRoundGraph.java     # 轮次子图（综合评估+多分支追问）
 │   ├── nodes/                           # 图节点
 │   │   ├── ComprehensiveEvaluationNode.java  # Omni多模态综合评估节点

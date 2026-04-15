@@ -4,11 +4,14 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.websocket.WebSocketMessage;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -21,11 +24,20 @@ import java.util.concurrent.CompletableFuture;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class JobAnalysisNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
+    private final InterviewWebSocketHandler webSocketHandler;
+
+    public JobAnalysisNode(
+            ChatClient.Builder chatClientBuilder,
+            PromptTemplateService promptTemplateService,
+            @Lazy InterviewWebSocketHandler webSocketHandler) {
+        this.chatClientBuilder = chatClientBuilder;
+        this.promptTemplateService = promptTemplateService;
+        this.webSocketHandler = webSocketHandler;
+    }
 
     /**
      * 执行岗位分析
@@ -63,6 +75,15 @@ public class JobAnalysisNode {
             updates.put(InterviewState.JOB_ANALYSIS_RESULT, result);
             CircuitBreakerHelper.recordSuccess(updates);
 
+            // 通知前端岗位分析已完成（并行时前端需等待此信号才能结束自我介绍截断）
+            webSocketHandler.sendMessage(state.sessionId(), WebSocketMessage.of(
+                    WebSocketMessage.Type.JOB_ANALYSIS_COMPLETE,
+                    Map.of(
+                            "jobType", result.getJobType().getDisplayName(),
+                            "totalQuestions", result.getTotalQuestions()
+                    )
+            ));
+
             log.info("岗位分析完成: 类型={}, 技术基础={}, 项目={}, 业务={}, 软技能={}",
                     result.getJobType().getDisplayName(),
                     result.getTechnicalBasicCount(),
@@ -75,8 +96,19 @@ public class JobAnalysisNode {
         } catch (Exception e) {
             log.error("岗位分析失败", e);
             Map<String, Object> updates = new HashMap<>();
-            updates.put(InterviewState.JOB_ANALYSIS_RESULT, getDefaultJobAnalysisResult());
+            JobAnalysisResult defaultResult = getDefaultJobAnalysisResult();
+            updates.put(InterviewState.JOB_ANALYSIS_RESULT, defaultResult);
             CircuitBreakerHelper.handleFailure(state, updates, e);
+
+            // 即使分析失败也发送完成信号，避免前端永久等待
+            webSocketHandler.sendMessage(state.sessionId(), WebSocketMessage.of(
+                    WebSocketMessage.Type.JOB_ANALYSIS_COMPLETE,
+                    Map.of(
+                            "jobType", defaultResult.getJobType().getDisplayName(),
+                            "totalQuestions", defaultResult.getTotalQuestions()
+                    )
+            ));
+
             return CompletableFuture.completedFuture(updates);
         }
     }

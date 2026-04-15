@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
  */
 @Data
 @Component
-@ConfigurationProperties(prefix = "langgraph4j.graph")
+@ConfigurationProperties(prefix = "interview.graph")
 public class GraphConfigProperties {
 
     /**
@@ -17,8 +17,4 @@ public class GraphConfigProperties {
      */
     private int mainRecursionLimit = 25;
 
-    /**
-     * 子图最大递归深度（防止无限循环）
-     */
-    private int subRecursionLimit = 10;
 }

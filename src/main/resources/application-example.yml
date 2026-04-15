@@ -35,6 +35,8 @@ spring:
         initialize-schema: true
 
 interview:
+  graph:
+    main-recursion-limit: 25
   multimodal:
     enabled: true                # 是否启用多模态分析
     omni:
@@ -56,12 +58,6 @@ interview:
     voice: Ethan
   knowledge:
     enabled: true                # 是否启用知识库检索
-
-# LangGraph4j 图配置
-langgraph4j:
-  graph:
-    main-recursion-limit: 25
-    sub-recursion-limit: 15
 
 # 日志级别
 logging:

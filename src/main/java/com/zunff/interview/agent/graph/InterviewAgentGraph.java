@@ -104,11 +104,13 @@ public class InterviewAgentGraph {
 
                 // ========== 定义边 ==========
                 .addEdge(START, NodeNames.INIT)
+                // fan out 并行执行 岗位分析、自我介绍
                 .addEdge(NodeNames.INIT, NodeNames.JOB_ANALYSIS)
-                .addEdge(NodeNames.JOB_ANALYSIS, NodeNames.SELF_INTRO)
-
-                // 自我介绍 → 画像分析 → 技术轮
+                .addEdge(NodeNames.INIT, NodeNames.SELF_INTRO)
+                // fan in 在执行人物画像分析前 等待自我介绍完成
+                .addEdge(NodeNames.JOB_ANALYSIS, NodeNames.PROFILE_ANALYSIS)
                 .addEdge(NodeNames.SELF_INTRO, NodeNames.PROFILE_ANALYSIS)
+
                 .addEdge(NodeNames.PROFILE_ANALYSIS, NodeNames.TECHNICAL_ROUND)
 
                 // 技术轮完成后进入轮次切换
@@ -134,8 +136,8 @@ public class InterviewAgentGraph {
                 .compile(CompileConfig.builder()
                         .checkpointSaver(new MemorySaver())
                         .recursionLimit(graphConfig.getMainRecursionLimit())
+                        .interruptsBefore(Set.of(NodeNames.PROFILE_ANALYSIS)) // 自我介绍需要等待回答
                         .interruptsAfter(Set.of(
-                                NodeNames.SELF_INTRO,  // 自我介绍需要等待回答
                                 NodeNames.TECHNICAL_ROUND + "-" + techAskQuestion,
                                 NodeNames.BUSINESS_ROUND + "-" + bizAskQuestion
                         ))
