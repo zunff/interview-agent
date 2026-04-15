@@ -16,7 +16,7 @@
 
 | 用途 | 说明 |
 |------|------|
-| 大语言模型 (qwen-plus) | 面试问题生成、追问决策 |
+| 大语言模型 (qwen3.5-flash) | 面试问题生成、追问决策 |
 | Omni 多模态模型 (qwen3.5-omni-plus) | 综合评估：视频帧+音频+文本一次调用 |
 | 语音模型 (Fun-ASR-Realtime) | 实时 ASR 语音转文字，支持句级时间戳 |
 | TTS 语音合成 (Qwen-TTS-Realtime) | WebSocket 流式合成，Opus 格式输出 |
@@ -36,8 +36,7 @@
 graph TD
     START((START))
 
-    subgraph 主图["InterviewAgentGraph"]
-        direction TD
+    subgraph InterviewAgentGraph[主图]
         INIT[InitInterviewNode<br/>初始化面试] --> JOB[JobAnalysisNode<br/>岗位分析]
         INIT --> SELF[SelfIntroNode<br/>自我介绍]
 
@@ -50,14 +49,15 @@ graph TD
 
         ROUTER -->|技术轮未完成| TECH
         ROUTER -->|切换业务轮| BIZ[InterviewRoundGraph<br/>业务轮子图]
-        ROUTER -->|提前结束| REPORT
+        ROUTER -->|提前结束| REPORT[ReportGeneratorNode<br/>生成报告]
 
         BIZ --> ROUTER
-        ROUTER -->|业务完成| REPORT[ReportGeneratorNode<br/>生成报告]
+        ROUTER -->|业务完成| REPORT
+
+        REPORT --> END((END))
     end
 
     START --> INIT
-    REPORT --> END((END))
 ```
 
 ### 子图架构（Omni 综合评估 + 多分支追问）
@@ -66,17 +66,16 @@ graph TD
 graph TD
     SUB_START((START))
 
-    subgraph 子图["InterviewRoundGraph"]
-        direction TD
+    subgraph InterviewRoundGraph[子图]
         GEN[QuestionGeneratorNode<br/>生成问题] --> ASK[AskQuestionNode<br/>记录问题]
 
         ASK --> EVAL[ComprehensiveEvaluationNode<br/>Omni多模态综合评估]
 
-        EVAL --> DECISION{FollowUpDecisionNode<br/>追问决策}
+        EVAL --> DECISION{FollowUpDecisionNode<br/>追问决策<br/>LLM决策+路由保护}
 
         DECISION -->|得分 < 50| DEEP[DeepDiveNode<br/>深入追问]
         DECISION -->|得分 > 90| CHALLENGE[ChallengeQuestionNode<br/>挑战问题]
-        DECISION -->|普通追问| FOLLOW[GenerateFollowUpNode<br/>生成追问]
+        DECISION -->|普通追问| FOLLOW[GenerateFollowUpNode<br/>生成追问<br/>累加followUpCount]
         DECISION -->|下一题| SUB_END((END))
 
         DEEP --> ASK
@@ -91,11 +90,12 @@ graph TD
 
 | 特性 | 说明 |
 |------|------|
-| **并行初始化** | 岗位分析与自我介绍并行执行，前端需同时收到两个完成信号后才可推进 |
+| **并行初始化** | 岗位分析与自我介绍并行执行，前端需同时收到两个完成信号后才可推进。使用 LangGraph4j 的并行节点执行机制，通过 `addParallelNodeExecutor` 配置虚拟线程池实现真正的并行执行 |
 | **Omni 综合评估** | 一次调用 Qwen-Omni 同时分析文本+音频+视频帧，模型可交叉理解多模态信号 |
 | **时间戳对齐** | 转录文本和关键帧都携带 UTC 时间戳，模型可根据时间对应关系综合判断 |
-| **多分支路由** | 根据得分动态选择追问策略（低分深入/高分挑战/普通追问） |
-| **多模态降级** | multimodalEnabled=false 时自动降级为纯文本评估（qwen-plus） |
+| **多分支路由** | 根据得分动态选择追问策略（低分深入/高分挑战/普通追问），追问次数在生成阶段累加而非决策阶段 |
+| **多模态降级** | multimodalEnabled=false 时自动降级为纯文本评估（qwen3.5-flash） |
+| **虚拟线程池** | 使用 Java 21 虚拟线程提供高性能异步执行，统一管理所有异步任务（面试启动、TTS 合成、图并行节点等） |
 
 ### 评估权重
 
