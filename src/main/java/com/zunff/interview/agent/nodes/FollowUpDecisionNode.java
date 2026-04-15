@@ -71,7 +71,8 @@ public class FollowUpDecisionNode {
             // 如果是追问类决策，设置追问问题
             if (!NEXT_QUESTION.equals(decisionValue) && decision.getFollowUpQuestion() != null) {
                 updates.put(InterviewState.FOLLOW_UP_QUESTION, decision.getFollowUpQuestion());
-                updates.put(InterviewState.FOLLOW_UP_COUNT, followUpCount + 1);
+                // 移除：不再在决策阶段累加次数，改为在追问生成节点累加
+                // updates.put(InterviewState.FOLLOW_UP_COUNT, followUpCount + 1);
                 log.info("路由决策: {}, 追问: {}, 原因: {}, 类型: {}",
                         decisionValue, decision.getFollowUpQuestion(), decision.getReason(), decision.getFollowUpType());
             } else {

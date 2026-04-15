@@ -24,6 +24,11 @@ public class GenerateFollowUpNode {
         Map<String, Object> updates = new HashMap<>();
         updates.put(InterviewState.CURRENT_QUESTION, followUpQuestion);
         updates.put(InterviewState.QUESTION_TYPE, QuestionType.FOLLOW_UP.getDisplayName());
+
+        // 追问真正生成后才累加次数
+        updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
+        log.info("追问次数累加: {} -> {}", state.followUpCount(), state.followUpCount() + 1);
+
         return CompletableFuture.completedFuture(updates);
     }
 }
