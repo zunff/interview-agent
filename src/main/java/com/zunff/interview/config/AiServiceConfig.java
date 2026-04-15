@@ -5,8 +5,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.ClientHttpRequestFactories;
+import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.Duration;
 
 /**
  * AI 服务配置类
@@ -16,8 +24,49 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class AiServiceConfig {
 
-    @Value("${spring.ai.dashscope.api-key}")
-    private String apiKey;
+    @Value("${spring.ai.openai.api-key}")
+    private String dashscopeApiKey;
+
+    /**
+     * 自定义 RestTemplate 以记录请求详情
+     */
+    @Bean
+    public RestTemplateCustomizer restTemplateCustomizer() {
+        return restTemplate -> {
+            restTemplate.getInterceptors().add((ClientHttpRequestInterceptor) (request, body, execution) -> {
+                log.info("=== RestTemplate HTTP Request ===");
+                log.info("URI: {}", request.getURI());
+                log.info("Method: {}", request.getMethod());
+                log.info("Headers: {}", request.getHeaders());
+                log.info("Body length: {}", body.length);
+                if (body.length > 0 && body.length < 1000) {
+                    log.info("Body: {}", new String(body));
+                }
+                log.info("=================================");
+                return execution.execute(request, body);
+            });
+        };
+    }
+
+    /**
+     * 自定义 RestClient.Builder 以拦截 Spring AI 的请求
+     */
+    @Bean
+    public RestClient.Builder restClientBuilder() {
+        return RestClient.builder()
+                .requestInterceptor((request, body, execution) -> {
+                    log.info("=== RestClient HTTP Request ===");
+                    log.info("URI: {}", request.getURI());
+                    log.info("Method: {}", request.getMethod());
+                    log.info("Headers: {}", request.getHeaders());
+                    log.info("Body length: {}", body != null ? body.length : 0);
+                    if (body != null && body.length > 0 && body.length < 2000) {
+                        log.info("Body: {}", new String(body));
+                    }
+                    log.info("==================================");
+                    return execution.execute(request, body);
+                });
+    }
 
     @Bean
     public PromptTemplateService promptTemplateService() {
@@ -35,6 +84,15 @@ public class AiServiceConfig {
     }
 
     /**
+     * ChatClient.Builder Bean
+     * 用于依赖注入到各个 Node
+     */
+    @Bean
+    public ChatClient.Builder chatClientBuilder(ChatModel chatModel) {
+        return ChatClient.builder(chatModel);
+    }
+
+    /**
      * Qwen-Omni 多模态服务 (qwen3.5-omni-plus)
      * 使用 DashScope OpenAI 兼容 API，用于视频帧分析
      */
@@ -43,7 +101,7 @@ public class AiServiceConfig {
         log.info("初始化 QwenOmniService，模型: {}, baseUrl: {}",
                 visionConfig.getModel(), visionConfig.getBaseUrl());
         return new OmniModalService(
-                apiKey,
+                dashscopeApiKey,
                 visionConfig.getModel(),
                 visionConfig.getBaseUrl());
     }
@@ -56,7 +114,7 @@ public class AiServiceConfig {
     public AsrRealtimeService asrRealtimeService(AsrConfig asrConfig) {
         log.info("初始化 AsrRealtimeService，模型: {}, url: {}",
                 asrConfig.getModel(), asrConfig.getUrl());
-        return new AsrRealtimeService(apiKey, asrConfig);
+        return new AsrRealtimeService(dashscopeApiKey, asrConfig);
     }
 
     /**
@@ -67,7 +125,7 @@ public class AiServiceConfig {
     public TtsRealtimeService ttsRealtimeService(TtsConfig ttsConfig) {
         log.info("初始化 TtsRealtimeService，模型: {}, voice: {}, enabled: {}",
                 ttsConfig.getModel(), ttsConfig.getVoice(), ttsConfig.isEnabled());
-        return new TtsRealtimeService(apiKey, ttsConfig);
+        return new TtsRealtimeService(dashscopeApiKey, ttsConfig);
     }
 
     /**

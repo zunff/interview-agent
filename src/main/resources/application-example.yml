@@ -13,17 +13,19 @@ spring:
       idle-timeout: 300000
       connection-timeout: 20000
 
-  # Spring AI 模型配置（按环境切换）
+  # Spring AI 模型配置（使用 OpenAI 兼容 API）
   ai:
-    dashscope:
-      # 请替换为您的 DashScope API Key
+    openai:
+      # DashScope OpenAI 兼容 API
       api-key: ${DASHSCOPE_API_KEY}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
       chat:
         options:
           model: qwen3.5-plus
           temperature: 0.7
       embedding:
-        model: text-embedding-v3
+        options:
+          model: text-embedding-v3
     # 向量存储配置 (pgvector)
     vectorstore:
       pgvector:

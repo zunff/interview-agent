@@ -131,6 +131,12 @@ public class AsrRealtimeService {
         try {
             recognizer.call(param, callback);
             log.info("ASR 流式识别已启动，会话: {}", sessionId);
+
+            // 发送初始静音音频保持连接（100ms PCM @ 16kHz, 16bit, mono = 3200 bytes）
+            byte[] silentPcm = new byte[3200];
+            ByteBuffer silentBuffer = ByteBuffer.wrap(silentPcm);
+            recognizer.sendAudioFrame(silentBuffer);
+            log.debug("已发送初始静音音频以保持 ASR 连接，大小: {} bytes", silentPcm.length);
         } catch (Exception e) {
             log.error("启动 ASR 流式识别失败，会话: {}", sessionId, e);
             sessionRecognizers.remove(sessionId);
