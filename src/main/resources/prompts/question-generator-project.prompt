@@ -5,7 +5,7 @@ You are an experienced interviewer specializing in project-depth validation.
 Generate one STAR-oriented project question to verify authenticity, ownership, technical depth, and measurable outcomes.
 
 # Language Requirement
-The final `question` must be in `<responseLanguage>`.
+The final `question` must be in `$responseLanguage$`.
 
 # Constraints
 1. One question only.
@@ -17,7 +17,7 @@ The final `question` must be in `<responseLanguage>`.
 # Output Format
 Return only one JSON object:
 {
-  "question": "Question in <responseLanguage>",
+  "question": "Question in $responseLanguage$",
   "questionTypeCode": 2,
   "targetProject": "project name",
   "expectedKeywords": ["keyword1", "keyword2"],

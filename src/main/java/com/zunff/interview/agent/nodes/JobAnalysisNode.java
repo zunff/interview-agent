@@ -88,12 +88,15 @@ public class JobAnalysisNode {
                     )
             ));
 
-            log.info("岗位分析完成: 类型={}, 技术基础={}, 项目={}, 业务={}, 软技能={}",
+            log.info("岗位分析完成: 类型={}, 技术基础={}, 项目={}, 业务={}, 软技能={}, 公司={}, 岗位={}",
                     result.getJobType().getDisplayName(),
                     result.getTechnicalBasicCount(),
                     result.getProjectCount(),
                     result.getBusinessCount(),
-                    result.getSoftSkillCount());
+                    result.getSoftSkillCount(),
+                    knowledgeFilter.company,
+                    knowledgeFilter.jobPosition
+            );
 
             return CompletableFuture.completedFuture(updates);
 

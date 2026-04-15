@@ -13,11 +13,11 @@ Requirements:
 2. Deep enough to validate real capability
 3. No repetition with previous questions
 4. Clear and easy to understand
-5. The `question` must be in `<responseLanguage>`
+5. The `question` must be in `$responseLanguage$`
 
 Return only JSON:
 {
-  "question": "Question in <responseLanguage>",
+  "question": "Question in $responseLanguage$",
   "questionTypeCode": 1,
   "expectedKeywords": ["keyword1", "keyword2"],
   "difficulty": "easy|medium|hard",

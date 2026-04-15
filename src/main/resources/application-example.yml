@@ -54,7 +54,7 @@ interview:
       vocabulary-id:
   tts:
     enabled: true                # 是否启用语音提问
-    model: qwen3-asr-flash-realtime-2026-02-10
+    model: qwen3-tts-instruct-flash-realtime-2026-01-22
     voice: Ethan
   knowledge:
     enabled: true                # 是否启用知识库检索

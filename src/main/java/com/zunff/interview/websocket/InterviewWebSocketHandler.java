@@ -19,6 +19,7 @@ import com.zunff.interview.utils.AudioUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -31,6 +32,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 /**
  * 面试 WebSocket 处理器
@@ -53,14 +56,17 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private final TtsRealtimeService ttsRealtimeService;
     private final InterviewSessionService sessionService;
 
+    @Qualifier("virtualThreadExecutor")
+    private final ExecutorService virtualThreadExecutor;
+
     /** 面试会话ID → WebSocket 会话 */
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
     /** WebSocket 会话ID → 面试会话ID */
     private final Map<String, String> wsToInterviewSession = new ConcurrentHashMap<>();
 
-    /** TTS 线程映射，用于会话关闭时中断 */
-    private final Map<String, Thread> ttsThreads = new ConcurrentHashMap<>();
+    /** TTS 任务映射，用于会话关闭时取消 */
+    private final Map<String, Future<?>> ttsTasks = new ConcurrentHashMap<>();
 
     @Autowired(required = false)
     private SimpMessagingTemplate messagingTemplate;
@@ -103,7 +109,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         String interviewSessionId = wsToInterviewSession.remove(session.getId());
         if (interviewSessionId != null) {
             sessions.remove(interviewSessionId);
-            interruptTtsThread(interviewSessionId);
+            cancelTtsTask(interviewSessionId);
             audioStreamService.stopRealtimeAsr(interviewSessionId);
             sessionService.disconnectSession(interviewSessionId);
         }
@@ -147,7 +153,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         ));
 
         // 异步执行图（耗时较长），完成后推送问题和 TTS
-        Thread.ofVirtual().name("interview-start-" + sessionId).start(() -> {
+        virtualThreadExecutor.submit(() -> {
             try {
                 InterviewState result = interviewBusinessService.executeInterviewGraph(
                         sessionId, resume, jobInfo, maxTechnicalQuestions, maxBusinessQuestions, maxFollowUps);
@@ -289,27 +295,26 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         // 异步触发 TTS 语音合成推送
         WebSocketSession session = sessions.get(sessionId);
         if (session != null && session.isOpen()) {
-            interruptTtsThread(sessionId);
-            Thread ttsThread = Thread.ofVirtual().name("tts-" + sessionId).unstarted(() -> {
+            cancelTtsTask(sessionId);
+            Future<?> ttsTask = virtualThreadExecutor.submit(() -> {
                 try {
                     ttsRealtimeService.synthesizeAndStream(question.getContent(), sessionId, session);
                 } finally {
-                    ttsThreads.remove(sessionId);
+                    ttsTasks.remove(sessionId);
                 }
             });
-            ttsThreads.put(sessionId, ttsThread);
-            ttsThread.start();
+            ttsTasks.put(sessionId, ttsTask);
         }
     }
 
     /**
-     * 中断指定会话的 TTS 线程
+     * 取消指定会话的 TTS 任务
      */
-    private void interruptTtsThread(String sessionId) {
-        Thread thread = ttsThreads.remove(sessionId);
-        if (thread != null && thread.isAlive()) {
-            thread.interrupt();
-            log.info("已中断 TTS 线程: {}", sessionId);
+    private void cancelTtsTask(String sessionId) {
+        Future<?> task = ttsTasks.remove(sessionId);
+        if (task != null && !task.isDone()) {
+            task.cancel(true);
+            log.info("已取消 TTS 任务: {}", sessionId);
         }
     }
 

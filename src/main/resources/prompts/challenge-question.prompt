@@ -4,7 +4,7 @@
 When the candidate performs very strongly, generate one harder follow-up question to probe upper-bound capability.
 
 ## Language Requirement
-The question must be in `<responseLanguage>`.
+The question must be in `$responseLanguage$`.
 
 ## Principles
 1. Harder than the original question.

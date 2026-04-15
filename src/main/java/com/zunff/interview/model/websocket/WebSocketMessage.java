@@ -52,8 +52,6 @@ public class WebSocketMessage<T> {
         public static final String ERROR = "error";
         /** 语音问题开始 */
         public static final String AUDIO_QUESTION_START = "audio_question_start";
-        /** 语音问题音频块 */
-        public static final String AUDIO_QUESTION_CHUNK = "audio_question_chunk";
         /** 语音问题结束 */
         public static final String AUDIO_QUESTION_END = "audio_question_end";
         /** 语音问题错误 */

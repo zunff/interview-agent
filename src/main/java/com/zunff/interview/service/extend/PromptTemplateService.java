@@ -30,10 +30,10 @@ public class PromptTemplateService {
     /** 已编译模板缓存（避免重复构建 PromptTemplate） */
     private final Map<String, PromptTemplate> compiledTemplateCache = new ConcurrentHashMap<>();
 
-    /** 自定义渲染器：使用 <变量名> 语法 */
+    /** 自定义渲染器：使用 $变量名$ 语法 */
     private final StTemplateRenderer renderer = StTemplateRenderer.builder()
-            .startDelimiterToken('<')
-            .endDelimiterToken('>')
+            .startDelimiterToken('$')
+            .endDelimiterToken('$')
             .build();
 
     /**

@@ -4,7 +4,7 @@
 Based on evaluation and multimodal signals, decide the next route.
 
 ## Language Requirement
-Any candidate-facing text (`followUpQuestion`) and `reason` must be in `<responseLanguage>`.
+Any candidate-facing text (`followUpQuestion`) and `reason` must be in $responseLanguage$.
 
 ## Decision rules
 - `deepDive`: overallScore < 50 and clear quality gaps.
@@ -19,8 +19,8 @@ Return exactly one JSON object:
 {
   "decision": "deepDive|challengeMode|followUp|nextQuestion",
   "decisionCode": 1,
-  "followUpQuestion": "Question in <responseLanguage> or empty string",
-  "reason": "Decision reason in <responseLanguage>",
+  "followUpQuestion": "Question in $responseLanguage$ or empty string",
+  "reason": "Decision reason in $responseLanguage$",
   "followUpType": "deep_dive|validate_clarify|add_detail|explore_anomaly|",
   "followUpTypeCode": 1
 }

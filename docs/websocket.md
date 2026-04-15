@@ -42,9 +42,16 @@ sequenceDiagram
     end
     客户端->>服务端: self_intro_complete
 
-    %% 首题下发
+    %% 首题下发（文字）
     服务端-->>客户端: answer_received
-    服务端-->>客户端: new_question（第一道技术题）<br/>(问题内容 + TTS 音频)
+    服务端-->>客户端: new_question（第一道技术题）<br/>(问题内容)
+    
+    %% TTS 音频推送流程
+    服务端-->>客户端: audio_question_start<br/>(format: "opus")
+    loop 音频流推送
+        服务端-->>客户端: BinaryMessage<br/>(Opus 音频块)
+    end
+    服务端-->>客户端: audio_question_end<br/>(sessionId)
 
     %% 答题环节（音视频+回答）
     客户端->>服务端: audio_start<br/>(startTimestampMs)
@@ -57,7 +64,16 @@ sequenceDiagram
     %% 评价与下一题
     服务端-->>客户端: answer_received
     服务端-->>客户端: evaluation_result
-    服务端-->>客户端: new_question（下一题）<br/>或 final_report（面试结束）
+    服务端-->>客户端: new_question（下一题）
+    
+    %% TTS 音频推送流程（重复）
+    服务端-->>客户端: audio_question_start<br/>(format: "opus")
+    loop 音频流推送
+        服务端-->>客户端: BinaryMessage<br/>(Opus 音频块)
+    end
+    服务端-->>客户端: audio_question_end<br/>(sessionId)
+    
+    服务端-->>客户端: final_report（面试结束）
 
     %% 循环结束
     note over 客户端,服务端: 循环问答直至面试结束
@@ -278,6 +294,10 @@ sequenceDiagram
 | `questionIndex` | int | 问题序号（从 1 开始） |
 | `isFollowUp` | boolean | 是否为追问 |
 
+**说明**：
+- 推送问题文本后，会紧接着推送 TTS 语音合成音频
+- TTS 音频通过独立流程推送：`audio_question_start` → BinaryMessage → `audio_question_end`
+
 ### evaluation_result - 答案评估结果
 
 **响应格式**：
@@ -371,8 +391,21 @@ sequenceDiagram
 - 每个二进制帧为一个音频分片，客户端应按序拼接
 - 音频格式：Opus，采样率 24000Hz
 - 客户端可使用 Opus 解码器或直接播放
+- **注意**：此消息类型不作为 JSON 文本消息发送，而是直接使用 WebSocket 二进制帧传输，以减少 Base64 编码开销和延迟
 
-> **注意**：此消息不再以 JSON 文本形式发送，而是直接作为二进制帧传输，以减少 Base64 编码开销和延迟。
+**前端接收示例**：
+```javascript
+ws.onmessage = (event) => {
+  if (event.data instanceof ArrayBuffer) {
+    // 二进制音频数据（audio_question_chunk）
+    audioBuffer.push(event.data);
+  } else {
+    // JSON 文本消息
+    const message = JSON.parse(event.data);
+    handleMessage(message);
+  }
+};
+```
 
 ### audio_question_end - 语音问题结束
 
@@ -444,3 +477,71 @@ sequenceDiagram
    - 若 `interview.multimodal.enabled=false` 或无音视频数据
    - 自动降级为纯文本评估（使用 qwen-plus）
    - 多模态分数字段返回默认值 70
+
+### TTS 语音问题推送流程
+
+每次推送 `new_question` 后，服务端会紧接着推送 TTS 合成的语音音频，流程如下：
+
+1. **推送 `audio_question_start`**：
+   - JSON 文本消息，通知前端即将开始推送音频流
+   - 包含音频格式信息（Opus，24kHz）
+
+2. **推送音频流（WebSocket BinaryMessage）**：
+   - 使用 WebSocket 二进制帧直接传输 Opus 音频字节流
+   - 每个二进制帧为一个音频分片，客户端应按序拼接
+   - 不使用 JSON 包装，减少 Base64 编码开销和延迟
+
+3. **推送 `audio_question_end`**：
+   - JSON 文本消息，通知前端音频流推送结束
+
+**前端处理流程示例**：
+```javascript
+// 1. 收到 new_question，显示问题文本
+// 2. 收到 audio_question_start，准备音频缓冲区
+// 3. 循环接收 BinaryMessage，拼接音频数据
+// 4. 收到 audio_question_end，播放完整音频
+
+let audioChunks = [];
+
+ws.onmessage = (event) => {
+  if (event.data instanceof ArrayBuffer) {
+    // 二进制音频块
+    audioChunks.push(event.data);
+  } else {
+    const message = JSON.parse(event.data);
+
+    if (message.type === 'audio_question_start') {
+      audioChunks = []; // 重置缓冲区
+      const format = message.payload.format; // "opus"
+      console.log('开始接收 TTS 音频，格式:', format);
+    }
+
+    if (message.type === 'audio_question_end') {
+      // 所有音频块接收完成，播放音频
+      playAudioChunks(audioChunks);
+    }
+  }
+};
+
+async function playAudioChunks(chunks) {
+  // 合并所有音频块
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const audioData = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    audioData.set(new Uint8Array(chunk), offset);
+    offset += chunk.byteLength;
+  }
+
+  // 创建 Blob 并播放（Opus 格式）
+  const blob = new Blob([audioData], { type: 'audio/opus' });
+  const audioUrl = URL.createObjectURL(blob);
+  const audio = new Audio(audioUrl);
+  await audio.play();
+}
+```
+
+**注意事项**：
+- TTS 功能可通过配置 `interview.tts.enabled=false` 关闭
+- TTS 失败时会推送 `audio_question_error`，前端应降级为纯文字显示
+- 同一时间只有一个 TTS 任务，新问题会中断旧问题的 TTS 合成

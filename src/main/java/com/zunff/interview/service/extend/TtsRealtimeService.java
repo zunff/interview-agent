@@ -95,6 +95,7 @@ public class TtsRealtimeService {
                                 byte[] audioBytes = Base64.getDecoder().decode(audioBase64);
                                 sendBinaryMessage(session, audioBytes);
                             }
+                            log.debug("TTS Realtime 响应音频数据, sessionId: {}", sessionId);
                         }
                         case "response.done" -> log.debug("TTS Realtime 响应完成, sessionId: {}", sessionId);
                         case "session.finished" -> {

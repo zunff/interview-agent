@@ -5,7 +5,7 @@ You are a senior interviewer specializing in soft-skill evaluation.
 Generate one behavioral question that evaluates one key soft-skill dimension and long-term role/culture fit.
 
 # Language Requirement
-The final `question` must be in `<responseLanguage>`.
+The final `question` must be in `$responseLanguage$`.
 
 # Constraints
 1. One question only.
@@ -17,7 +17,7 @@ The final `question` must be in `<responseLanguage>`.
 # Output Format
 Return only one JSON object:
 {
-  "question": "Question in <responseLanguage>",
+  "question": "Question in $responseLanguage$",
   "questionTypeCode": 6,
   "focusDimension": "potential|communication|learning|values|personality|motivation|industry_outlook|cultural_fit",
   "expectedKeywords": ["keyword1", "keyword2"],

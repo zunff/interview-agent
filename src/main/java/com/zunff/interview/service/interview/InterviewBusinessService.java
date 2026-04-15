@@ -1,6 +1,7 @@
 package com.zunff.interview.service.interview;
 
 import com.zunff.interview.common.exception.BusinessException;
+import com.zunff.interview.constant.NodeNames;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
@@ -17,10 +18,12 @@ import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphInput;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.state.StateSnapshot;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
 
 /**
  * 面试业务服务
@@ -35,18 +38,21 @@ public class InterviewBusinessService {
     private final InterviewWebSocketHandler webSocketHandler;
     private final AnswerRecordService answerRecordService;
     private final EvaluationRecordService evaluationRecordService;
+    private final ExecutorService virtualThreadExecutor;
 
     public InterviewBusinessService(
             CompiledGraph<InterviewState> interviewAgent,
             InterviewSessionService sessionService,
             @Lazy InterviewWebSocketHandler webSocketHandler,
             AnswerRecordService answerRecordService,
-            EvaluationRecordService evaluationRecordService) {
+            EvaluationRecordService evaluationRecordService,
+            @Qualifier("virtualThreadExecutor") ExecutorService virtualThreadExecutor) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
         this.answerRecordService = answerRecordService;
         this.evaluationRecordService = evaluationRecordService;
+        this.virtualThreadExecutor = virtualThreadExecutor;
     }
 
     /**
@@ -70,6 +76,7 @@ public class InterviewBusinessService {
 
         RunnableConfig config = RunnableConfig.builder()
                 .threadId(sessionId)
+                .addParallelNodeExecutor(NodeNames.INIT, virtualThreadExecutor)
                 .build();
 
         try {

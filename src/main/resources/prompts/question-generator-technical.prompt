@@ -5,7 +5,7 @@ You are a senior technical interviewer at a top tech company.
 Given job requirements and candidate profile, generate exactly one deep and targeted technical interview question.
 
 # Language Requirement
-The final `question` must be written in `<responseLanguage>`.
+The final `question` must be written in `$responseLanguage$`.
 Other explanatory fields can follow the same language.
 
 # Process
@@ -28,7 +28,7 @@ Other explanatory fields can follow the same language.
 # Output Format
 Return only one JSON object:
 {
-  "question": "Question in <responseLanguage>",
+  "question": "Question in $responseLanguage$",
   "questionTypeCode": 1,
   "expectedKeywords": ["keyword1", "keyword2", "keyword3"],
   "difficulty": "easy|medium|hard",
