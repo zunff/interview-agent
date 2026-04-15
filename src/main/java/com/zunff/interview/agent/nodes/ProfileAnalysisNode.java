@@ -3,6 +3,7 @@ package com.zunff.interview.agent.nodes;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -42,26 +43,22 @@ public class ProfileAnalysisNode {
 
         String systemPrompt = promptTemplateService.getPrompt("profile-analysis");
 
-        StringBuilder userPrompt = new StringBuilder();
-        if (resume != null && !resume.isEmpty()) {
-            userPrompt.append("候选人简历：\n").append(resume).append("\n\n");
-        }
-        if (selfIntro != null && !selfIntro.isEmpty()) {
-            userPrompt.append("候选人自我介绍：\n").append(selfIntro).append("\n\n");
-        }
-        userPrompt.append("应聘岗位：\n").append(jobInfo).append("\n\n");
-        userPrompt.append("请综合分析。");
+        String userPrompt = promptTemplateService.getPrompt("profile-analysis-user", Map.of(
+                "resume", resume == null ? "" : resume,
+                "selfIntro", selfIntro == null ? "" : selfIntro,
+                "jobInfo", jobInfo == null ? "" : jobInfo
+        ));
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
                     .system(systemPrompt)
-                    .user(userPrompt.toString())
+                    .user(userPrompt)
                     .call()
                     .content();
 
-            String candidateProfile = extractJson(response);
+            String candidateProfile = JsonExtractionUtils.extractJsonObjectString(response);
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.SELF_INTRO, selfIntro != null ? selfIntro : "");
@@ -81,12 +78,4 @@ public class ProfileAnalysisNode {
         }
     }
 
-    private String extractJson(String response) {
-        int start = response.indexOf('{');
-        int end = response.lastIndexOf('}');
-        if (start != -1 && end != -1 && end > start) {
-            return response.substring(start, end + 1);
-        }
-        return response;
-    }
 }

@@ -4,6 +4,7 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.config.KnowledgeConfig;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
@@ -11,6 +12,7 @@ import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
 import com.zunff.interview.service.interview.InterviewKnowledgeService;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -34,6 +36,7 @@ public class QuestionGeneratorNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
+    private final PromptConfig promptConfig;
     private final InterviewKnowledgeService knowledgeService;
     private final KnowledgeConfig knowledgeConfig;
 
@@ -55,53 +58,44 @@ public class QuestionGeneratorNode {
         InterviewRound round = InterviewRound.fromCode(currentRound);
 
         // 根据轮次选择不同的 Prompt 模板
-        String systemPrompt = promptTemplateService.getPrompt(round.getPromptTemplate());
-
-        // 构建用户提示
-        StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("候选人画像：\n").append(candidateProfile).append("\n\n");
-        userPrompt.append("应聘岗位：\n").append(jobInfo).append("\n\n");
-        userPrompt.append("当前轮次：").append(round.getDisplayName()).append("\n\n");
-
-        // 根据轮次显示已问问题数
-        if (round.isTechnical()) {
-            userPrompt.append("技术轮已问问题数：").append(state.technicalQuestionsDone()).append("/").append(state.maxTechnicalQuestions()).append("\n\n");
-        } else {
-            userPrompt.append("业务轮已问问题数：").append(state.businessQuestionsDone()).append("/").append(state.maxBusinessQuestions()).append("\n\n");
-        }
-
-        userPrompt.append("当前问题序号：").append(questionIndex + 1).append("\n\n");
-
-        if (!previousQuestions.isEmpty()) {
-            userPrompt.append("已提问的问题：\n");
-            for (int i = 0; i < previousQuestions.size(); i++) {
-                userPrompt.append((i + 1)).append(". ").append(previousQuestions.get(i)).append("\n");
-            }
-            userPrompt.append("\n请生成下一个问题，避免与已提问的问题重复。\n");
-        } else {
-            if (round.isTechnical()) {
-                userPrompt.append("这是技术轮的第一个问题，请从技术基础或项目经验方面入手。\n");
-            } else {
-                userPrompt.append("这是业务轮的第一个问题，请从业务场景或软技能方面入手。\n");
-            }
-        }
+        String systemPrompt = promptTemplateService.getPrompt(round.getPromptTemplate(), Map.of(
+                "responseLanguage", promptConfig.getResponseLanguage()
+        ));
 
         // 从知识库检索参考题目
         String referenceContext = "";
         if (isKnowledgeEnabled()) {
-            referenceContext = searchReferenceQuestions(jobInfo, round);
-            if (!referenceContext.isEmpty()) {
-                userPrompt.append("\n--- 可选参考题目（仅供参考，请生成新的问题）---\n");
-                userPrompt.append(referenceContext);
-            }
+            referenceContext = searchReferenceQuestions(state, jobInfo, round);
         }
+
+        String progressLabel = round.isTechnical() ? "技术轮已问问题数" : "业务轮已问问题数";
+        int doneCount = round.isTechnical() ? state.technicalQuestionsDone() : state.businessQuestionsDone();
+        int maxCount = round.isTechnical() ? state.maxTechnicalQuestions() : state.maxBusinessQuestions();
+        String firstQuestionHint = round.isTechnical()
+                ? "这是技术轮的第一个问题，请从技术基础或项目经验方面入手。"
+                : "这是业务轮的第一个问题，请从业务场景或软技能方面入手。";
+
+        String userPrompt = promptTemplateService.getPrompt("question-generator-user", Map.ofEntries(
+                Map.entry("candidateProfile", candidateProfile == null ? "" : candidateProfile),
+                Map.entry("jobInfo", jobInfo == null ? "" : jobInfo),
+                Map.entry("roundDisplayName", round.getDisplayName()),
+                Map.entry("progressLabel", progressLabel),
+                Map.entry("doneCount", doneCount),
+                Map.entry("maxCount", maxCount),
+                Map.entry("questionIndex", questionIndex + 1),
+                Map.entry("hasPreviousQuestions", !previousQuestions.isEmpty()),
+                Map.entry("previousQuestions", formatPreviousQuestions(previousQuestions)),
+                Map.entry("firstQuestionHint", firstQuestionHint),
+                Map.entry("referenceContext", referenceContext == null || referenceContext.isBlank() ? "None" : referenceContext),
+                Map.entry("responseLanguage", promptConfig.getResponseLanguage())
+        ));
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
                     .system(systemPrompt)
-                    .user(userPrompt.toString())
+                    .user(userPrompt)
                     .call()
                     .content();
 
@@ -123,7 +117,7 @@ public class QuestionGeneratorNode {
             log.error("生成问题失败", e);
             Map<String, Object> updates = new HashMap<>();
             // 返回默认问题
-            updates.put(InterviewState.CURRENT_QUESTION, "请简单介绍一下你的技术背景和项目经验。");
+            updates.put(InterviewState.CURRENT_QUESTION, buildFallbackQuestion());
             updates.put(InterviewState.QUESTION_TYPE, QuestionType.PROJECT_EXPERIENCE.getDisplayName());
             updates.put(InterviewState.QUESTION_INDEX, questionIndex + 1);
             updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
@@ -135,10 +129,16 @@ public class QuestionGeneratorNode {
     /**
      * 从知识库检索参考题目
      */
-    private String searchReferenceQuestions(String jobInfo, InterviewRound round) {
+    private String searchReferenceQuestions(InterviewState state, String jobInfo, InterviewRound round) {
         try {
             String questionType = round.isTechnical() ? "技术面" : "业务面";
-            List<KnowledgeSearchResult> results = knowledgeService.searchByJobInfo(jobInfo, questionType, 3);
+            List<KnowledgeSearchResult> results = knowledgeService.searchByJobInfo(
+                    jobInfo,
+                    questionType,
+                    state.knowledgeCompany(),
+                    state.knowledgeJobPosition(),
+                    3
+            );
 
             if (results.isEmpty()) {
                 return "";
@@ -161,7 +161,7 @@ public class QuestionGeneratorNode {
 
     private QuestionResult parseQuestionResult(String response) {
         try {
-            String jsonStr = extractJson(response);
+            String jsonStr = JsonExtractionUtils.extractJsonObjectString(response);
             JSONObject json = JSONUtil.parseObj(jsonStr);
 
             List<String> keywords = new ArrayList<>();
@@ -174,9 +174,9 @@ public class QuestionGeneratorNode {
 
             return QuestionResult.builder()
                     .question(json.getStr("question", response))
-                    .questionType(json.getStr("questionType", QuestionType.TECHNICAL_BASIC.getDisplayName()))
+                    .questionType(resolveQuestionType(json).getDisplayName())
                     .expectedKeywords(keywords)
-                    .difficulty(json.getStr("difficulty", "中等"))
+                    .difficulty(json.getStr("difficulty", "medium"))
                     .reason(json.getStr("reason", json.getStr("interviewIntent", "")))
                     .build();
         } catch (Exception e) {
@@ -184,18 +184,33 @@ public class QuestionGeneratorNode {
             return QuestionResult.builder()
                     .question(response)
                     .questionType(QuestionType.TECHNICAL_BASIC.getDisplayName())
-                    .difficulty("中等")
+                    .difficulty("medium")
                     .build();
         }
     }
 
-    private String extractJson(String response) {
-        int start = response.indexOf('{');
-        int end = response.lastIndexOf('}');
-        if (start != -1 && end != -1 && end > start) {
-            return response.substring(start, end + 1);
+    private QuestionType resolveQuestionType(JSONObject json) {
+        Integer questionTypeCode = json.getInt("questionTypeCode");
+        return QuestionType.fromCode(questionTypeCode);
+    }
+
+    private String formatPreviousQuestions(List<String> previousQuestions) {
+        if (previousQuestions == null || previousQuestions.isEmpty()) {
+            return "无";
         }
-        return response;
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < previousQuestions.size(); i++) {
+            builder.append(i + 1).append(". ").append(previousQuestions.get(i)).append(System.lineSeparator());
+        }
+        return builder.toString().trim();
+    }
+
+    private String buildFallbackQuestion() {
+        String language = promptConfig.getResponseLanguage();
+        if (language != null && language.toLowerCase().startsWith("zh")) {
+            return "请简单介绍一下你的技术背景和项目经验。";
+        }
+        return "Could you briefly introduce your technical background and project experience?";
     }
 
     @lombok.Data

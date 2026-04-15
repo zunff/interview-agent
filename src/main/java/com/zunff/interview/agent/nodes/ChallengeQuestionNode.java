@@ -1,6 +1,7 @@
 package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.service.extend.PromptTemplateService;
@@ -24,6 +25,7 @@ public class ChallengeQuestionNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
+    private final PromptConfig promptConfig;
 
     /**
      * 执行挑战问题生成
@@ -35,16 +37,19 @@ public class ChallengeQuestionNode {
         String answer = state.answerText();
 
         try {
-            String systemPrompt = promptTemplateService.getPrompt("challenge-question");
+            String systemPrompt = promptTemplateService.getPrompt("challenge-question", Map.of(
+                    "responseLanguage", promptConfig.getResponseLanguage()
+            ));
 
             String answerSummary = answer != null && answer.length() > 200
                     ? answer.substring(0, 200) + "..."
                     : (answer != null ? answer : "");
 
-            String userPrompt = String.format(
-                    "原始问题：%s\n\n优秀回答摘要：%s\n\n请基于候选人的优秀回答，生成一个更有挑战性的进阶问题，" +
-                    "问题应该考察更深层次的理解或实际应用能力。",
-                    originalQuestion, answerSummary);
+            String userPrompt = promptTemplateService.getPrompt("challenge-question-user", Map.of(
+                    "originalQuestion", originalQuestion == null ? "" : originalQuestion,
+                    "answerSummary", answerSummary,
+                    "responseLanguage", promptConfig.getResponseLanguage()
+            ));
 
             ChatClient chatClient = chatClientBuilder.build();
 

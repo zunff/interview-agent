@@ -101,48 +101,13 @@ public class ComprehensiveEvaluationNode {
             return "evaluation";
         }
 
-        if (isTechnicalBasicQuestion(questionType)) {
-            return "evaluation-technical";
-        }
-
-        if (isProjectQuestion(questionType)) {
-            return "evaluation-project";
-        }
-
-        if (isBusinessQuestion(questionType)) {
-            return "evaluation-business";
-        }
-
-        if (isSoftSkillQuestion(questionType)) {
-            return "evaluation-soft";
-        }
-
-        return "evaluation";
-    }
-
-    private boolean isTechnicalBasicQuestion(String questionType) {
-        return questionType.contains("技术基础") ||
-               questionType.contains("技术难点") ||
-               questionType.equals(QuestionType.TECHNICAL_BASIC.getDisplayName());
-    }
-
-    private boolean isProjectQuestion(String questionType) {
-        return questionType.contains("项目") ||
-               questionType.contains("项目经验") ||
-               questionType.equals(QuestionType.PROJECT_EXPERIENCE.getDisplayName());
-    }
-
-    private boolean isBusinessQuestion(String questionType) {
-        return questionType.contains("业务") ||
-               questionType.contains("场景") ||
-               questionType.contains("业务理解") ||
-               questionType.contains("场景分析");
-    }
-
-    private boolean isSoftSkillQuestion(String questionType) {
-        return questionType.contains("软技能") ||
-               questionType.contains("沟通") ||
-               questionType.contains("协作") ||
-               questionType.contains("职业素养");
+        QuestionType type = QuestionType.fromDisplayName(questionType);
+        return switch (type) {
+            case TECHNICAL_BASIC, TECHNICAL_CHALLENGE, SYSTEM_DESIGN -> "evaluation-technical";
+            case PROJECT_EXPERIENCE -> "evaluation-project";
+            case BUSINESS_UNDERSTANDING, PROBLEM_SOLVING -> "evaluation-business";
+            case COMMUNICATION, PROFESSIONALISM -> "evaluation-soft";
+            default -> "evaluation";
+        };
     }
 }

@@ -47,6 +47,8 @@ management:
 
 # 面试系统配置
 interview:
+  prompt:
+    response-language: zh-CN     # Candidate-facing output language
   video:
     analysis-interval: 5000      # 视频分析间隔(ms)
     frame-rate: 1                # 每秒采样帧数

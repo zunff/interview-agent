@@ -1,6 +1,7 @@
 package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.service.extend.PromptTemplateService;
@@ -24,6 +25,7 @@ public class DeepDiveNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
+    private final PromptConfig promptConfig;
 
     /**
      * 执行深入追问生成
@@ -36,7 +38,9 @@ public class DeepDiveNode {
         var evaluation = state.getCurrentEvaluation();
 
         try {
-            String systemPrompt = promptTemplateService.getPrompt("deep-dive-question");
+            String systemPrompt = promptTemplateService.getPrompt("deep-dive-question", Map.of(
+                    "responseLanguage", promptConfig.getResponseLanguage()
+            ));
 
             StringBuilder weaknessesText = new StringBuilder();
             if (evaluation != null && evaluation.getWeaknesses() != null) {
@@ -45,13 +49,12 @@ public class DeepDiveNode {
                 }
             }
 
-            String userPrompt = String.format(
-                    "原始问题：%s\n\n候选人回答：%s\n\n回答的不足之处：\n%s\n\n" +
-                    "请生成一个深入追问问题，帮助确认候选人是否真的存在这些不足，" +
-                    "或者只是表达问题。追问应该针对具体的薄弱环节。",
-                    originalQuestion,
-                    answer != null ? answer : "",
-                    weaknessesText.toString());
+            String userPrompt = promptTemplateService.getPrompt("deep-dive-question-user", Map.of(
+                    "originalQuestion", originalQuestion == null ? "" : originalQuestion,
+                    "answer", answer == null ? "" : answer,
+                    "weaknesses", weaknessesText.length() == 0 ? "None provided." : weaknessesText.toString().trim(),
+                    "responseLanguage", promptConfig.getResponseLanguage()
+            ));
 
             ChatClient chatClient = chatClientBuilder.build();
 

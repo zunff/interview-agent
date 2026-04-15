@@ -68,28 +68,24 @@ public class ReportGeneratorNode {
         // 从模板加载 system prompt
         String systemPrompt = promptTemplateService.getPrompt("report-generator");
 
-        // 构建用户提示
-        StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("## 候选人画像\n").append(candidateProfile).append("\n\n");
-        userPrompt.append("## 应聘岗位\n").append(jobInfo).append("\n\n");
-
-        // 轮次表现
-        userPrompt.append("## 轮次表现\n");
-        userPrompt.append("- **技术轮**：平均分 ").append(String.format("%.1f", technicalAvgScore)).append("/100 (").append(technicalQuestionsDone).append("题)\n");
-        userPrompt.append("- **业务轮**：平均分 ").append(String.format("%.1f", businessAvgScore)).append("/100 (").append(businessQuestionsDone).append("题)\n");
-        userPrompt.append("- **总平均**：").append(String.format("%.1f", avgScore)).append("/100\n\n");
-
-        userPrompt.append("## 面试评估记录\n");
-        userPrompt.append("- 问题总数：").append(totalQuestions).append("\n");
-        userPrompt.append(evalSummary).append("\n\n");
-        userPrompt.append("请根据以上面试记录生成综合评估报告。");
+        String userPrompt = promptTemplateService.getPrompt("report-generator-user", Map.of(
+                "candidateProfile", candidateProfile == null ? "" : candidateProfile,
+                "jobInfo", jobInfo == null ? "" : jobInfo,
+                "technicalAvgScore", String.format("%.1f", technicalAvgScore),
+                "technicalQuestionsDone", technicalQuestionsDone,
+                "businessAvgScore", String.format("%.1f", businessAvgScore),
+                "businessQuestionsDone", businessQuestionsDone,
+                "avgScore", String.format("%.1f", avgScore),
+                "totalQuestions", totalQuestions,
+                "evalSummary", evalSummary.length() == 0 ? "无评估记录" : evalSummary.toString()
+        ));
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
             String report = chatClient.prompt()
                     .system(systemPrompt)
-                    .user(userPrompt.toString())
+                    .user(userPrompt)
                     .call()
                     .content();
 

@@ -1,13 +1,9 @@
 package com.zunff.interview.service.interview;
 
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import com.zunff.interview.model.dto.rag.KnowledgeSearchRequest;
 import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
-import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -28,8 +24,6 @@ import java.util.stream.Collectors;
 public class InterviewKnowledgeService {
 
     private final VectorStore vectorStore;
-    private final ChatClient.Builder chatClientBuilder;
-    private final PromptTemplateService promptTemplateService;
 
     /**
      * 检索相关面试题
@@ -97,22 +91,25 @@ public class InterviewKnowledgeService {
 
     /**
      * 根据岗位信息检索相关面试题
-     * 自动提取公司、岗位等元数据进行过滤
      *
      * @param jobInfo       岗位信息
      * @param questionType  问题类型
+     * @param company       公司过滤（可空）
+     * @param jobPosition   岗位过滤（可空）
      * @param topK          返回数量
      * @return 检索结果列表
      */
-    public List<KnowledgeSearchResult> searchByJobInfo(String jobInfo, String questionType, int topK) {
-        // 提取元数据
-        KnowledgeFilter filter = extractMetadata(jobInfo);
-
+    public List<KnowledgeSearchResult> searchByJobInfo(
+            String jobInfo,
+            String questionType,
+            String company,
+            String jobPosition,
+            int topK) {
         KnowledgeSearchRequest request = KnowledgeSearchRequest.builder()
                 .query(jobInfo)
                 .questionType(questionType)
-                .company(filter.company)
-                .jobPosition(filter.jobPosition)
+                .company(company)
+                .jobPosition(jobPosition)
                 .topK(topK > 0 ? topK : 5)
                 .build();
 
@@ -153,36 +150,6 @@ public class InterviewKnowledgeService {
     }
 
     /**
-     * 从岗位信息中提取元数据（公司、岗位）
-     */
-    private KnowledgeFilter extractMetadata(String jobInfo) {
-        try {
-            String systemPrompt = promptTemplateService.getPrompt("knowledge-filter");
-
-            ChatClient chatClient = chatClientBuilder.build();
-
-            String response = chatClient.prompt()
-                    .system(systemPrompt)
-                    .user("岗位信息：" + jobInfo)
-                    .call()
-                    .content();
-
-            // 解析结果
-            String jsonStr = extractJson(response);
-            JSONObject json = JSONUtil.parseObj(jsonStr);
-
-            return new KnowledgeFilter(
-                    json.getStr("company"),
-                    json.getStr("jobPosition")
-            );
-
-        } catch (Exception e) {
-            log.warn("提取元数据失败: {}", e.getMessage());
-            return new KnowledgeFilter(null, null);
-        }
-    }
-
-    /**
      * 转换 Document 到 SearchResult
      */
     private KnowledgeSearchResult toSearchResult(Document doc) {
@@ -199,21 +166,4 @@ public class InterviewKnowledgeService {
                 .build();
     }
 
-    /**
-     * 提取 JSON 字符串
-     */
-    private String extractJson(String response) {
-        int start = response.indexOf('{');
-        int end = response.lastIndexOf('}');
-        if (start != -1 && end != -1 && end > start) {
-            return response.substring(start, end + 1);
-        }
-        return response;
-    }
-
-    /**
-     * 知识过滤条件
-     */
-    private record KnowledgeFilter(String company, String jobPosition) {
-    }
 }

@@ -88,6 +88,8 @@ public class InterviewState extends AgentState {
     // ========== 岗位分析 ==========
     public static final String JOB_ANALYSIS_RESULT = "jobAnalysisResult";          // JobAnalysisResult 对象
     public static final String CURRENT_QUESTION_CATEGORY = "currentQuestionCategory"; // 当前题目类别索引
+    public static final String KNOWLEDGE_COMPANY = "knowledgeCompany";
+    public static final String KNOWLEDGE_JOB_POSITION = "knowledgeJobPosition";
 
     // ========== 熔断机制 ==========
     public static final String CONSECUTIVE_LLM_FAILURES = "consecutiveLLMFailures";
@@ -155,6 +157,8 @@ public class InterviewState extends AgentState {
         // 岗位分析
         SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), JobAnalysisResult::new));
         SCHEMA.put(CURRENT_QUESTION_CATEGORY, Channels.base(new LastValueReducer<>(), () -> 0));
+        SCHEMA.put(KNOWLEDGE_COMPANY, Channels.base(new LastValueReducer<>(), () -> ""));
+        SCHEMA.put(KNOWLEDGE_JOB_POSITION, Channels.base(new LastValueReducer<>(), () -> ""));
 
         // 熔断机制
         SCHEMA.put(CONSECUTIVE_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 0));
@@ -438,7 +442,6 @@ public class InterviewState extends AgentState {
     /**
      * 获取岗位分析结果
      */
-    @SuppressWarnings("unchecked")
     public com.zunff.interview.model.dto.JobAnalysisResult jobAnalysisResult() {
         return (com.zunff.interview.model.dto.JobAnalysisResult) data().get(JOB_ANALYSIS_RESULT);
     }
@@ -456,6 +459,14 @@ public class InterviewState extends AgentState {
      */
     public boolean hasJobAnalysisResult() {
         return data().containsKey(JOB_ANALYSIS_RESULT) && data().get(JOB_ANALYSIS_RESULT) != null;
+    }
+
+    public String knowledgeCompany() {
+        return (String) data().getOrDefault(KNOWLEDGE_COMPANY, "");
+    }
+
+    public String knowledgeJobPosition() {
+        return (String) data().getOrDefault(KNOWLEDGE_JOB_POSITION, "");
     }
 
     // ========== 多模态分析中间结果便捷方法 ==========

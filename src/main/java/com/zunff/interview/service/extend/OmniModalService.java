@@ -38,14 +38,19 @@ public class OmniModalService {
 
     /**
      * 多模态综合分析（视频帧 + 音频 + 文本）
-     * 将三种模态组合在一条消息的 content 数组中发送给 Qwen-Omni
+     * 使用 system + user 双消息，system 负责约束输出与评估规则。
      *
-     * @param base64Frames  Base64 编码的视频帧列表
+     * @param base64Frames   Base64 编码的视频帧列表
      * @param base64WavAudio Base64 编码的 WAV 音频数据
-     * @param textPrompt    文本提示
+     * @param systemPrompt   系统级提示词
+     * @param textPrompt     用户文本提示
      * @return 分析结果文本
      */
-    public String analyzeMultimodal(List<String> base64Frames, String base64WavAudio, String textPrompt) {
+    public String analyzeMultimodal(
+            List<String> base64Frames,
+            String base64WavAudio,
+            String systemPrompt,
+            String textPrompt) {
         log.info("开始多模态综合分析，视频帧: {}, 音频: {}",
                 base64Frames != null ? base64Frames.size() : 0,
                 base64WavAudio != null ? "有" : "无");
@@ -83,12 +88,16 @@ public class OmniModalService {
             textContent.set("text", textPrompt);
             content.add(textContent);
 
-            // 构建请求
-            JSONObject message = new JSONObject();
-            message.set("role", "user");
-            message.set("content", content);
+            // 构建请求（system + user）
+            JSONObject systemMessage = new JSONObject();
+            systemMessage.set("role", "system");
+            systemMessage.set("content", systemPrompt);
 
-            return sendRequest(List.of(message));
+            JSONObject userMessage = new JSONObject();
+            userMessage.set("role", "user");
+            userMessage.set("content", content);
+
+            return sendRequest(List.of(systemMessage, userMessage));
 
         } catch (Exception e) {
             log.error("多模态综合分析失败", e);
@@ -113,7 +122,7 @@ public class OmniModalService {
 
         String url = baseUrl + CHAT_COMPLETIONS_ENDPOINT;
         log.debug("发送请求到: {}", url);
-        log.debug("请求体: {}", requestBody.toString());
+        log.debug("请求体: {}", requestBody);
 
         try {
             HttpResponse response = HttpRequest.post(url)

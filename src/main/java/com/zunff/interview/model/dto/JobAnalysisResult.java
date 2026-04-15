@@ -26,26 +26,64 @@ public class JobAnalysisResult implements Serializable {
         /**
          * 技术驱动型：技术要求高，技术问题占比高
          */
-        TECHNICAL_DRIVEN("技术驱动型"),
+        TECHNICAL_DRIVEN(1, "technical_driven", "技术驱动型"),
 
         /**
          * 业务驱动型：业务要求高，业务问题占比高
          */
-        BUSINESS_DRIVEN("业务驱动型"),
+        BUSINESS_DRIVEN(2, "business_driven", "业务驱动型"),
 
         /**
          * 均衡型：技术与业务要求相当
          */
-        BALANCED("均衡型");
+        BALANCED(3, "balanced", "均衡型");
 
+        private final int code;
+        private final String description;
         private final String displayName;
 
-        JobType(String displayName) {
+        JobType(int code, String description, String displayName) {
+            this.code = code;
+            this.description = description;
             this.displayName = displayName;
+        }
+
+        public int getCode() {
+            return code;
+        }
+
+        public String getDescription() {
+            return description;
         }
 
         public String getDisplayName() {
             return displayName;
+        }
+
+        public static JobType fromCode(Integer code) {
+            if (code == null) {
+                return BALANCED;
+            }
+            for (JobType type : values()) {
+                if (type.code == code) {
+                    return type;
+                }
+            }
+            return BALANCED;
+        }
+
+        public static JobType fromValue(String value) {
+            if (value == null || value.isBlank()) {
+                return BALANCED;
+            }
+            String normalized = value.trim().toLowerCase().replace('-', '_');
+            for (JobType type : values()) {
+                if (type.name().equalsIgnoreCase(normalized)
+                        || type.description.equalsIgnoreCase(normalized)) {
+                    return type;
+                }
+            }
+            return BALANCED;
         }
     }
 

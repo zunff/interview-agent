@@ -27,6 +27,8 @@ public class PromptTemplateService {
 
     /** Prompt 缓存 */
     private final Map<String, String> promptCache = new ConcurrentHashMap<>();
+    /** 已编译模板缓存（避免重复构建 PromptTemplate） */
+    private final Map<String, PromptTemplate> compiledTemplateCache = new ConcurrentHashMap<>();
 
     /** 自定义渲染器：使用 <变量名> 语法 */
     private final StTemplateRenderer renderer = StTemplateRenderer.builder()
@@ -56,10 +58,12 @@ public class PromptTemplateService {
         if (variables == null || variables.isEmpty()) {
             return template;
         }
-        PromptTemplate promptTemplate = PromptTemplate.builder()
-                .renderer(renderer)
-                .template(template)
-                .build();
+        PromptTemplate promptTemplate = compiledTemplateCache.computeIfAbsent(name, key ->
+                PromptTemplate.builder()
+                        .renderer(renderer)
+                        .template(template)
+                        .build()
+        );
         return promptTemplate.render(variables);
     }
 
@@ -68,6 +72,7 @@ public class PromptTemplateService {
      */
     public void clearCache() {
         promptCache.clear();
+        compiledTemplateCache.clear();
         log.info("Prompt cache cleared");
     }
 
@@ -76,6 +81,7 @@ public class PromptTemplateService {
      */
     public void reload(String name) {
         promptCache.remove(name);
+        compiledTemplateCache.remove(name);
         getPrompt(name);
         log.info("Prompt reloaded: {}", name);
     }

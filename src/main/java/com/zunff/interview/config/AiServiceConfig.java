@@ -5,16 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.client.ClientHttpRequestFactories;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
-import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestTemplate;
-
-import java.time.Duration;
 
 /**
  * AI 服务配置类
@@ -137,11 +132,13 @@ public class AiServiceConfig {
             ChatClient textChatClient,
             OmniModalService qwenOmniService,
             PromptTemplateService promptTemplateService,
+            PromptConfig promptConfig,
             MultimodalConfig multimodalConfig) {
         return new MultimodalAnalysisService(
                 textChatClient,
                 qwenOmniService,
                 promptTemplateService,
+                promptConfig,
                 multimodalConfig.isEnabled());
     }
 

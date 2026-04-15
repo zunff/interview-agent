@@ -2,6 +2,7 @@ package com.zunff.interview.service.interview;
 
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -36,21 +37,19 @@ public class ReportGeneratorService {
         log.debug("生成问题分析: {}", question);
 
         String systemPrompt = promptTemplateService.getPrompt("question-analysis");
-
-        StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("面试问题：").append(question).append("\n\n");
-        userPrompt.append("问题类型：").append(questionType).append("\n\n");
-        userPrompt.append("应聘岗位：").append(jobInfo).append("\n\n");
-        if (resume != null && !resume.isEmpty()) {
-            userPrompt.append("候选人简历摘要：\n").append(resume.substring(0, Math.min(resume.length(), 500))).append("\n\n");
-        }
+        String userPrompt = promptTemplateService.getPrompt("question-analysis-user", Map.of(
+                "question", question == null ? "" : question,
+                "questionType", questionType == null ? "" : questionType,
+                "jobInfo", jobInfo == null ? "" : jobInfo,
+                "resumeSummary", buildResumeSummary(resume)
+        ));
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
             String response = chatClient.prompt()
                     .system(systemPrompt)
-                    .user(userPrompt.toString())
+                    .user(userPrompt)
                     .call()
                     .content();
 
@@ -132,7 +131,7 @@ public class ReportGeneratorService {
      */
     private QuestionAnalysisResult parseAnalysisResult(String response) {
         try {
-            String jsonStr = extractJson(response);
+            String jsonStr = JsonExtractionUtils.extractJsonObjectString(response);
             cn.hutool.json.JSONObject json = cn.hutool.json.JSONUtil.parseObj(jsonStr);
 
             return new QuestionAnalysisResult(
@@ -144,16 +143,11 @@ public class ReportGeneratorService {
         }
     }
 
-    /**
-     * 提取 JSON 字符串
-     */
-    private String extractJson(String response) {
-        int start = response.indexOf('{');
-        int end = response.lastIndexOf('}');
-        if (start != -1 && end != -1 && end > start) {
-            return response.substring(start, end + 1);
+    private String buildResumeSummary(String resume) {
+        if (resume == null || resume.isEmpty()) {
+            return "无";
         }
-        return response;
+        return resume.substring(0, Math.min(resume.length(), 500));
     }
 
     /**
