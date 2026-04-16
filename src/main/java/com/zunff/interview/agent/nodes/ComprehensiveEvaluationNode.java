@@ -66,13 +66,6 @@ public class ComprehensiveEvaluationNode {
             updates.put(InterviewState.CURRENT_EVALUATION, evaluation);
             CircuitBreakerHelper.recordSuccess(updates);
 
-            // 传递多模态追问建议到状态
-            if (evaluation.getModalityFollowUpSuggestion() != null && !evaluation.getModalityFollowUpSuggestion().isEmpty()) {
-                updates.put(InterviewState.MODALITY_FOLLOW_UP_SUGGESTION, evaluation.getModalityFollowUpSuggestion());
-                updates.put(InterviewState.MODALITY_CONCERN, evaluation.isModalityConcern());
-                log.debug("多模态建议: {}", evaluation.getModalityFollowUpSuggestion());
-            }
-
             log.info("综合评估完成，综合得分: {}, 问题类型: {}", evaluation.getOverallScore(), questionType);
 
             return CompletableFuture.completedFuture(updates);

@@ -1,5 +1,6 @@
 package com.zunff.interview.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zunff.interview.mapper.EvaluationRecordMapper;
 import com.zunff.interview.model.bo.EvaluationBO;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 评估记录服务实现
@@ -48,5 +50,12 @@ public class EvaluationRecordServiceImpl extends ServiceImpl<EvaluationRecordMap
     @Override
     public Double calculateAverageScore(String sessionId) {
         return baseMapper.calculateAverageOverallScore(sessionId);
+    }
+
+    @Override
+    public List<EvaluationRecord> getBySessionId(String sessionId) {
+        return list(new LambdaQueryWrapper<EvaluationRecord>()
+                .eq(EvaluationRecord::getSessionId, sessionId)
+                .orderByAsc(EvaluationRecord::getQuestionIndex));
     }
 }

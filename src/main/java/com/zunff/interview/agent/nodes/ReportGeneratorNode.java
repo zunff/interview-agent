@@ -1,6 +1,8 @@
 package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.model.entity.EvaluationRecord;
+import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ public class ReportGeneratorNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
+    private final EvaluationRecordService evaluationRecordService;
 
     /**
      * 执行报告生成
@@ -31,6 +34,7 @@ public class ReportGeneratorNode {
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
         log.info("开始生成面试报告");
 
+        String sessionId = state.sessionId();
         String candidateProfile = state.candidateProfile();
 
         // 优先使用岗位分析结果
@@ -38,9 +42,8 @@ public class ReportGeneratorNode {
                 ? state.jobAnalysisResult().generateJobSummary()
                 : state.jobInfo();
 
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> evaluations = (List<Map<String, Object>>) state.data()
-                .getOrDefault(InterviewState.EVALUATIONS, List.of());
+        // 从数据库读取评估记录（避免状态冗余）
+        List<EvaluationRecord> evaluations = evaluationRecordService.getBySessionId(sessionId);
 
         // 获取轮次信息
         int technicalQuestionsDone = state.technicalQuestionsDone();
@@ -48,26 +51,58 @@ public class ReportGeneratorNode {
         double technicalAvgScore = state.technicalAverageScore();
         double businessAvgScore = state.businessAverageScore();
 
-        // 计算总分
-        int totalScore = 0;
+        // 计算各维度平均分
+        double avgScore = 0;
+        double avgAccuracy = 0, avgLogic = 0, avgFluency = 0, avgConfidence = 0;
+        double avgEmotion = 0, avgBodyLanguage = 0, avgVoiceTone = 0;
         int totalQuestions = evaluations.size();
 
-        for (Map<String, Object> eval : evaluations) {
-            if (eval.get("overallScore") instanceof Number) {
-                totalScore += ((Number) eval.get("overallScore")).intValue();
+        if (totalQuestions > 0) {
+            int totalScore = 0, totalAccuracy = 0, totalLogic = 0, totalFluency = 0, totalConfidence = 0;
+            int totalEmotion = 0, totalBodyLanguage = 0, totalVoiceTone = 0;
+
+            for (EvaluationRecord eval : evaluations) {
+                if (eval.getOverallScore() != null) totalScore += eval.getOverallScore();
+                if (eval.getAccuracy() != null) totalAccuracy += eval.getAccuracy();
+                if (eval.getLogic() != null) totalLogic += eval.getLogic();
+                if (eval.getFluency() != null) totalFluency += eval.getFluency();
+                if (eval.getConfidence() != null) totalConfidence += eval.getConfidence();
+                if (eval.getEmotionScore() != null) totalEmotion += eval.getEmotionScore();
+                if (eval.getBodyLanguageScore() != null) totalBodyLanguage += eval.getBodyLanguageScore();
+                if (eval.getVoiceToneScore() != null) totalVoiceTone += eval.getVoiceToneScore();
             }
+
+            avgScore = (double) totalScore / totalQuestions;
+            avgAccuracy = (double) totalAccuracy / totalQuestions;
+            avgLogic = (double) totalLogic / totalQuestions;
+            avgFluency = (double) totalFluency / totalQuestions;
+            avgConfidence = (double) totalConfidence / totalQuestions;
+            avgEmotion = (double) totalEmotion / totalQuestions;
+            avgBodyLanguage = (double) totalBodyLanguage / totalQuestions;
+            avgVoiceTone = (double) totalVoiceTone / totalQuestions;
         }
 
-        double avgScore = totalQuestions > 0 ? (double) totalScore / totalQuestions : 0;
-
-        // 构建评估摘要
+        // 构建详细的评估摘要
         StringBuilder evalSummary = new StringBuilder();
         for (int i = 0; i < evaluations.size(); i++) {
-            Map<String, Object> eval = evaluations.get(i);
+            EvaluationRecord eval = evaluations.get(i);
             evalSummary.append("\n### 问题 ").append(i + 1).append("\n");
-            evalSummary.append("- 问题：").append(eval.get("question")).append("\n");
-            evalSummary.append("- 回答摘要：").append(truncate(eval.get("answer"), 100)).append("\n");
-            evalSummary.append("- 综合得分：").append(eval.get("overallScore")).append("\n");
+            evalSummary.append("- 问题：").append(eval.getQuestion()).append("\n");
+            evalSummary.append("- 回答摘要：").append(truncate(eval.getAnswer(), 150)).append("\n");
+            evalSummary.append("- 综合得分：").append(eval.getOverallScore()).append("\n");
+            evalSummary.append("  - 内容维度：准确度 ").append(eval.getAccuracy());
+            evalSummary.append(" | 逻辑性 ").append(eval.getLogic());
+            evalSummary.append(" | 流畅度 ").append(eval.getFluency());
+            evalSummary.append(" | 自信度 ").append(eval.getConfidence()).append("\n");
+            evalSummary.append("  - 多模态：表情 ").append(eval.getEmotionScore());
+            evalSummary.append(" | 肢体 ").append(eval.getBodyLanguageScore());
+            evalSummary.append(" | 语调 ").append(eval.getVoiceToneScore()).append("\n");
+            if (eval.getStrengths() != null && !eval.getStrengths().isEmpty()) {
+                evalSummary.append("  - 优点：").append(String.join("、", eval.getStrengths())).append("\n");
+            }
+            if (eval.getWeaknesses() != null && !eval.getWeaknesses().isEmpty()) {
+                evalSummary.append("  - 不足：").append(String.join("、", eval.getWeaknesses())).append("\n");
+            }
         }
 
         // 从模板加载 system prompt
@@ -81,6 +116,13 @@ public class ReportGeneratorNode {
                 "businessAvgScore", String.format("%.1f", businessAvgScore),
                 "businessQuestionsDone", businessQuestionsDone,
                 "avgScore", String.format("%.1f", avgScore),
+                "avgAccuracy", String.format("%.1f", avgAccuracy),
+                "avgLogic", String.format("%.1f", avgLogic),
+                "avgFluency", String.format("%.1f", avgFluency),
+                "avgConfidence", String.format("%.1f", avgConfidence),
+                "avgEmotion", String.format("%.1f", avgEmotion),
+                "avgBodyLanguage", String.format("%.1f", avgBodyLanguage),
+                "avgVoiceTone", String.format("%.1f", avgVoiceTone),
                 "totalQuestions", totalQuestions,
                 "evalSummary", evalSummary.length() == 0 ? "无评估记录" : evalSummary.toString()
         ));
@@ -99,6 +141,20 @@ public class ReportGeneratorNode {
             reportHeader.append("# 面试评估报告\n\n");
             reportHeader.append("> **综合得分**：").append(String.format("%.1f", avgScore)).append(" / 100\n");
             reportHeader.append("> **面试问题数**：").append(totalQuestions).append("\n\n");
+
+            // 各维度平均分概览
+            reportHeader.append("## 综合评估概览\n\n");
+            reportHeader.append("### 内容维度\n");
+            reportHeader.append("| 准确度 | 逻辑性 | 流畅度 | 自信度 |\n");
+            reportHeader.append("|--------|--------|--------|--------|\n");
+            reportHeader.append(String.format("| %.1f | %.1f | %.1f | %.1f |\n\n",
+                    avgAccuracy, avgLogic, avgFluency, avgConfidence));
+
+            reportHeader.append("### 多模态维度\n");
+            reportHeader.append("| 表情表现 | 肢体语言 | 语音语调 |\n");
+            reportHeader.append("|----------|----------|----------|\n");
+            reportHeader.append(String.format("| %.1f | %.1f | %.1f |\n\n",
+                    avgEmotion, avgBodyLanguage, avgVoiceTone));
 
             // 轮次表现摘要
             reportHeader.append("## 轮次表现\n\n");
@@ -131,10 +187,9 @@ public class ReportGeneratorNode {
         }
     }
 
-    private String truncate(Object text, int maxLength) {
+    private String truncate(String text, int maxLength) {
         if (text == null) return "";
-        String str = text.toString();
-        if (str.length() <= maxLength) return str;
-        return str.substring(0, maxLength) + "...";
+        if (text.length() <= maxLength) return text;
+        return text.substring(0, maxLength) + "...";
     }
 }

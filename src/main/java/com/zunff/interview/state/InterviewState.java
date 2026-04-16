@@ -43,15 +43,9 @@ public class InterviewState extends AgentState {
     public static final String ANSWER_FRAMES = "answerFrames";
     public static final String ANSWER_FRAMES_WITH_TIMESTAMPS = "answerFramesWithTimestamps";
     public static final String CURRENT_EVALUATION = "currentEvaluation";
-    public static final String EVALUATIONS = "evaluations";
 
     // ========== 实时ASR转录结果 ==========
     public static final String TRANSCRIPT_ENTRIES = "transcriptEntries";
-
-    // ========== 实时多模态分析 ==========
-    public static final String EMOTION_SCORES = "emotionScores";
-    public static final String BODY_LANGUAGE_SCORES = "bodyLanguageScores";
-    public static final String VOICE_TONE_SCORES = "voiceToneScores";
 
     // ========== 追问控制 ==========
     public static final String FOLLOW_UP_COUNT = "followUpCount";
@@ -71,10 +65,6 @@ public class InterviewState extends AgentState {
 
     // ========== 提前结束检测 ==========
     public static final String CONSECUTIVE_HIGH_SCORES = "consecutiveHighScores";
-
-    // ========== 多模态建议 ==========
-    public static final String MODALITY_FOLLOW_UP_SUGGESTION = "modalityFollowUpSuggestion";
-    public static final String MODALITY_CONCERN = "modalityConcern";
 
     // ========== 配置参数 ==========
     public static final String MAX_TECHNICAL_QUESTIONS = "maxTechnicalQuestions";  // 默认6
@@ -112,10 +102,6 @@ public class InterviewState extends AgentState {
     static {
         // 列表类型：使用 appender 累加
         SCHEMA.put(QUESTIONS, Channels.appender(ArrayList::new));
-        SCHEMA.put(EVALUATIONS, Channels.appender(ArrayList::new));
-        SCHEMA.put(EMOTION_SCORES, Channels.appender(ArrayList::new));
-        SCHEMA.put(BODY_LANGUAGE_SCORES, Channels.appender(ArrayList::new));
-        SCHEMA.put(VOICE_TONE_SCORES, Channels.appender(ArrayList::new));
         // ANSWER_FRAMES 使用 base（覆盖语义），因为每次回答的视频帧是独立的
         SCHEMA.put(ANSWER_FRAMES, Channels.base(new LastValueReducer<>(), ArrayList::new));
         SCHEMA.put(ANSWER_FRAMES_WITH_TIMESTAMPS, Channels.base(new LastValueReducer<>(), ArrayList::new));
@@ -150,8 +136,6 @@ public class InterviewState extends AgentState {
         SCHEMA.put(TECHNICAL_QUESTIONS_DONE, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(BUSINESS_QUESTIONS_DONE, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(CONSECUTIVE_HIGH_SCORES, Channels.base(new LastValueReducer<>(), () -> 0));
-        SCHEMA.put(MODALITY_FOLLOW_UP_SUGGESTION, Channels.base(new LastValueReducer<>(), () -> ""));
-        SCHEMA.put(MODALITY_CONCERN, Channels.base(new LastValueReducer<>(), () -> false));
 
         // 岗位分析
         SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), JobAnalysisResult::new));
@@ -251,11 +235,6 @@ public class InterviewState extends AgentState {
     @SuppressWarnings("unchecked")
     public List<String> questions() {
         return (List<String>) data().getOrDefault(QUESTIONS, new ArrayList<>());
-    }
-
-    @SuppressWarnings("unchecked")
-    public List<Map<String, Object>> evaluations() {
-        return (List<Map<String, Object>>) data().getOrDefault(EVALUATIONS, new ArrayList<>());
     }
 
     public String getFinalReport() {
@@ -418,21 +397,6 @@ public class InterviewState extends AgentState {
      */
     public boolean isBusinessRoundComplete() {
         return businessQuestionsDone() >= maxBusinessQuestions();
-    }
-
-    /**
-     * 获取多模态追问建议
-     */
-    public String modalityFollowUpSuggestion() {
-        return (String) data().getOrDefault(MODALITY_FOLLOW_UP_SUGGESTION, "");
-    }
-
-    /**
-     * 是否存在多模态异常
-     */
-    public boolean modalityConcern() {
-        Object value = data().get(MODALITY_CONCERN);
-        return Boolean.TRUE.equals(value);
     }
 
     // ========== 岗位分析便捷方法 ==========

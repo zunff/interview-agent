@@ -4,16 +4,24 @@ $question$
 ## Answer
 $answer$
 
-## Evaluation
+## Evaluation Scores
 - Overall Score: $overallScore$
+- Accuracy (Content correctness): $accuracy$
+- Logic (Reasoning clarity): $logic$
+- Fluency (Expression smoothness): $fluency$
+- Confidence (Self-assurance): $confidence$
+
+## Evaluation Details
 - Strengths: $strengths$
 - Weaknesses: $weaknesses$
+- Detailed Evaluation: $detailedEvaluation$
 
 ## Multimodal Signals
 - Emotion Score: $emotionScore$
 - Body Language Score: $bodyLanguageScore$
 - Voice Tone Score: $voiceToneScore$
 - Modality Concern: $modalityConcern$
+- Modality Follow-up Suggestion: $modalityFollowUpSuggestion$
 
 ## Follow-up Count
 - Current Follow-ups: $followUpCount$
