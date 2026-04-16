@@ -1,5 +1,7 @@
 package com.zunff.interview.model.dto.llm.resp;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.List;
 
 public record CandidateProfileResponseDto(
@@ -13,6 +15,8 @@ public record CandidateProfileResponseDto(
         List<String> concerns,
         Integer impressionScore,
         String summary
-) {
+) implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 }
 

@@ -6,7 +6,7 @@ import com.zunff.interview.agent.nodes.round.ComprehensiveEvaluationNode;
 import com.zunff.interview.agent.nodes.round.DeepDiveNode;
 import com.zunff.interview.agent.nodes.round.FollowUpDecisionNode;
 import com.zunff.interview.agent.nodes.round.GenerateFollowUpNode;
-import com.zunff.interview.agent.router.EvaluationRouter;
+import com.zunff.interview.agent.router.RoundRouter;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.agent.names.NodeNames;
 import com.zunff.interview.constant.RouteDecision;
@@ -37,7 +37,7 @@ public class InterviewRoundSubGraph {
 
     private final AskQuestionNode askQuestionNode;
     private final GenerateFollowUpNode generateFollowUpNode;
-    private final EvaluationRouter evaluationRouter;
+    private final RoundRouter roundRouter;
 
     // Omni多模态综合评估节点（替代并行三分支）
     private final ComprehensiveEvaluationNode comprehensiveEvaluationNode;
@@ -50,14 +50,14 @@ public class InterviewRoundSubGraph {
     public InterviewRoundSubGraph(
             AskQuestionNode askQuestionNode,
             GenerateFollowUpNode generateFollowUpNode,
-            EvaluationRouter evaluationRouter,
+            RoundRouter roundRouter,
             ComprehensiveEvaluationNode comprehensiveEvaluationNode,
             FollowUpDecisionNode followUpDecisionNode,
             ChallengeQuestionNode challengeQuestionNode,
             DeepDiveNode deepDiveNode) {
         this.askQuestionNode = askQuestionNode;
         this.generateFollowUpNode = generateFollowUpNode;
-        this.evaluationRouter = evaluationRouter;
+        this.roundRouter = roundRouter;
         this.comprehensiveEvaluationNode = comprehensiveEvaluationNode;
         this.followUpDecisionNode = followUpDecisionNode;
         this.challengeQuestionNode = challengeQuestionNode;
@@ -110,36 +110,23 @@ public class InterviewRoundSubGraph {
                 // 综合评估后进入追问决策
                 .addEdge(comprehensiveEval, followUpDecision)
 
-                // ========== 条件路由：追问决策 ==========
+                // ========== 条件路由：追问决策 + 轮次完成 ==========
                 .addConditionalEdges(
                         followUpDecision,
-                        state -> CompletableFuture.completedFuture(routeAfterEvaluation(state, round)),
+                        state -> CompletableFuture.completedFuture(roundRouter.route(state)),
                         Map.of(
                                 RouteDecision.FOLLOW_UP.getValue(), generateFollowUp,
                                 RouteDecision.DEEP_DIVE.getValue(), generateDeepDive,
                                 RouteDecision.CHALLENGE_MODE.getValue(), generateChallenge,
-                                RouteDecision.NEXT_QUESTION.getValue(), END
+                                RouteDecision.NEXT_QUESTION.getValue(), askQuestion,   // 内部消化：回到提问
+                                RouteDecision.ROUND_COMPLETE.getValue(), END           // 轮次结束：子图退出
                         )
                 )
 
-                // 所有分支最终回到 askQuestion 形成循环
+                // 所有追问分支最终回到 askQuestion 形成循环
                 .addEdge(generateFollowUp, askQuestion)
                 .addEdge(generateChallenge, askQuestion)
                 .addEdge(generateDeepDive, askQuestion);
         // 注意：不在这里 compile()，由主图统一编译
-    }
-
-    /**
-     * 评估后的路由决策
-     * 只调用 Router 做保护性检查，LLM 决策由 FollowUpDecisionNode 完成
-     */
-    private String routeAfterEvaluation(InterviewState state, InterviewRound round) {
-        String decision = evaluationRouter.route(state);
-
-        if (RouteDecision.NEXT_QUESTION.getValue().equals(decision)) {
-            log.info("[{}] 问题完成，准备进入下一题", round.getDisplayName());
-        }
-
-        return decision;
     }
 }

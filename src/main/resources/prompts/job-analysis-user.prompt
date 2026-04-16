@@ -1,0 +1,8 @@
+Job information:
+{{jobInfo}}
+
+CRITICAL CONSTRAINTS (DO NOT EXCEED):
+- Technical round total (technicalBasicCount + projectCount) ≤ $maxTechnicalQuestions$
+- Business round total (businessCount + softSkillCount) ≤ $maxBusinessQuestions$
+
+Allocate question counts WITHIN these limits while reflecting role requirements.

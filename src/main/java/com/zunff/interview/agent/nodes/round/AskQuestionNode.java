@@ -97,6 +97,10 @@ public class AskQuestionNode {
         updates.put(InterviewState.QUESTION_TYPE, nextQuestion.getQuestionType());
         updates.put(InterviewState.QUESTION_INDEX, nextQuestion.getQuestionIndex());
 
+        // 清空追问次数，开始新问题
+        updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
+        log.info("新问题开始，清空追问次数: {} -> 0", state.followUpCount());
+
         // 更新对应轮次的索引
         if (state.isTechnicalRound()) {
             updates.put(InterviewState.CURRENT_TECHNICAL_INDEX, newIndex);

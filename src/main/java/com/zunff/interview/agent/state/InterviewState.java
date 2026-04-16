@@ -7,6 +7,7 @@ import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.JobAnalysisResult;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
@@ -187,8 +188,73 @@ public class InterviewState extends AgentState {
         return (String) data().getOrDefault(SESSION_ID, "");
     }
 
-    public String candidateProfile() {
-        return (String) data().getOrDefault(CANDIDATE_PROFILE, "");
+    /**
+     * 获取候选人画像对象
+     */
+    public CandidateProfileResponseDto candidateProfile() {
+        Object value = data().get(CANDIDATE_PROFILE);
+        return value instanceof CandidateProfileResponseDto ? (CandidateProfileResponseDto) value : null;
+    }
+
+    /**
+     * 获取候选人画像文本描述（用于 prompt，英文格式）
+     */
+    public String candidateProfileAsText() {
+        CandidateProfileResponseDto profile = candidateProfile();
+        if (profile == null) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        if (profile.techStack() != null && !profile.techStack().isEmpty()) {
+            sb.append("Tech Stack: ").append(String.join(", ", profile.techStack())).append("\n");
+        }
+
+        if (profile.keyProjects() != null && !profile.keyProjects().isEmpty()) {
+            sb.append("\nKey Projects:\n");
+            for (int i = 0; i < profile.keyProjects().size(); i++) {
+                var project = profile.keyProjects().get(i);
+                sb.append(i + 1).append(". ").append(project.name());
+                if (project.role() != null && !project.role().isEmpty()) {
+                    sb.append(" (Role: ").append(project.role()).append(")");
+                }
+                if (project.highlights() != null && !project.highlights().isEmpty()) {
+                    sb.append("\n   Highlights: ").append(String.join("; ", project.highlights()));
+                }
+                sb.append("\n");
+            }
+        }
+
+        if (profile.workYears() != null) {
+            sb.append("\nWork Experience: ").append(profile.workYears()).append(" years\n");
+        }
+
+        if (profile.education() != null && !profile.education().isEmpty()) {
+            sb.append("Education: ").append(profile.education()).append("\n");
+        }
+
+        if (profile.summary() != null && !profile.summary().isEmpty()) {
+            sb.append("\nSummary: ").append(profile.summary()).append("\n");
+        }
+
+        if (profile.highlights() != null && !profile.highlights().isEmpty()) {
+            sb.append("\nHighlights:\n- ").append(String.join("\n- ", profile.highlights())).append("\n");
+        }
+
+        if (profile.concerns() != null && !profile.concerns().isEmpty()) {
+            sb.append("\nPotential Concerns:\n- ").append(String.join("\n- ", profile.concerns())).append("\n");
+        }
+
+        if (profile.impressionScore() != null) {
+            sb.append("\nInitial Impression Score: ").append(profile.impressionScore()).append("/100\n");
+        }
+
+        if (profile.selfIntroConsistency() != null && !profile.selfIntroConsistency().isEmpty()) {
+            sb.append("Self-Introduction Consistency: ").append(profile.selfIntroConsistency()).append("\n");
+        }
+
+        return sb.toString().trim();
     }
 
     public String selfIntro() {

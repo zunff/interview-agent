@@ -2,6 +2,7 @@ package com.zunff.interview.agent.state;
 
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import lombok.Getter;
 import lombok.Setter;
 import org.bsc.langgraph4j.state.AgentState;
@@ -19,7 +20,6 @@ import java.util.Map;
  * 独立的状态类，与主图隔离
  */
 @Getter
-@Setter
 public class BatchQuestionGenState extends AgentState {
 
     // ========== 输入参数常量 ==========
@@ -88,7 +88,7 @@ public class BatchQuestionGenState extends AgentState {
         SCHEMA.put(CURRENT_BUSINESS_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(FALLBACK, Channels.base(new LastValueReducer<>(), () -> false));
 
-        SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> null));
+        SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC));
         SCHEMA.put(QUESTION_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(OUTPUT_KEY, Channels.base(new LastValueReducer<>(), () -> ""));
     }
@@ -100,20 +100,67 @@ public class BatchQuestionGenState extends AgentState {
         super(initData);
     }
 
-    public BatchQuestionGenState(BatchQuestionGenState state, int count, QuestionType questionType, String outputKey) {
-        super(state.data());
-        data().put(QUESTION_TYPE, questionType);
-        data().put(QUESTION_COUNT, count);
-        data().put(OUTPUT_KEY, outputKey);
-    }
-
     // ========== 便捷方法（兼容 QuestionTypeBatchNode） ==========
 
     /**
-     * 兼容方法：candidateProfile()
+     * 兼容方法：candidateProfile() - 返回文本描述用于 prompt
      */
     public String candidateProfile() {
-        return getCandidateProfile();
+        CandidateProfileResponseDto profile = getCandidateProfileObject();
+        if (profile == null) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        if (profile.techStack() != null && !profile.techStack().isEmpty()) {
+            sb.append("Tech Stack: ").append(String.join(", ", profile.techStack())).append("\n");
+        }
+
+        if (profile.keyProjects() != null && !profile.keyProjects().isEmpty()) {
+            sb.append("\nKey Projects:\n");
+            for (int i = 0; i < profile.keyProjects().size(); i++) {
+                var project = profile.keyProjects().get(i);
+                sb.append(i + 1).append(". ").append(project.name());
+                if (project.role() != null && !project.role().isEmpty()) {
+                    sb.append(" (Role: ").append(project.role()).append(")");
+                }
+                if (project.highlights() != null && !project.highlights().isEmpty()) {
+                    sb.append("\n   Highlights: ").append(String.join("; ", project.highlights()));
+                }
+                sb.append("\n");
+            }
+        }
+
+        if (profile.workYears() != null) {
+            sb.append("\nWork Experience: ").append(profile.workYears()).append(" years\n");
+        }
+
+        if (profile.education() != null && !profile.education().isEmpty()) {
+            sb.append("Education: ").append(profile.education()).append("\n");
+        }
+
+        if (profile.summary() != null && !profile.summary().isEmpty()) {
+            sb.append("\nSummary: ").append(profile.summary()).append("\n");
+        }
+
+        if (profile.highlights() != null && !profile.highlights().isEmpty()) {
+            sb.append("\nHighlights:\n- ").append(String.join("\n- ", profile.highlights())).append("\n");
+        }
+
+        if (profile.concerns() != null && !profile.concerns().isEmpty()) {
+            sb.append("\nPotential Concerns:\n- ").append(String.join("\n- ", profile.concerns())).append("\n");
+        }
+
+        if (profile.impressionScore() != null) {
+            sb.append("\nInitial Impression Score: ").append(profile.impressionScore()).append("/100\n");
+        }
+
+        if (profile.selfIntroConsistency() != null && !profile.selfIntroConsistency().isEmpty()) {
+            sb.append("Self-Introduction Consistency: ").append(profile.selfIntroConsistency()).append("\n");
+        }
+
+        return sb.toString().trim();
     }
 
     /**
@@ -167,8 +214,16 @@ public class BatchQuestionGenState extends AgentState {
 
     // ========== Getter 方法 ==========
 
+    /**
+     * 获取候选人画像对象
+     */
+    public CandidateProfileResponseDto getCandidateProfileObject() {
+        Object value = data().get(CANDIDATE_PROFILE);
+        return value instanceof CandidateProfileResponseDto ? (CandidateProfileResponseDto) value : null;
+    }
+
     public String getCandidateProfile() {
-        return (String) data().getOrDefault(CANDIDATE_PROFILE, "");
+        return candidateProfile();
     }
 
     public String getJobContext() {

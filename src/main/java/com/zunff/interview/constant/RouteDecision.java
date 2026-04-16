@@ -4,20 +4,16 @@ import lombok.Getter;
 
 /**
  * 路由决策枚举
- * 用于状态图中的条件路由
+ * 仅用于子图级别的条件路由（追问策略 + 轮次完成）
  */
 @Getter
 public enum RouteDecision {
 
     FOLLOW_UP("followUp"),
     NEXT_QUESTION("nextQuestion"),
-    DEEP_DIVE("deepDive"),          // 低分深入追问
-    CHALLENGE_MODE("challengeMode"), // 高分挑战模式
-    END("end"),
-    TECHNICAL_TO_BUSINESS("technicalToBusiness"),
-    BUSINESS_DONE("businessDone"),
-    CONTINUE("continue"),
-    EARLY_END("earlyEnd");
+    DEEP_DIVE("deepDive"),           // 低分深入追问
+    CHALLENGE_MODE("challengeMode"),  // 高分挑战模式
+    ROUND_COMPLETE("roundComplete");  // 轮次结束
 
     private final String value;
 
@@ -30,13 +26,13 @@ public enum RouteDecision {
      */
     public static RouteDecision fromValue(String value) {
         if (value == null) {
-            return CONTINUE;
+            return NEXT_QUESTION;
         }
         for (RouteDecision decision : values()) {
             if (decision.value.equals(value)) {
                 return decision;
             }
         }
-        return CONTINUE;
+        return NEXT_QUESTION;
     }
 }

@@ -36,9 +36,7 @@ public class ProjectGenNode {
 
             log.info("开始生成项目经验题，数量: {}", count);
 
-            BatchQuestionGenState nodeState = new BatchQuestionGenState(state, count, QuestionType.PROJECT_EXPERIENCE, BatchQuestionGenState.PROJECT_QUESTIONS);
-
-            return questionGenerationService.execute(nodeState)
+            return questionGenerationService.execute(state, count, QuestionType.PROJECT_EXPERIENCE, BatchQuestionGenState.PROJECT_QUESTIONS)
                     .thenApply(result -> {
                         @SuppressWarnings("unchecked")
                         List<GeneratedQuestion> questions = (List<GeneratedQuestion>) result.get(BatchQuestionGenState.PROJECT_QUESTIONS);

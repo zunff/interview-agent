@@ -36,7 +36,7 @@ public class ReportGeneratorNode {
         log.info("开始生成面试报告");
 
         String sessionId = state.sessionId();
-        String candidateProfile = state.candidateProfile();
+        String candidateProfile = state.candidateProfileAsText();
 
         // 优先使用岗位分析结果
         String jobContext = state.hasJobAnalysisResult()

@@ -35,9 +35,7 @@ public class SoftSkillGenNode {
 
             log.info("开始生成软技能题，数量: {}", count);
 
-            BatchQuestionGenState nodeState = new BatchQuestionGenState(state, count, QuestionType.COMMUNICATION, BatchQuestionGenState.SOFT_SKILL_QUESTIONS);
-
-            return questionGenerationService.execute(nodeState)
+            return questionGenerationService.execute(state, count, QuestionType.COMMUNICATION, BatchQuestionGenState.SOFT_SKILL_QUESTIONS)
                     .thenApply(result -> {
                         @SuppressWarnings("unchecked")
                         List<GeneratedQuestion> questions = (List<GeneratedQuestion>) result.get(BatchQuestionGenState.SOFT_SKILL_QUESTIONS);

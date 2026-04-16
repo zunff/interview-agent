@@ -30,7 +30,7 @@
 
 ## 整体架构
 
-系统采用 **LangGraph4j 主图 + 批量题目生成子图 + 轮次子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析 ‖ 自我介绍 → 人物画像 → 批量题目生成 → 技术轮 → 业务轮 → 报告），批量题目子图并行生成所有题目，每个轮次通过可复用的子图实例执行。
+系统采用 **LangGraph4j 主图 + 批量题目生成子图 + 轮次子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析 ‖ 自我介绍 → 人物画像 → 批量题目生成 → 技术轮 → 轮次切换 → 业务轮 → 报告），批量题目子图并行生成所有题目，每个轮次通过可复用的子图实例执行。
 
 ```mermaid
 graph TD
@@ -47,14 +47,11 @@ graph TD
 
         BATCH --> TECH[InterviewRoundGraph<br/>技术轮子图<br/>从队列获取题目]
 
-        TECH --> ROUTER{RoundTransitionNode<br/>轮次决策}
+        TECH --> TRANS[RoundTransitionNode<br/>轮次切换<br/>更新状态]
 
-        ROUTER -->|技术轮未完成| TECH
-        ROUTER -->|切换业务轮| BIZ[InterviewRoundGraph<br/>业务轮子图<br/>从队列获取题目]
-        ROUTER -->|提前结束| REPORT[ReportGeneratorNode<br/>生成报告]
+        TRANS --> BIZ[InterviewRoundGraph<br/>业务轮子图<br/>从队列获取题目]
 
-        BIZ --> ROUTER
-        ROUTER -->|业务完成| REPORT
+        BIZ --> REPORT[ReportGeneratorNode<br/>生成报告]
 
         REPORT --> END((END))
     end
@@ -142,23 +139,21 @@ graph TD
 
 ### 路由决策逻辑
 
-**追问路由（EvaluationRouter）**：
+**子图 Router**：
 
-| 得分范围 | 决策 | 说明 |
-|---------|------|------|
-| < 50 | DEEP_DIVE | 低分深入追问，确认是否真的存在不足 |
-| > 90 | CHALLENGE_MODE | 高分挑战模式，提出更有挑战性的问题 |
-| 50-90 且需追问 | FOLLOW_UP | 普通追问，深入挖掘 |
-| 其他 | NEXT_QUESTION | 进入下一题 |
+负责子图内部的路由决策：追问策略 + 轮次完成检查。
 
-**轮次切换路由（RoundTransitionRouter）**：
-
-| 条件 | 转换 |
+| 决策 | 说明 |
 |------|------|
-| 技术轮完成 && 平均分 ≥ 75 | 技术轮 → 业务轮 |
-| 技术轮完成 && 平均分 < 75 | 继续技术轮 |
-| 业务轮完成 | 生成报告 |
-| 连续3次高分 (≥85分) | 提前结束 |
+| FOLLOW_UP | 普通追问，深入挖掘 |
+| DEEP_DIVE | 低分深入追问（得分 < 50） |
+| CHALLENGE_MODE | 高分挑战模式（得分 > 90） |
+| NEXT_QUESTION | 进入下一题（子图内循环） |
+| ROUND_COMPLETE | 轮次结束（子图退出） |
+
+**主图轮次切换**：
+
+技术轮结束后，`RoundTransitionNode` 更新 `currentRound` 状态为业务轮，然后通过固定边进入业务轮。业务轮结束后直接生成报告。
 
 ### 多模态评估流水线
 
@@ -298,8 +293,7 @@ src/main/java/com/zunff/interview/
 │   │           ├── AggregateResultsNode.java  # 结果聚合+重新编号
 │   │           └── HandleSideEffectsNode.java # 副作用处理
 │   └── router/                          # 路由决策
-│       ├── EvaluationRouter.java        # 追问路由（多分支）
-│       └── RoundTransitionRouter.java   # 轮次切换路由
+│       └── RoundRouter.java             # 子图路由（追问策略+轮次完成检查）
 ├── config/                              # 配置类
 ├── controller/                          # REST 控制器
 ├── model/                               # 数据模型

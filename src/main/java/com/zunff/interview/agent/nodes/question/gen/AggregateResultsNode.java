@@ -1,5 +1,6 @@
 package com.zunff.interview.agent.nodes.question.gen;
 
+import cn.hutool.json.JSONUtil;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.agent.state.BatchQuestionGenState;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +51,8 @@ public class AggregateResultsNode {
         }
 
         log.info("题目聚合完成：技术轮 {} 题，业务轮 {} 题", technicalQueue.size(), businessQueue.size());
+        log.debug("技术轮题目：{}", JSONUtil.toJsonStr(technicalQueue));
+        log.debug("业务轮题目：{}", JSONUtil.toJsonStr(businessQueue));
 
         // 返回状态更新
         Map<String, Object> updates = new HashMap<>();

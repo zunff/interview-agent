@@ -39,11 +39,8 @@ public class TechBasicGenNode {
 
             log.info("开始生成技术基础题，数量: {}", count);
 
-            // 构建 QuestionTypeBatchNode 输入
-            BatchQuestionGenState nodeState = new BatchQuestionGenState(state, count, QuestionType.TECHNICAL_BASIC, BatchQuestionGenState.TECHNICAL_BASIC_QUESTIONS);
-
             // 调用题目生成服务
-            return questionGenerationService.execute(nodeState)
+            return questionGenerationService.execute(state, count, QuestionType.TECHNICAL_BASIC, BatchQuestionGenState.TECHNICAL_BASIC_QUESTIONS)
                     .thenApply(result -> {
                         @SuppressWarnings("unchecked")
                         List<GeneratedQuestion> questions = (List<GeneratedQuestion>) result.get(BatchQuestionGenState.TECHNICAL_BASIC_QUESTIONS);

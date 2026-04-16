@@ -44,12 +44,7 @@ public class QuestionGenerationService {
      * @param state 包含题目类型、数量等配置的状态对象
      * @return 生成结果，包含题目列表
      */
-    public CompletableFuture<Map<String, Object>> execute(BatchQuestionGenState state) {
-        // 从状态中获取配置
-        QuestionType questionType = state.questionType();
-        int count = state.questionCount();
-        String outputKey = state.outputKey();
-
+    public CompletableFuture<Map<String, Object>> execute(BatchQuestionGenState state, int count, QuestionType questionType, String outputKey) {
         log.info("批量生成 {} 题目，数量: {}", questionType.getDisplayName(), count);
 
         if (count <= 0) {
@@ -119,10 +114,9 @@ public class QuestionGenerationService {
      */
     private String searchReferenceQuestions(String jobContext, BatchQuestionGenState state, QuestionType questionType) {
         try {
-            String questionTypeName = questionType.isTechnicalType() ? "技术面" : "业务面";
             List<KnowledgeSearchResult> results = knowledgeService.searchByJobInfo(
                     jobContext,
-                    questionTypeName,
+                    questionType.getDisplayName(),
                     state.knowledgeCompany(),
                     state.knowledgeJobPosition(),
                     5  // 批量生成时多检索一些参考

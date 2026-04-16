@@ -35,9 +35,7 @@ public class BusinessGenNode {
 
             log.info("开始生成业务理解题，数量: {}", count);
 
-            BatchQuestionGenState nodeState = new BatchQuestionGenState(state, count, QuestionType.BUSINESS_UNDERSTANDING, BatchQuestionGenState.BUSINESS_QUESTIONS);
-
-            return questionGenerationService.execute(nodeState)
+            return questionGenerationService.execute(state, count, QuestionType.BUSINESS_UNDERSTANDING, BatchQuestionGenState.BUSINESS_QUESTIONS)
                     .thenApply(result -> {
                         @SuppressWarnings("unchecked")
                         List<GeneratedQuestion> questions = (List<GeneratedQuestion>) result.get(BatchQuestionGenState.BUSINESS_QUESTIONS);

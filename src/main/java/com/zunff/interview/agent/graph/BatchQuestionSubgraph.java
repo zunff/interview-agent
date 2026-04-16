@@ -60,7 +60,7 @@ public class BatchQuestionSubgraph {
                 .addEdge(QuestionGenNodeNames.GEN_BUSINESS, QuestionGenNodeNames.AGGREGATE_RESULTS)
                 .addEdge(QuestionGenNodeNames.GEN_SOFT_SKILL, QuestionGenNodeNames.AGGREGATE_RESULTS)
 
-                // 聚合后处理副作用
+                // 聚合
                 .addEdge(QuestionGenNodeNames.AGGREGATE_RESULTS, END)
                 // 编译子图
                 .compile();

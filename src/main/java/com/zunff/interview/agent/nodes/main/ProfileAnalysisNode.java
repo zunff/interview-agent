@@ -1,6 +1,5 @@
 package com.zunff.interview.agent.nodes.main;
 
-import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
@@ -62,14 +61,13 @@ public class ProfileAnalysisNode {
                     .user(userPrompt)
                     .call()
                     .entity(CandidateProfileResponseDto.class);
-            String candidateProfile = JSONUtil.toJsonStr(response);
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.SELF_INTRO, selfIntro != null ? selfIntro : "");
-            updates.put(InterviewState.CANDIDATE_PROFILE, candidateProfile);
+            updates.put(InterviewState.CANDIDATE_PROFILE, response);
             CircuitBreakerHelper.recordSuccess(updates);
 
-            log.info("候选人画像生成完成，长度: {}", candidateProfile.length());
+            log.info("候选人画像生成完成");
 
             return CompletableFuture.completedFuture(updates);
 

@@ -3,12 +3,10 @@ package com.zunff.interview.agent.graph;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.agent.names.NodeNames;
 import com.zunff.interview.agent.nodes.main.*;
-import com.zunff.interview.agent.router.RoundTransitionRouter;
 import com.zunff.interview.agent.state.BatchQuestionGenState;
 import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.config.GraphConfigProperties;
 import com.zunff.interview.constant.InterviewRound;
-import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.JobAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +18,7 @@ import org.springframework.context.annotation.Configuration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
@@ -28,11 +27,8 @@ import static org.bsc.langgraph4j.StateGraph.START;
  * 面试 Agent 主图配置
  *
  * 架构:
- * START → init → jobAnalysis → selfIntro(interrupt) → profileAnalysis → batchQuestionGenerator → technicalRound → roundTransition → businessRound → generateReport → END
- *
- * 自我介绍环节：SelfIntroNode 只标记阶段，前端自行引导，interrupt 等待回答
- * ProfileAnalysisNode：一次 LLM 调用综合分析简历 + 自我介绍，生成统一候选人画像
- * BatchQuestionSubgraph：批量生成技术轮和业务轮的所有题目（子图模式）
+ * START → init → jobAnalysis/selfIntro(并行) → profileAnalysis → batchQuestionGenerator
+ * → technicalRound → roundTransition → businessRound → generateReport → END
  */
 @Slf4j
 @Configuration
@@ -45,19 +41,24 @@ public class InterviewAgentGraph {
     private final BatchQuestionSubgraph batchQuestionSubgraph;
     private final ReportGeneratorNode reportGeneratorNode;
     private final RoundTransitionNode roundTransitionNode;
-    private final RoundTransitionRouter roundTransitionRouter;
     private final InterviewRoundSubGraph interviewRoundSubGraph;
     private final GraphConfigProperties graphConfig;
     private final ExecutorService virtualThreadExecutor;
-
 
     // 预编译的批量题目生成子图
     private CompiledGraph<BatchQuestionGenState> compiledBatchQuestionGraph;
 
     public InterviewAgentGraph(
-            InitInterviewNode initInterviewNode, JobAnalysisNode jobAnalysisNode, SelfIntroNode selfIntroNode, ProfileAnalysisNode profileAnalysisNode,
-            BatchQuestionSubgraph batchQuestionSubgraph, ReportGeneratorNode reportGeneratorNode, RoundTransitionNode roundTransitionNode, RoundTransitionRouter roundTransitionRouter,
-            InterviewRoundSubGraph interviewRoundSubGraph, GraphConfigProperties graphConfig, ExecutorService virtualThreadExecutor) {
+            InitInterviewNode initInterviewNode,
+            JobAnalysisNode jobAnalysisNode,
+            SelfIntroNode selfIntroNode,
+            ProfileAnalysisNode profileAnalysisNode,
+            BatchQuestionSubgraph batchQuestionSubgraph,
+            ReportGeneratorNode reportGeneratorNode,
+            RoundTransitionNode roundTransitionNode,
+            InterviewRoundSubGraph interviewRoundSubGraph,
+            GraphConfigProperties graphConfig,
+            ExecutorService virtualThreadExecutor) {
         this.initInterviewNode = initInterviewNode;
         this.jobAnalysisNode = jobAnalysisNode;
         this.selfIntroNode = selfIntroNode;
@@ -65,7 +66,6 @@ public class InterviewAgentGraph {
         this.batchQuestionSubgraph = batchQuestionSubgraph;
         this.reportGeneratorNode = reportGeneratorNode;
         this.roundTransitionNode = roundTransitionNode;
-        this.roundTransitionRouter = roundTransitionRouter;
         this.interviewRoundSubGraph = interviewRoundSubGraph;
         this.graphConfig = graphConfig;
         this.virtualThreadExecutor = virtualThreadExecutor;
@@ -98,9 +98,9 @@ public class InterviewAgentGraph {
                 .addNode(NodeNames.BATCH_QUESTION_GENERATOR, this::callBatchQuestionSubgraphAsync)
 
                 .addNode(NodeNames.TECHNICAL_ROUND, technicalSubgraph)
+                .addNode(NodeNames.ROUND_TRANSITION, roundTransitionNode::execute)
                 .addNode(NodeNames.BUSINESS_ROUND, businessSubgraph)
 
-                .addNode(NodeNames.ROUND_TRANSITION, roundTransitionNode::execute)
                 .addNode(NodeNames.GENERATE_REPORT, reportGeneratorNode::execute)
 
                 // ========== 定义边 ==========
@@ -116,22 +116,9 @@ public class InterviewAgentGraph {
                 .addEdge(NodeNames.PROFILE_ANALYSIS, NodeNames.BATCH_QUESTION_GENERATOR)
                 .addEdge(NodeNames.BATCH_QUESTION_GENERATOR, NodeNames.TECHNICAL_ROUND)
 
-                // 技术轮完成后进入轮次切换
+                // 技术轮 → 轮次切换 → 业务轮 → 报告
                 .addEdge(NodeNames.TECHNICAL_ROUND, NodeNames.ROUND_TRANSITION)
-
-                // ========== 轮次路由 ==========
-                .addConditionalEdges(
-                        NodeNames.ROUND_TRANSITION,
-                        state -> CompletableFuture.completedFuture(roundTransitionRouter.route(state)),
-                        Map.of(
-                                RouteDecision.TECHNICAL_TO_BUSINESS.getValue(), NodeNames.BUSINESS_ROUND,
-                                RouteDecision.BUSINESS_DONE.getValue(), NodeNames.GENERATE_REPORT,
-                                RouteDecision.CONTINUE.getValue(), NodeNames.TECHNICAL_ROUND,
-                                RouteDecision.EARLY_END.getValue(), NodeNames.GENERATE_REPORT
-                        )
-                )
-
-                // 业务轮完成后生成报告
+                .addEdge(NodeNames.ROUND_TRANSITION, NodeNames.BUSINESS_ROUND)
                 .addEdge(NodeNames.BUSINESS_ROUND, NodeNames.GENERATE_REPORT)
                 .addEdge(NodeNames.GENERATE_REPORT, END)
 
@@ -163,22 +150,26 @@ public class InterviewAgentGraph {
         subInputMap.put(BatchQuestionGenState.CANDIDATE_PROFILE, mainState.candidateProfile());
         subInputMap.put(BatchQuestionGenState.JOB_CONTEXT, jobAnalysis != null ? jobAnalysis.generateJobSummary() : "");
         subInputMap.put(BatchQuestionGenState.SESSION_ID, mainState.sessionId());
-        subInputMap.put(BatchQuestionGenState.KNOWLEDGE_COMPANY, mainState.knowledgeCompany());
-        subInputMap.put(BatchQuestionGenState.KNOWLEDGE_JOB_POSITION, mainState.knowledgeJobPosition());
-        subInputMap.put(BatchQuestionGenState.TECHNICAL_BASIC_COUNT, jobAnalysis != null ? jobAnalysis.getTechnicalBasicCount() : 3);
-        subInputMap.put(BatchQuestionGenState.PROJECT_COUNT, jobAnalysis != null ? jobAnalysis.getProjectCount() : 3);
-        subInputMap.put(BatchQuestionGenState.BUSINESS_COUNT, jobAnalysis != null ? jobAnalysis.getBusinessCount() : 2);
-        subInputMap.put(BatchQuestionGenState.SOFT_SKILL_COUNT, jobAnalysis != null ? jobAnalysis.getSoftSkillCount() : 2);
+        subInputMap.put(BatchQuestionGenState.KNOWLEDGE_COMPANY, Optional.ofNullable(mainState.knowledgeCompany()).orElse(""));
+        subInputMap.put(BatchQuestionGenState.KNOWLEDGE_JOB_POSITION, Optional.ofNullable(mainState.knowledgeJobPosition()).orElse(""));
+        subInputMap.put(BatchQuestionGenState.TECHNICAL_BASIC_COUNT, jobAnalysis != null ? jobAnalysis.getTechnicalBasicCount() : mainState.maxTechnicalQuestions() / 2);
+        subInputMap.put(BatchQuestionGenState.PROJECT_COUNT, jobAnalysis != null ? jobAnalysis.getProjectCount() : mainState.maxTechnicalQuestions() - mainState.maxTechnicalQuestions() / 2);
+        subInputMap.put(BatchQuestionGenState.BUSINESS_COUNT, jobAnalysis != null ? jobAnalysis.getBusinessCount() : mainState.maxBusinessQuestions() / 2);
+        subInputMap.put(BatchQuestionGenState.SOFT_SKILL_COUNT, jobAnalysis != null ? jobAnalysis.getSoftSkillCount() : mainState.maxBusinessQuestions() - mainState.maxBusinessQuestions() / 2);
 
         // 2. 异步调用子图
         RunnableConfig config = RunnableConfig.builder()
                 .threadId(mainState.sessionId())
                 .addParallelNodeExecutor(StateGraph.START, virtualThreadExecutor)
                 .build();
+
+        // 3. 用 AtomicReference 捕获最后一个状态
+        AtomicReference<NodeOutput<BatchQuestionGenState>> lastStateRef = new AtomicReference<>();
         return compiledBatchQuestionGraph.stream(subInputMap, config)
                 // 使用 reduceAsync 获取最终状态
-                .<NodeOutput<BatchQuestionGenState>>reduceAsync(null, (first, second) -> second)
-                .thenApply(nodeOutput -> {
+                .forEachAsync(lastStateRef::set)
+                .thenApply(voidResult -> {
+                    NodeOutput<BatchQuestionGenState> nodeOutput = lastStateRef.get();
                     // 3. 子图结果 → 主图状态更新
                     if (nodeOutput == null) {
                         log.error("子图执行返回空，触发主图降级和熔断计数");

@@ -48,8 +48,12 @@ public class JobAnalysisNode {
         // 从模板加载 system prompt
         String systemPrompt = promptTemplateService.getPrompt("job-analysis");
 
-        // 构建用户提示
-        String userPrompt = "Job information:\n" + jobInfo;
+        // 构建用户提示（注入前端限制）
+        String userPrompt = promptTemplateService.getPrompt("job-analysis-user", Map.of(
+                "jobInfo", jobInfo,
+                "maxTechnicalQuestions", String.valueOf(state.maxTechnicalQuestions()),
+                "maxBusinessQuestions", String.valueOf(state.maxBusinessQuestions())
+        ));
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
@@ -61,7 +65,7 @@ public class JobAnalysisNode {
                     .entity(JobAnalysisResponseDto.class);
 
             // 单次响应同时解析：岗位分析结果 + 知识库过滤元数据
-            JobAnalysisResult result = parseJobAnalysisResult(response);
+            JobAnalysisResult result = parseJobAnalysisResult(response, state.maxTechnicalQuestions(), state.maxBusinessQuestions());
 
             if (result == null) {
                 // 使用默认配置
@@ -138,9 +142,9 @@ public class JobAnalysisNode {
     }
 
     /**
-     * 解析岗位分析结果
+     * 解析岗位分析结果（含超限兜底）
      */
-    private JobAnalysisResult parseJobAnalysisResult(JobAnalysisResponseDto response) {
+    private JobAnalysisResult parseJobAnalysisResult(JobAnalysisResponseDto response, int maxTechnical, int maxBusiness) {
         try {
             if (response == null) {
                 return null;
@@ -148,13 +152,46 @@ public class JobAnalysisNode {
             Integer jobTypeCode = response.jobTypeCode();
             JobAnalysisResult.JobType jobType = JobAnalysisResult.JobType.fromCode(jobTypeCode);
 
+            int technicalBasic = response.technicalBasicCount() == null ? 3 : response.technicalBasicCount();
+            int project = response.projectCount() == null ? 3 : response.projectCount();
+            int business = response.businessCount() == null ? 2 : response.businessCount();
+            int softSkill = response.softSkillCount() == null ? 2 : response.softSkillCount();
+
+            // 超限兜底：如果 LLM 返回超限，按比例缩放
+            int techTotal = technicalBasic + project;
+            int businessTotal = business + softSkill;
+
+            if (techTotal > maxTechnical) {
+                log.warn("技术轮题目超限: {} > {}, 按比例缩放", techTotal, maxTechnical);
+                technicalBasic = scaleCount(technicalBasic, techTotal, maxTechnical);
+                project = scaleCount(project, techTotal, maxTechnical);
+                // 确保总数不超过限制
+                int adjustedTechTotal = technicalBasic + project;
+                if (adjustedTechTotal > maxTechnical) {
+                    project = maxTechnical - technicalBasic;
+                }
+            }
+
+            if (businessTotal > maxBusiness) {
+                log.warn("业务轮题目超限: {} > {}, 按比例缩放", businessTotal, maxBusiness);
+                business = scaleCount(business, businessTotal, maxBusiness);
+                softSkill = scaleCount(softSkill, businessTotal, maxBusiness);
+                // 确保总数不超过限制
+                int adjustedBusinessTotal = business + softSkill;
+                if (adjustedBusinessTotal > maxBusiness) {
+                    softSkill = maxBusiness - business;
+                }
+            }
+
+            int totalQuestions = (technicalBasic + project) + (business + softSkill);
+
             return JobAnalysisResult.builder()
                     .jobType(jobType)
-                    .technicalBasicCount(response.technicalBasicCount() == null ? 3 : response.technicalBasicCount())
-                    .projectCount(response.projectCount() == null ? 3 : response.projectCount())
-                    .businessCount(response.businessCount() == null ? 2 : response.businessCount())
-                    .softSkillCount(response.softSkillCount() == null ? 2 : response.softSkillCount())
-                    .totalQuestions(response.totalQuestions() == null ? 10 : response.totalQuestions())
+                    .technicalBasicCount(technicalBasic)
+                    .projectCount(project)
+                    .businessCount(business)
+                    .softSkillCount(softSkill)
+                    .totalQuestions(totalQuestions)
                     .keyRequirements(response.keyRequirements() == null ? "" : response.keyRequirements())
                     .techStackSummary(response.techStackSummary() == null ? "" : response.techStackSummary())
                     .businessDomain(response.businessDomain() == null ? "" : response.businessDomain())
@@ -165,6 +202,14 @@ public class JobAnalysisNode {
             log.error("解析岗位分析结果失败: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 优雅兜底：如果 LLM 返回的总数超过限制，按比例缩放
+     * 如果符合限制，直接返回（零开销）
+     */
+    private int scaleCount(int count, int totalCount, int maxCount) {
+        return totalCount <= maxCount ? count : (int) Math.ceil((double) count / totalCount * maxCount);
     }
 
     /**
