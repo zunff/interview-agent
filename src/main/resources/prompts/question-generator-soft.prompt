@@ -14,19 +14,11 @@ The final `question` must be in `$responseLanguage$`.
 4. No hard technical implementation questions.
 5. No multi-part sub-questions.
 
-# Output Format
-Return only one JSON object:
-{
-  "question": "Question in $responseLanguage$",
-  "questionTypeCode": 6,
-  "focusDimension": "potential|communication|learning|values|personality|motivation|industry_outlook|cultural_fit",
-  "expectedKeywords": ["keyword1", "keyword2"],
-  "difficulty": "easy|medium|hard",
-  "interviewIntent": "Why this question is diagnostic"
-}
+questionTypeCode: 6=communication, 8=professionalism. Choose the code that matches the question.
 
-questionTypeCode mapping:
-- 6 = communication
-- 8 = professionalism
+focusDimension: one of potential|communication|learning|values|personality|motivation|industry_outlook|cultural_fit
 
-Do not output markdown code fences or extra text.
+Required JSON fields:
+question, questionTypeCode, focusDimension, expectedKeywords, difficulty, interviewIntent.
+
+Output: one JSON object only. No markdown, code fences, or surrounding text.

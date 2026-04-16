@@ -9,6 +9,8 @@ import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.bo.FollowUpDecisionBO;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.dto.llm.resp.EvaluationResponseDto;
+import com.zunff.interview.model.dto.llm.resp.FollowUpDecisionResponseDto;
 import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -132,13 +134,13 @@ public class MultimodalAnalysisService {
                     "candidateAnswer", transcribedText == null ? "" : transcribedText
             ));
 
-            String response = textChatClient.prompt()
+            EvaluationResponseDto response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
+                    .entity(EvaluationResponseDto.class);
 
-            return parseOmniEvaluationResponse(response);
+            return toEvaluationBO(response);
 
         } catch (Exception e) {
             log.error("纯文本评估失败", e);
@@ -191,13 +193,13 @@ public class MultimodalAnalysisService {
         ));
 
         try {
-            String response = textChatClient.prompt()
+            FollowUpDecisionResponseDto response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
+                    .entity(FollowUpDecisionResponseDto.class);
 
-            return parseFollowUpDecision(response);
+            return toFollowUpDecisionBO(response);
 
         } catch (Exception e) {
             log.error("追问决策失败", e);
@@ -277,31 +279,52 @@ public class MultimodalAnalysisService {
         return suggestion.toString();
     }
 
-    /**
-     * 解析追问决策结果
-     */
-    private FollowUpDecisionBO parseFollowUpDecision(String response) {
-        try {
-            String jsonStr = JsonExtractionUtils.extractJsonObjectString(response);
-            JSONObject json = JSONUtil.parseObj(jsonStr);
-
-            String decision = resolveDecision(json);
-            String followUpType = resolveFollowUpType(json);
-
-            return FollowUpDecisionBO.builder()
-                    .decision(decision)
-                    .followUpQuestion(json.getStr("followUpQuestion", ""))
-                    .reason(json.getStr("reason", ""))
-                    .followUpType(followUpType)
-                    .build();
-
-        } catch (Exception e) {
-            log.error("解析追问决策结果失败: {}", e.getMessage());
-            return FollowUpDecisionBO.builder()
-                    .decision("nextQuestion")
-                    .reason("解析失败")
+    private EvaluationBO toEvaluationBO(EvaluationResponseDto response) {
+        if (response == null) {
+            return EvaluationBO.builder()
+                    .accuracy(60).logic(60).fluency(60).confidence(60)
+                    .emotionScore(70).bodyLanguageScore(70).voiceToneScore(70)
+                    .overallScore(60)
                     .build();
         }
+        int emotionScore = response.emotionScore() == null ? 70 : response.emotionScore();
+        int bodyLanguageScore = response.bodyLanguageScore() == null ? 70 : response.bodyLanguageScore();
+        int voiceToneScore = response.voiceToneScore() == null ? 70 : response.voiceToneScore();
+        return EvaluationBO.builder()
+                .accuracy(response.accuracy() == null ? 70 : response.accuracy())
+                .logic(response.logic() == null ? 70 : response.logic())
+                .fluency(response.fluency() == null ? 70 : response.fluency())
+                .confidence(response.confidence() == null ? 70 : response.confidence())
+                .emotionScore(emotionScore)
+                .bodyLanguageScore(bodyLanguageScore)
+                .voiceToneScore(voiceToneScore)
+                .overallScore(response.overallScore() == null ? 70 : response.overallScore())
+                .strengths(response.strengths() == null ? List.of() : response.strengths())
+                .weaknesses(response.weaknesses() == null ? List.of() : response.weaknesses())
+                .detailedEvaluation(response.detailedEvaluation() == null ? "" : response.detailedEvaluation())
+                .modalityFollowUpSuggestion(buildOmniFollowUpSuggestion(emotionScore, bodyLanguageScore, voiceToneScore))
+                .modalityConcern(emotionScore < 60 || bodyLanguageScore < 60 || voiceToneScore < 60)
+                .build();
+    }
+
+    private FollowUpDecisionBO toFollowUpDecisionBO(FollowUpDecisionResponseDto response) {
+        if (response == null) {
+            return FollowUpDecisionBO.builder()
+                    .decision(RouteDecision.NEXT_QUESTION.getValue())
+                    .reason("Empty decision response")
+                    .build();
+        }
+        JSONObject json = new JSONObject();
+        json.set("decisionCode", response.decisionCode());
+        json.set("decision", response.decision());
+        json.set("followUpTypeCode", response.followUpTypeCode());
+        json.set("followUpType", response.followUpType());
+        return FollowUpDecisionBO.builder()
+                .decision(resolveDecision(json))
+                .followUpQuestion(response.followUpQuestion() == null ? "" : response.followUpQuestion())
+                .reason(response.reason() == null ? "" : response.reason())
+                .followUpType(resolveFollowUpType(json))
+                .build();
     }
 
     private List<String> parseStringList(JSONObject json, String key) {
@@ -371,4 +394,5 @@ public class MultimodalAnalysisService {
         }
         return json.getStr("followUpType", "");
     }
+
 }

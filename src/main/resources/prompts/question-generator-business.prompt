@@ -14,21 +14,9 @@ The final `question` must be in `$responseLanguage$`.
 4. Avoid purely technical implementation questions.
 5. Avoid duplicates with previous questions.
 
-# Output Format
-Return only one JSON object:
-{
-  "question": "Question in $responseLanguage$",
-  "questionTypeCode": 5,
-  "expectedKeywords": ["keyword1", "keyword2"],
-  "difficulty": "easy|medium|hard",
-  "interviewIntent": "What this evaluates",
-  "businessContext": "Relevant business scenario"
-}
+questionTypeCode: 5=business_understanding, 6=communication, 7=problem_solving, 8=professionalism. Choose the code that matches the question.
 
-questionTypeCode mapping:
-- 5 = business_understanding
-- 6 = communication
-- 7 = problem_solving
-- 8 = professionalism
+Required JSON fields:
+question, questionTypeCode, expectedKeywords, difficulty, interviewIntent, businessContext.
 
-Do not output markdown code fences or extra text.
+Output: one JSON object only. No markdown, code fences, or surrounding text.

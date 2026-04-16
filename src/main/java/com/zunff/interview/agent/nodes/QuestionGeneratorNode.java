@@ -1,24 +1,20 @@
 package com.zunff.interview.agent.nodes;
 
-import cn.hutool.json.JSONArray;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.config.KnowledgeConfig;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
+import com.zunff.interview.model.dto.llm.resp.LlmQuestionResultDto;
 import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
 import com.zunff.interview.service.interview.InterviewKnowledgeService;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
-import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,11 +94,11 @@ public class QuestionGeneratorNode {
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
-            String response = chatClient.prompt()
+            LlmQuestionResultDto response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
+                    .entity(LlmQuestionResultDto.class);
 
             // 解析响应
             QuestionResult result = parseQuestionResult(response);
@@ -164,39 +160,24 @@ public class QuestionGeneratorNode {
         }
     }
 
-    private QuestionResult parseQuestionResult(String response) {
-        try {
-            String jsonStr = JsonExtractionUtils.extractJsonObjectString(response);
-            JSONObject json = JSONUtil.parseObj(jsonStr);
-
-            List<String> keywords = new ArrayList<>();
-            JSONArray keywordsArray = json.getJSONArray("expectedKeywords");
-            if (keywordsArray != null && !keywordsArray.isEmpty()) {
-                for (int i = 0; i < keywordsArray.size(); i++) {
-                    keywords.add(keywordsArray.getStr(i));
-                }
-            }
-
+    private QuestionResult parseQuestionResult(LlmQuestionResultDto response) {
+        if (response == null) {
             return QuestionResult.builder()
-                    .question(json.getStr("question", response))
-                    .questionType(resolveQuestionType(json).getDisplayName())
-                    .expectedKeywords(keywords)
-                    .difficulty(json.getStr("difficulty", "medium"))
-                    .reason(json.getStr("reason", json.getStr("interviewIntent", "")))
-                    .build();
-        } catch (Exception e) {
-            log.error("解析问题结果失败: {}", e.getMessage());
-            return QuestionResult.builder()
-                    .question(response)
+                    .question(buildFallbackQuestion())
                     .questionType(QuestionType.TECHNICAL_BASIC.getDisplayName())
                     .difficulty("medium")
                     .build();
         }
-    }
-
-    private QuestionType resolveQuestionType(JSONObject json) {
-        Integer questionTypeCode = json.getInt("questionTypeCode");
-        return QuestionType.fromCode(questionTypeCode);
+        String reason = (response.reason() != null && !response.reason().isBlank())
+                ? response.reason()
+                : response.interviewIntent();
+        return QuestionResult.builder()
+                .question(response.question() == null || response.question().isBlank() ? buildFallbackQuestion() : response.question())
+                .questionType(QuestionType.fromCode(response.questionTypeCode()).getDisplayName())
+                .expectedKeywords(response.expectedKeywords() == null ? List.of() : response.expectedKeywords())
+                .difficulty(response.difficulty() == null || response.difficulty().isBlank() ? "medium" : response.difficulty())
+                .reason(reason == null ? "" : reason)
+                .build();
     }
 
     private String formatPreviousQuestions(List<String> previousQuestions) {
@@ -229,4 +210,5 @@ public class QuestionGeneratorNode {
         private String difficulty;
         private String reason;
     }
+
 }

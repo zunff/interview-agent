@@ -14,31 +14,12 @@ Any candidate-facing text (`followUpQuestion`) and `reason` must be in $response
 
 Priority: deepDive > challengeMode > followUp > nextQuestion.
 
-## Output format
-Return exactly one JSON object:
-{
-  "decision": "deepDive|challengeMode|followUp|nextQuestion",
-  "decisionCode": 1,
-  "followUpQuestion": "Question in $responseLanguage$ or empty string",
-  "reason": "Decision reason in $responseLanguage$",
-  "followUpType": "deep_dive|validate_clarify|add_detail|explore_anomaly|",
-  "followUpTypeCode": 1
-}
+## Codes (authoritative)
+decisionCode: 1=deepDive, 2=challengeMode, 3=followUp, 4=nextQuestion. `decision` must match decisionCode.
 
-decisionCode mapping:
-- 1 = deepDive
-- 2 = challengeMode
-- 3 = followUp
-- 4 = nextQuestion
-`decisionCode` is authoritative; `decision` must match that code.
+followUpTypeCode: 1=deep_dive, 2=validate_clarify, 3=add_detail, 4=explore_anomaly. `followUpType` must match followUpTypeCode.
 
-followUpTypeCode mapping:
-- 1 = deep_dive
-- 2 = validate_clarify
-- 3 = add_detail
-- 4 = explore_anomaly
-`followUpTypeCode` is authoritative; `followUpType` must match that code.
+Required JSON fields:
+decision, decisionCode, followUpQuestion, reason, followUpType, followUpTypeCode.
 
-## Output constraints
-1. Output JSON only.
-2. No markdown, no extra explanation.
+Output: one JSON object only. No markdown, code fences, or surrounding text.

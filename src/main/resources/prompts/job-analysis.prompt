@@ -14,10 +14,10 @@ Question categories:
 3. businessCount - Business scenario questions
 4. softSkillCount - Soft skill questions
 
-Role type:
-- TECHNICAL_DRIVEN - High technical requirements, more technical questions
-- BUSINESS_DRIVEN - High business requirements, more business questions
-- BALANCED - Balanced technical and business requirements
+Role type (via jobTypeCode):
+- 1 = TECHNICAL_DRIVEN — high technical requirements, more technical questions
+- 2 = BUSINESS_DRIVEN — high business requirements, more business questions
+- 3 = BALANCED — balanced technical and business requirements
 
 Rules:
 1. Suggested total questions: 8-12 (adjust based on role complexity)
@@ -31,7 +31,7 @@ Rules:
    - BALANCED: roughly equal distribution between technical and business rounds
 7. Final question count will be limited by frontend parameters (minimum of analysis result and frontend limit)
 
-Metadata extraction rules:
+Metadata extraction:
 1. Extract `company` and `jobPosition` from the same input.
 2. Use only supported values and normalization rules below.
 3. If uncertain, return empty string "".
@@ -60,30 +60,9 @@ Job position normalization:
 - 数分 / 数据开发 -> 数据工程师
 - 云原生 / 云服务工程师 -> 云计算工程师
 
-Return exactly one JSON object:
-{
-  "jobTypeCode": 1,
-  "company": "normalized company name or empty string",
-  "jobPosition": "normalized job position or empty string",
-  "technicalBasicCount": 4,
-  "projectCount": 3,
-  "businessCount": 2,
-  "softSkillCount": 1,
-  "totalQuestions": 10,
-  "keyRequirements": "concise summary of key requirements from job description",
-  "techStackSummary": "key technologies and tools required (for technical roles)",
-  "businessDomain": "business context and domain knowledge required",
-  "softSkillsRequired": "communication, leadership, teamwork, etc."
-}
+`jobTypeCode` is authoritative for role type.
 
-jobTypeCode mapping:
-- 1 = TECHNICAL_DRIVEN (技术驱动型 - high technical requirements, allocate more technical questions)
-- 2 = BUSINESS_DRIVEN (业务驱动型 - high business requirements, allocate more business questions)
-- 3 = BALANCED (均衡型 - balanced technical and business requirements)
+Required JSON fields:
+jobTypeCode (int), company (string), jobPosition (string), technicalBasicCount, projectCount, businessCount, softSkillCount, totalQuestions (integers), keyRequirements, techStackSummary, businessDomain, softSkillsRequired (strings).
 
-`jobTypeCode` determines the job type. Use the code that best matches the role.
-
-Output constraints:
-1. JSON only.
-2. No markdown code fences or extra text.
-3. Do not output values outside the supported company/job lists.
+Output: one JSON object only. No markdown, code fences, or surrounding text. Do not output company/job values outside the supported lists.

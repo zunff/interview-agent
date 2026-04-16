@@ -1,6 +1,7 @@
 package com.zunff.interview.agent.nodes;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.model.dto.llm.vars.ReportUserPromptVars;
 import com.zunff.interview.model.entity.EvaluationRecord;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.extend.PromptTemplateService;
@@ -108,24 +109,26 @@ public class ReportGeneratorNode {
         // 从模板加载 system prompt
         String systemPrompt = promptTemplateService.getPrompt("report-generator");
 
-        String userPrompt = promptTemplateService.getPrompt("report-generator-user", Map.of(
-                "candidateProfile", candidateProfile == null ? "" : candidateProfile,
-                "jobInfo", jobContext == null ? "" : jobContext,
-                "technicalAvgScore", String.format("%.1f", technicalAvgScore),
-                "technicalQuestionsDone", technicalQuestionsDone,
-                "businessAvgScore", String.format("%.1f", businessAvgScore),
-                "businessQuestionsDone", businessQuestionsDone,
-                "avgScore", String.format("%.1f", avgScore),
-                "avgAccuracy", String.format("%.1f", avgAccuracy),
-                "avgLogic", String.format("%.1f", avgLogic),
-                "avgFluency", String.format("%.1f", avgFluency),
-                "avgConfidence", String.format("%.1f", avgConfidence),
-                "avgEmotion", String.format("%.1f", avgEmotion),
-                "avgBodyLanguage", String.format("%.1f", avgBodyLanguage),
-                "avgVoiceTone", String.format("%.1f", avgVoiceTone),
-                "totalQuestions", totalQuestions,
-                "evalSummary", evalSummary.length() == 0 ? "无评估记录" : evalSummary.toString()
-        ));
+        String evalSummaryText = evalSummary.length() == 0 ? "无评估记录" : evalSummary.toString();
+        String userPrompt = promptTemplateService.getPrompt("report-generator-user",
+                new ReportUserPromptVars(
+                        candidateProfile,
+                        jobContext,
+                        technicalQuestionsDone,
+                        businessQuestionsDone,
+                        technicalAvgScore,
+                        businessAvgScore,
+                        avgScore,
+                        avgAccuracy,
+                        avgLogic,
+                        avgFluency,
+                        avgConfidence,
+                        avgEmotion,
+                        avgBodyLanguage,
+                        avgVoiceTone,
+                        totalQuestions,
+                        evalSummaryText
+                ).asMap());
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
@@ -192,4 +195,5 @@ public class ReportGeneratorNode {
         if (text.length() <= maxLength) return text;
         return text.substring(0, maxLength) + "...";
     }
+
 }

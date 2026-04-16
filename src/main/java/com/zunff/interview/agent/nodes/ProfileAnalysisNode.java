@@ -1,9 +1,10 @@
 package com.zunff.interview.agent.nodes;
 
+import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
-import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -56,13 +57,12 @@ public class ProfileAnalysisNode {
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
-            String response = chatClient.prompt()
+            CandidateProfileResponseDto response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
-
-            String candidateProfile = JsonExtractionUtils.extractJsonObjectString(response);
+                    .entity(CandidateProfileResponseDto.class);
+            String candidateProfile = JSONUtil.toJsonStr(response);
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.SELF_INTRO, selfIntro != null ? selfIntro : "");

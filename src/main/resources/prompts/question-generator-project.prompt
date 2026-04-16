@@ -14,16 +14,9 @@ The final `question` must be in `$responseLanguage$`.
 4. Avoid duplicate questions from previous rounds.
 5. Keep natural interview tone.
 
-# Output Format
-Return only one JSON object:
-{
-  "question": "Question in $responseLanguage$",
-  "questionTypeCode": 2,
-  "targetProject": "project name",
-  "expectedKeywords": ["keyword1", "keyword2"],
-  "difficulty": "easy|medium|hard",
-  "interviewIntent": "What this question validates",
-  "starFocus": "S|T|A|R"
-}
+questionTypeCode: use 2 for project_experience unless the prompt context requires otherwise.
 
-Do not output markdown code fences or extra text.
+Required JSON fields:
+question, questionTypeCode, targetProject, expectedKeywords, difficulty, interviewIntent, starFocus (one of S|T|A|R).
+
+Output: one JSON object only. No markdown, code fences, or surrounding text.

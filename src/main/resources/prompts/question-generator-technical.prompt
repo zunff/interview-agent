@@ -25,20 +25,9 @@ Other explanatory fields can follow the same language.
 - project_experience
 - technical_challenge
 
-# Output Format
-Return only one JSON object:
-{
-  "question": "Question in $responseLanguage$",
-  "questionTypeCode": 1,
-  "expectedKeywords": ["keyword1", "keyword2", "keyword3"],
-  "difficulty": "easy|medium|hard",
-  "interviewIntent": "What capability this question evaluates",
-  "coreRequirement": "Mapped core job requirement"
-}
+questionTypeCode: 1=technical_basic, 2=project_experience, 3=technical_challenge. Choose the code that matches the question.
 
-questionTypeCode mapping:
-- 1 = technical_basic
-- 2 = project_experience
-- 3 = technical_challenge
+Required JSON fields:
+question, questionTypeCode, expectedKeywords, difficulty, interviewIntent, coreRequirement.
 
-Do not output markdown code fences or extra text.
+Output: one JSON object only. No markdown, code fences, or surrounding text.

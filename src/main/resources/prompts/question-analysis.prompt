@@ -5,16 +5,10 @@ Task:
 2. Provide a high-quality reference answer.
 3. If input context is limited, provide conservative and explainable output without inventing specific experiences.
 
-Output exactly one JSON object:
-{
-  "interviewIntent": "intent analysis",
-  "standardAnswer": "reference answer"
-}
-
 Field guidance:
 - interviewIntent: concise intent analysis.
 - standardAnswer: structured, professional, and practical answer with key points and examples.
 
-Output constraints:
-1. JSON only.
-2. No markdown code fences or extra text.
+Required JSON fields: interviewIntent, standardAnswer.
+
+Output: one JSON object only. No markdown, code fences, or surrounding text.

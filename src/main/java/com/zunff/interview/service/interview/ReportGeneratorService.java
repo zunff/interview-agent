@@ -1,7 +1,7 @@
 package com.zunff.interview.service.interview;
 
+import com.zunff.interview.model.dto.llm.resp.QuestionAnalysisResultDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
-import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -26,7 +26,7 @@ public class ReportGeneratorService {
      * 生成问题分析
      * 包括考察意图和标准答案
      */
-    public CompletableFuture<QuestionAnalysisResult> generateQuestionAnalysis(
+    public CompletableFuture<QuestionAnalysisResultDto> generateQuestionAnalysis(
             String question,
             String questionType,
             String jobInfo,
@@ -45,37 +45,30 @@ public class ReportGeneratorService {
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
-            String response = chatClient.prompt()
+            QuestionAnalysisResultDto response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
+                    .entity(QuestionAnalysisResultDto.class);
 
-            return CompletableFuture.completedFuture(parseAnalysisResult(response));
+            return CompletableFuture.completedFuture(normalizeAnalysisResult(response));
 
         } catch (Exception e) {
             log.error("生成问题分析失败", e);
             return CompletableFuture.completedFuture(
-                    new QuestionAnalysisResult("分析失败", "标准答案生成失败")
+                    new QuestionAnalysisResultDto("分析失败", "标准答案生成失败")
             );
         }
     }
 
-    /**
-     * 解析分析结果
-     */
-    private QuestionAnalysisResult parseAnalysisResult(String response) {
-        try {
-            String jsonStr = JsonExtractionUtils.extractJsonObjectString(response);
-            cn.hutool.json.JSONObject json = cn.hutool.json.JSONUtil.parseObj(jsonStr);
-
-            return new QuestionAnalysisResult(
-                    json.getStr("interviewIntent", ""),
-                    json.getStr("standardAnswer", "")
-            );
-        } catch (Exception e) {
-            return new QuestionAnalysisResult("分析失败", response);
+    private QuestionAnalysisResultDto normalizeAnalysisResult(QuestionAnalysisResultDto result) {
+        if (result == null) {
+            return new QuestionAnalysisResultDto("分析失败", "");
         }
+        return new QuestionAnalysisResultDto(
+                result.interviewIntent() == null ? "" : result.interviewIntent(),
+                result.standardAnswer() == null ? "" : result.standardAnswer()
+        );
     }
 
     private String buildResumeSummary(String resume) {
@@ -85,11 +78,5 @@ public class ReportGeneratorService {
         return resume.substring(0, Math.min(resume.length(), 500));
     }
 
-    /**
-     * 问题分析结果
-     */
-    public record QuestionAnalysisResult(
-            String interviewIntent,
-            String standardAnswer
-    ) {}
+
 }

@@ -1,13 +1,11 @@
 package com.zunff.interview.agent.nodes;
 
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.dto.llm.resp.JobAnalysisResponseDto;
 import com.zunff.interview.model.websocket.WebSocketMessage;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.state.InterviewState;
-import com.zunff.interview.utils.JsonExtractionUtils;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -56,16 +54,14 @@ public class JobAnalysisNode {
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
-            String response = chatClient.prompt()
+            JobAnalysisResponseDto response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
+                    .entity(JobAnalysisResponseDto.class);
 
             // 单次响应同时解析：岗位分析结果 + 知识库过滤元数据
-            JSONObject json = parseJson(response);
-            JobAnalysisResult result = parseJobAnalysisResult(json);
-            KnowledgeFilter knowledgeFilter = parseKnowledgeFilter(json);
+            JobAnalysisResult result = parseJobAnalysisResult(response);
 
             if (result == null) {
                 // 使用默认配置
@@ -75,8 +71,8 @@ public class JobAnalysisNode {
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.JOB_ANALYSIS_RESULT, result);
-            updates.put(InterviewState.KNOWLEDGE_COMPANY, knowledgeFilter.company);
-            updates.put(InterviewState.KNOWLEDGE_JOB_POSITION, knowledgeFilter.jobPosition);
+            updates.put(InterviewState.KNOWLEDGE_COMPANY, response.company());
+            updates.put(InterviewState.KNOWLEDGE_JOB_POSITION, response.jobPosition());
 
             // 根据岗位分析结果调整题目数量，取 JobAnalysisResult 和前端参数的最小值
             int technicalQuestionsFromAnalysis = result.getTechnicalRoundTotal();
@@ -104,8 +100,8 @@ public class JobAnalysisNode {
                     result.getProjectCount(),
                     result.getBusinessCount(),
                     result.getSoftSkillCount(),
-                    knowledgeFilter.company,
-                    knowledgeFilter.jobPosition,
+                    response.company(),
+                    response.jobPosition(),
                     maxTechnicalQuestions,
                     maxBusinessQuestions
             );
@@ -144,22 +140,25 @@ public class JobAnalysisNode {
     /**
      * 解析岗位分析结果
      */
-    private JobAnalysisResult parseJobAnalysisResult(JSONObject json) {
+    private JobAnalysisResult parseJobAnalysisResult(JobAnalysisResponseDto response) {
         try {
-            Integer jobTypeCode = json.getInt("jobTypeCode");
+            if (response == null) {
+                return null;
+            }
+            Integer jobTypeCode = response.jobTypeCode();
             JobAnalysisResult.JobType jobType = JobAnalysisResult.JobType.fromCode(jobTypeCode);
 
             return JobAnalysisResult.builder()
                     .jobType(jobType)
-                    .technicalBasicCount(json.getInt("technicalBasicCount", 3))
-                    .projectCount(json.getInt("projectCount", 3))
-                    .businessCount(json.getInt("businessCount", 2))
-                    .softSkillCount(json.getInt("softSkillCount", 2))
-                    .totalQuestions(json.getInt("totalQuestions", 10))
-                    .keyRequirements(json.getStr("keyRequirements", ""))
-                    .techStackSummary(json.getStr("techStackSummary", ""))
-                    .businessDomain(json.getStr("businessDomain", ""))
-                    .softSkillsRequired(json.getStr("softSkillsRequired", ""))
+                    .technicalBasicCount(response.technicalBasicCount() == null ? 3 : response.technicalBasicCount())
+                    .projectCount(response.projectCount() == null ? 3 : response.projectCount())
+                    .businessCount(response.businessCount() == null ? 2 : response.businessCount())
+                    .softSkillCount(response.softSkillCount() == null ? 2 : response.softSkillCount())
+                    .totalQuestions(response.totalQuestions() == null ? 10 : response.totalQuestions())
+                    .keyRequirements(response.keyRequirements() == null ? "" : response.keyRequirements())
+                    .techStackSummary(response.techStackSummary() == null ? "" : response.techStackSummary())
+                    .businessDomain(response.businessDomain() == null ? "" : response.businessDomain())
+                    .softSkillsRequired(response.softSkillsRequired() == null ? "" : response.softSkillsRequired())
                     .build();
 
         } catch (Exception e) {
@@ -180,25 +179,5 @@ public class JobAnalysisNode {
                 .softSkillCount(2)
                 .totalQuestions(10)
                 .build();
-    }
-
-    private JSONObject parseJson(String response) {
-        try {
-            String jsonStr = JsonExtractionUtils.extractJsonObjectString(response);
-            return JSONUtil.parseObj(jsonStr);
-        } catch (Exception e) {
-            log.error("解析岗位分析响应失败: {}", e.getMessage());
-            return new JSONObject();
-        }
-    }
-
-    private KnowledgeFilter parseKnowledgeFilter(JSONObject json) {
-        return new KnowledgeFilter(
-                json.getStr("company", ""),
-                json.getStr("jobPosition", "")
-        );
-    }
-
-    private record KnowledgeFilter(String company, String jobPosition) {
     }
 }
