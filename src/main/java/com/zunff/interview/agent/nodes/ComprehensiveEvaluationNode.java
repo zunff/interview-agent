@@ -49,7 +49,8 @@ public class ComprehensiveEvaluationNode {
                 answerAudio != null && !answerAudio.isEmpty() ? "有" : "无");
 
         // 根据问题类型选择评估模板
-        String evaluationPrompt = getEvaluationPromptByQuestionType(questionType);
+        QuestionType type = QuestionType.fromDisplayName(questionType);
+        String evaluationPrompt = type.getEvaluationPrompt();
         log.debug("选择评估模板: {} -> {}", questionType, evaluationPrompt);
 
         try {
@@ -84,23 +85,5 @@ public class ComprehensiveEvaluationNode {
             updates.put(InterviewState.CURRENT_EVALUATION, defaultEval);
             return CompletableFuture.completedFuture(updates);
         }
-    }
-
-    /**
-     * 根据问题类型选择评估 Prompt 模板
-     */
-    private String getEvaluationPromptByQuestionType(String questionType) {
-        if (questionType == null || questionType.isEmpty()) {
-            return "evaluation";
-        }
-
-        QuestionType type = QuestionType.fromDisplayName(questionType);
-        return switch (type) {
-            case TECHNICAL_BASIC, TECHNICAL_CHALLENGE, SYSTEM_DESIGN -> "evaluation-technical";
-            case PROJECT_EXPERIENCE -> "evaluation-project";
-            case BUSINESS_UNDERSTANDING, PROBLEM_SOLVING -> "evaluation-business";
-            case COMMUNICATION, PROFESSIONALISM -> "evaluation-soft";
-            default -> "evaluation";
-        };
     }
 }

@@ -88,11 +88,8 @@ public class MultimodalAnalysisService {
         }
 
         try {
-            // 提取评估类型：evaluation-project -> project，evaluation -> ""
-            String evaluationType = evaluationPromptName.replace("evaluation-", "");
-            String systemPrompt = evaluationType.isEmpty()
-                    ? promptTemplateService.getPrompt("evaluation-omni")
-                    : promptTemplateService.getPrompt("evaluation-omni-" + evaluationType);
+            // 加载评估模板
+            String systemPrompt = promptTemplateService.getPrompt("evaluation-omni-" + evaluationPromptName);
 
             String userPrompt = promptTemplateService.getPrompt("omni-evaluation-user", Map.of(
                     "question", question == null ? "" : question,
@@ -123,11 +120,8 @@ public class MultimodalAnalysisService {
      */
     private EvaluationBO textOnlyEvaluation(String question, String transcribedText, String evaluationPromptName) {
         try {
-            // 提取评估类型：evaluation-project -> project，evaluation -> ""
-            String evaluationType = evaluationPromptName.replace("evaluation-", "");
-            String systemPrompt = evaluationType.isEmpty()
-                    ? promptTemplateService.getPrompt("evaluation-omni")
-                    : promptTemplateService.getPrompt("evaluation-omni-" + evaluationType);
+            // 加载评估模板
+            String systemPrompt = promptTemplateService.getPrompt("evaluation-omni-" + evaluationPromptName);
 
             String userPrompt = promptTemplateService.getPrompt("omni-text-evaluation-user", Map.of(
                     "question", question == null ? "" : question,
