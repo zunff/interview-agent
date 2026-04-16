@@ -51,7 +51,12 @@ public class QuestionGeneratorNode {
         log.info("开始生成面试问题，当前轮次: {}, 问题索引: {}", state.currentRound(), state.questionIndex());
 
         String candidateProfile = state.candidateProfile();
-        String jobInfo = state.jobInfo();
+
+        // 优先使用岗位分析结果，否则降级使用原始岗位信息
+        String jobContext = state.hasJobAnalysisResult()
+                ? state.jobAnalysisResult().generateJobSummary()
+                : state.jobInfo();
+
         List<String> previousQuestions = state.questions();
         int questionIndex = state.questionIndex();
         String currentRound = state.currentRound();
@@ -65,19 +70,19 @@ public class QuestionGeneratorNode {
         // 从知识库检索参考题目
         String referenceContext = "";
         if (isKnowledgeEnabled()) {
-            referenceContext = searchReferenceQuestions(state, jobInfo, round);
+            referenceContext = searchReferenceQuestions(state, jobContext, round);
         }
 
-        String progressLabel = round.isTechnical() ? "技术轮已问问题数" : "业务轮已问问题数";
+        String progressLabel = round.isTechnical() ? "Number of questions asked (Technical round)" : "Number of questions asked (Business round)";
         int doneCount = round.isTechnical() ? state.technicalQuestionsDone() : state.businessQuestionsDone();
         int maxCount = round.isTechnical() ? state.maxTechnicalQuestions() : state.maxBusinessQuestions();
         String firstQuestionHint = round.isTechnical()
-                ? "这是技术轮的第一个问题，请从技术基础或项目经验方面入手。"
-                : "这是业务轮的第一个问题，请从业务场景或软技能方面入手。";
+                ? "This is the first question in the technical round. Please start with technical fundamentals or project experience."
+                : "This is the first question in the business round. Please start with business scenarios or soft skills.";
 
         String userPrompt = promptTemplateService.getPrompt("question-generator-user", Map.ofEntries(
                 Map.entry("candidateProfile", candidateProfile == null ? "" : candidateProfile),
-                Map.entry("jobInfo", jobInfo == null ? "" : jobInfo),
+                Map.entry("jobInfo", jobContext == null ? "" : jobContext),
                 Map.entry("roundDisplayName", round.getDisplayName()),
                 Map.entry("progressLabel", progressLabel),
                 Map.entry("doneCount", doneCount),
@@ -86,7 +91,7 @@ public class QuestionGeneratorNode {
                 Map.entry("hasPreviousQuestions", !previousQuestions.isEmpty()),
                 Map.entry("previousQuestions", formatPreviousQuestions(previousQuestions)),
                 Map.entry("firstQuestionHint", firstQuestionHint),
-                Map.entry("referenceContext", referenceContext == null || referenceContext.isBlank() ? "None" : referenceContext),
+                Map.entry("referenceContext", referenceContext.isBlank() ? "None" : referenceContext),
                 Map.entry("responseLanguage", promptConfig.getResponseLanguage())
         ));
 
@@ -129,11 +134,11 @@ public class QuestionGeneratorNode {
     /**
      * 从知识库检索参考题目
      */
-    private String searchReferenceQuestions(InterviewState state, String jobInfo, InterviewRound round) {
+    private String searchReferenceQuestions(InterviewState state, String jobContext, InterviewRound round) {
         try {
             String questionType = round.isTechnical() ? "技术面" : "业务面";
             List<KnowledgeSearchResult> results = knowledgeService.searchByJobInfo(
-                    jobInfo,
+                    jobContext,
                     questionType,
                     state.knowledgeCompany(),
                     state.knowledgeJobPosition(),

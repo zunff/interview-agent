@@ -32,7 +32,12 @@ public class ReportGeneratorNode {
         log.info("开始生成面试报告");
 
         String candidateProfile = state.candidateProfile();
-        String jobInfo = state.jobInfo();
+
+        // 优先使用岗位分析结果
+        String jobContext = state.hasJobAnalysisResult()
+                ? state.jobAnalysisResult().generateJobSummary()
+                : state.jobInfo();
+
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> evaluations = (List<Map<String, Object>>) state.data()
                 .getOrDefault(InterviewState.EVALUATIONS, List.of());
@@ -70,7 +75,7 @@ public class ReportGeneratorNode {
 
         String userPrompt = promptTemplateService.getPrompt("report-generator-user", Map.of(
                 "candidateProfile", candidateProfile == null ? "" : candidateProfile,
-                "jobInfo", jobInfo == null ? "" : jobInfo,
+                "jobInfo", jobContext == null ? "" : jobContext,
                 "technicalAvgScore", String.format("%.1f", technicalAvgScore),
                 "technicalQuestionsDone", technicalQuestionsDone,
                 "businessAvgScore", String.format("%.1f", businessAvgScore),

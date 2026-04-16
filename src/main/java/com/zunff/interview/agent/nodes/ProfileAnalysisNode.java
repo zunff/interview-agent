@@ -31,7 +31,11 @@ public class ProfileAnalysisNode {
 
         String resume = state.resume();
         String selfIntro = state.selfIntro();
-        String jobInfo = state.jobInfo();
+
+        // 优先使用岗位分析结果，否则降级使用原始岗位信息
+        String jobContext = state.hasJobAnalysisResult()
+                ? state.jobAnalysisResult().generateJobSummary()
+                : state.jobInfo();
 
         if ((selfIntro == null || selfIntro.isEmpty()) && (resume == null || resume.isEmpty())) {
             log.warn("自我介绍和简历均为空，跳过画像分析");
@@ -46,7 +50,7 @@ public class ProfileAnalysisNode {
         String userPrompt = promptTemplateService.getPrompt("profile-analysis-user", Map.of(
                 "resume", resume == null ? "" : resume,
                 "selfIntro", selfIntro == null ? "" : selfIntro,
-                "jobInfo", jobInfo == null ? "" : jobInfo
+                "jobInfo", jobContext == null ? "" : jobContext
         ));
 
         try {

@@ -31,11 +31,15 @@ public class QuestionAnalysisNode {
 
         String question = state.currentQuestion();
         String questionType = state.questionType();
-        String jobInfo = state.jobInfo();
+
+        // 优先使用岗位分析结果
+        String jobContext = state.hasJobAnalysisResult()
+                ? state.jobAnalysisResult().generateJobSummary()
+                : state.jobInfo();
         String candidateProfile = state.candidateProfile();
 
         // 生成问题分析
-        return reportGeneratorService.generateQuestionAnalysis(question, questionType, jobInfo, candidateProfile)
+        return reportGeneratorService.generateQuestionAnalysis(question, questionType, jobContext, candidateProfile)
                 .thenApply(result -> {
                     Map<String, Object> updates = new HashMap<>();
 

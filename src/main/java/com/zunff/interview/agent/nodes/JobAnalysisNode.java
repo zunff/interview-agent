@@ -77,6 +77,16 @@ public class JobAnalysisNode {
             updates.put(InterviewState.JOB_ANALYSIS_RESULT, result);
             updates.put(InterviewState.KNOWLEDGE_COMPANY, knowledgeFilter.company);
             updates.put(InterviewState.KNOWLEDGE_JOB_POSITION, knowledgeFilter.jobPosition);
+
+            // 根据岗位分析结果调整题目数量，取 JobAnalysisResult 和前端参数的最小值
+            int technicalQuestionsFromAnalysis = result.getTechnicalRoundTotal();
+            int businessQuestionsFromAnalysis = result.getBusinessRoundTotal();
+            int maxTechnicalQuestions = Math.min(technicalQuestionsFromAnalysis, state.maxTechnicalQuestions());
+            int maxBusinessQuestions = Math.min(businessQuestionsFromAnalysis, state.maxBusinessQuestions());
+
+            updates.put(InterviewState.MAX_TECHNICAL_QUESTIONS, maxTechnicalQuestions);
+            updates.put(InterviewState.MAX_BUSINESS_QUESTIONS, maxBusinessQuestions);
+
             CircuitBreakerHelper.recordSuccess(updates);
 
             // 通知前端岗位分析已完成（并行时前端需等待此信号才能结束自我介绍截断）
@@ -88,14 +98,16 @@ public class JobAnalysisNode {
                     )
             ));
 
-            log.info("岗位分析完成: 类型={}, 技术基础={}, 项目={}, 业务={}, 软技能={}, 公司={}, 岗位={}",
+            log.info("岗位分析完成: 类型={}, 技术基础={}, 项目={}, 业务={}, 软技能={}, 公司={}, 岗位={}, 实际技术轮={}, 实际业务轮={}",
                     result.getJobType().getDisplayName(),
                     result.getTechnicalBasicCount(),
                     result.getProjectCount(),
                     result.getBusinessCount(),
                     result.getSoftSkillCount(),
                     knowledgeFilter.company,
-                    knowledgeFilter.jobPosition
+                    knowledgeFilter.jobPosition,
+                    maxTechnicalQuestions,
+                    maxBusinessQuestions
             );
 
             return CompletableFuture.completedFuture(updates);
@@ -107,6 +119,13 @@ public class JobAnalysisNode {
             updates.put(InterviewState.JOB_ANALYSIS_RESULT, defaultResult);
             updates.put(InterviewState.KNOWLEDGE_COMPANY, "");
             updates.put(InterviewState.KNOWLEDGE_JOB_POSITION, "");
+
+            // 失败时使用前端参数作为兜底
+            int maxTechnicalQuestions = state.maxTechnicalQuestions();
+            int maxBusinessQuestions = state.maxBusinessQuestions();
+            updates.put(InterviewState.MAX_TECHNICAL_QUESTIONS, maxTechnicalQuestions);
+            updates.put(InterviewState.MAX_BUSINESS_QUESTIONS, maxBusinessQuestions);
+
             CircuitBreakerHelper.handleFailure(state, updates, e);
 
             // 即使分析失败也发送完成信号，避免前端永久等待
@@ -128,20 +147,19 @@ public class JobAnalysisNode {
     private JobAnalysisResult parseJobAnalysisResult(JSONObject json) {
         try {
             Integer jobTypeCode = json.getInt("jobTypeCode");
-            String jobTypeValue = json.getStr("jobType", "BALANCED");
-            JobAnalysisResult.JobType jobType = jobTypeCode != null
-                    ? JobAnalysisResult.JobType.fromCode(jobTypeCode)
-                    : JobAnalysisResult.JobType.fromValue(jobTypeValue);
+            JobAnalysisResult.JobType jobType = JobAnalysisResult.JobType.fromCode(jobTypeCode);
 
             return JobAnalysisResult.builder()
                     .jobType(jobType)
-                    .jobTypeDescription(json.getStr("jobTypeDescription", jobType.getDescription()))
                     .technicalBasicCount(json.getInt("technicalBasicCount", 3))
                     .projectCount(json.getInt("projectCount", 3))
                     .businessCount(json.getInt("businessCount", 2))
                     .softSkillCount(json.getInt("softSkillCount", 2))
                     .totalQuestions(json.getInt("totalQuestions", 10))
-                    .analysisReason(json.getStr("analysisReason", ""))
+                    .keyRequirements(json.getStr("keyRequirements", ""))
+                    .techStackSummary(json.getStr("techStackSummary", ""))
+                    .businessDomain(json.getStr("businessDomain", ""))
+                    .softSkillsRequired(json.getStr("softSkillsRequired", ""))
                     .build();
 
         } catch (Exception e) {
@@ -156,13 +174,11 @@ public class JobAnalysisNode {
     private JobAnalysisResult getDefaultJobAnalysisResult() {
         return JobAnalysisResult.builder()
                 .jobType(JobAnalysisResult.JobType.BALANCED)
-                .jobTypeDescription("balanced")
                 .technicalBasicCount(3)
                 .projectCount(3)
                 .businessCount(2)
                 .softSkillCount(2)
                 .totalQuestions(10)
-                .analysisReason("Use default balanced allocation")
                 .build();
     }
 

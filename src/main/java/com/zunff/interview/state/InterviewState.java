@@ -87,7 +87,6 @@ public class InterviewState extends AgentState {
 
     // ========== 岗位分析 ==========
     public static final String JOB_ANALYSIS_RESULT = "jobAnalysisResult";          // JobAnalysisResult 对象
-    public static final String CURRENT_QUESTION_CATEGORY = "currentQuestionCategory"; // 当前题目类别索引
     public static final String KNOWLEDGE_COMPANY = "knowledgeCompany";
     public static final String KNOWLEDGE_JOB_POSITION = "knowledgeJobPosition";
 
@@ -156,7 +155,6 @@ public class InterviewState extends AgentState {
 
         // 岗位分析
         SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), JobAnalysisResult::new));
-        SCHEMA.put(CURRENT_QUESTION_CATEGORY, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(KNOWLEDGE_COMPANY, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(KNOWLEDGE_JOB_POSITION, Channels.base(new LastValueReducer<>(), () -> ""));
 
@@ -442,16 +440,8 @@ public class InterviewState extends AgentState {
     /**
      * 获取岗位分析结果
      */
-    public com.zunff.interview.model.dto.JobAnalysisResult jobAnalysisResult() {
-        return (com.zunff.interview.model.dto.JobAnalysisResult) data().get(JOB_ANALYSIS_RESULT);
-    }
-
-    /**
-     * 获取当前题目类别索引
-     */
-    public int currentQuestionCategory() {
-        Object value = data().get(CURRENT_QUESTION_CATEGORY);
-        return value instanceof Number ? ((Number) value).intValue() : 0;
+    public JobAnalysisResult jobAnalysisResult() {
+        return (JobAnalysisResult) data().get(JOB_ANALYSIS_RESULT);
     }
 
     /**
