@@ -1,17 +1,16 @@
 package com.zunff.interview.agent.graph;
 
-import com.zunff.interview.agent.nodes.AskQuestionNode;
-import com.zunff.interview.agent.nodes.ChallengeQuestionNode;
-import com.zunff.interview.agent.nodes.ComprehensiveEvaluationNode;
-import com.zunff.interview.agent.nodes.DeepDiveNode;
-import com.zunff.interview.agent.nodes.FollowUpDecisionNode;
-import com.zunff.interview.agent.nodes.GenerateFollowUpNode;
-import com.zunff.interview.agent.nodes.QuestionGeneratorNode;
+import com.zunff.interview.agent.nodes.round.AskQuestionNode;
+import com.zunff.interview.agent.nodes.round.ChallengeQuestionNode;
+import com.zunff.interview.agent.nodes.round.ComprehensiveEvaluationNode;
+import com.zunff.interview.agent.nodes.round.DeepDiveNode;
+import com.zunff.interview.agent.nodes.round.FollowUpDecisionNode;
+import com.zunff.interview.agent.nodes.round.GenerateFollowUpNode;
 import com.zunff.interview.agent.router.EvaluationRouter;
 import com.zunff.interview.constant.InterviewRound;
-import com.zunff.interview.constant.NodeNames;
+import com.zunff.interview.agent.names.NodeNames;
 import com.zunff.interview.constant.RouteDecision;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
@@ -30,12 +29,12 @@ import static org.bsc.langgraph4j.StateGraph.START;
  * 架构：
  * - 返回未编译的 StateGraph，由主图统一编译
  * - 主图使用 addSubGraph() 合并子图，状态共享
+ * - 题目从队列中获取，不再动态生成（追问除外）
  */
 @Slf4j
 @Component
-public class InterviewRoundGraph {
+public class InterviewRoundSubGraph {
 
-    private final QuestionGeneratorNode questionGeneratorNode;
     private final AskQuestionNode askQuestionNode;
     private final GenerateFollowUpNode generateFollowUpNode;
     private final EvaluationRouter evaluationRouter;
@@ -48,8 +47,7 @@ public class InterviewRoundGraph {
     private final ChallengeQuestionNode challengeQuestionNode;
     private final DeepDiveNode deepDiveNode;
 
-    public InterviewRoundGraph(
-            QuestionGeneratorNode questionGeneratorNode,
+    public InterviewRoundSubGraph(
             AskQuestionNode askQuestionNode,
             GenerateFollowUpNode generateFollowUpNode,
             EvaluationRouter evaluationRouter,
@@ -57,7 +55,6 @@ public class InterviewRoundGraph {
             FollowUpDecisionNode followUpDecisionNode,
             ChallengeQuestionNode challengeQuestionNode,
             DeepDiveNode deepDiveNode) {
-        this.questionGeneratorNode = questionGeneratorNode;
         this.askQuestionNode = askQuestionNode;
         this.generateFollowUpNode = generateFollowUpNode;
         this.evaluationRouter = evaluationRouter;
@@ -78,7 +75,6 @@ public class InterviewRoundGraph {
         log.info("创建轮次子图: {}", round.getDisplayName());
 
         String prefix = round.isTechnical() ? NodeNames.TECH_PREFIX : NodeNames.BIZ_PREFIX;
-        String generateQuestion = prefix + NodeNames.GENERATE_QUESTION;
         String askQuestion = prefix + NodeNames.ASK_QUESTION;
         String followUpDecision = prefix + NodeNames.FOLLOW_UP_DECISION;
         String generateFollowUp = prefix + NodeNames.GENERATE_FOLLOW_UP;
@@ -93,7 +89,6 @@ public class InterviewRoundGraph {
         // 返回未编译的 StateGraph，由主图统一编译
         return new StateGraph<>(InterviewState.SCHEMA, InterviewState::new)
                 // ========== 添加节点 ==========
-                .addNode(generateQuestion, questionGeneratorNode::execute)
                 .addNode(askQuestion, askQuestionNode::execute)
 
                 // Omni多模态综合评估（单节点替代并行三分支）
@@ -106,8 +101,8 @@ public class InterviewRoundGraph {
                 .addNode(generateDeepDive, deepDiveNode::execute)
 
                 // ========== 定义边 ==========
-                .addEdge(START, generateQuestion)
-                .addEdge(generateQuestion, askQuestion)
+                // 直接从 START 进入 askQuestion
+                .addEdge(START, askQuestion)
 
                 // 恢复执行后直接进入综合评估
                 .addEdge(askQuestion, comprehensiveEval)

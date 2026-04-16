@@ -1,11 +1,11 @@
-package com.zunff.interview.agent.nodes;
+package com.zunff.interview.agent.nodes.main;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.JobAnalysisResult;
 import com.zunff.interview.model.dto.llm.resp.JobAnalysisResponseDto;
 import com.zunff.interview.model.websocket.WebSocketMessage;
 import com.zunff.interview.service.extend.PromptTemplateService;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;

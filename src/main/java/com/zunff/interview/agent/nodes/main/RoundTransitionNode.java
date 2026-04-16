@@ -1,7 +1,7 @@
-package com.zunff.interview.agent.nodes;
+package com.zunff.interview.agent.nodes.main;
 
 import com.zunff.interview.constant.InterviewRound;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -49,6 +49,7 @@ public class RoundTransitionNode {
                 updates.put(InterviewState.CURRENT_ROUND, InterviewRound.BUSINESS.getCode());
                 updates.put(InterviewState.QUESTION_INDEX, 0);
                 updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
+                // 业务轮索引已在 BatchQuestionGeneratorNode 中初始化为 0，无需额外设置
             } else {
                 log.info("技术轮平均分 {} < 通过分 {}，继续技术轮", avgScore, passScore);
             }

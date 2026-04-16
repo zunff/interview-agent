@@ -1,10 +1,10 @@
-package com.zunff.interview.agent.nodes;
+package com.zunff.interview.agent.nodes.round;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.bo.FollowUpDecisionBO;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

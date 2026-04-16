@@ -1,9 +1,8 @@
-package com.zunff.interview.agent.nodes;
+package com.zunff.interview.agent.nodes.main;
 
 import com.zunff.interview.model.websocket.WebSocketMessage;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;

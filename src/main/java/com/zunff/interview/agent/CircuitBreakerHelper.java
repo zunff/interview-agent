@@ -1,8 +1,7 @@
 package com.zunff.interview.agent;
 
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**

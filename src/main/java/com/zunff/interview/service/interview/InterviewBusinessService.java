@@ -1,7 +1,7 @@
 package com.zunff.interview.service.interview;
 
 import com.zunff.interview.common.exception.BusinessException;
-import com.zunff.interview.constant.NodeNames;
+import com.zunff.interview.agent.names.NodeNames;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
@@ -11,7 +11,7 @@ import com.zunff.interview.model.response.SessionResponse;
 import com.zunff.interview.service.AnswerRecordService;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.CompiledGraph;
@@ -184,9 +184,6 @@ public class InterviewBusinessService {
 
                 // 保存评估结果
                 evaluationRecordService.saveEvaluation(sessionId, evaluation);
-
-                // 推送评估结果到前端
-                webSocketHandler.sendEvaluationResult(sessionId, evaluation);
             }
 
             // 检查是否结束

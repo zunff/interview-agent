@@ -9,6 +9,7 @@ import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.bo.FollowUpDecisionBO;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.dto.llm.vars.FollowUpDecisionUserPromptVars;
 import com.zunff.interview.model.dto.llm.resp.EvaluationResponseDto;
 import com.zunff.interview.model.dto.llm.resp.FollowUpDecisionResponseDto;
 import com.zunff.interview.utils.JsonExtractionUtils;
@@ -165,26 +166,28 @@ public class MultimodalAnalysisService {
                 "responseLanguage", promptConfig.getResponseLanguage()
         ));
 
-        String userPrompt = promptTemplateService.getPrompt("followup-decision-user", Map.ofEntries(
-                Map.entry("question", question == null ? "" : question),
-                Map.entry("answer", answer == null ? "" : answer),
-                Map.entry("overallScore", evaluation.getOverallScore()),
-                Map.entry("accuracy", evaluation.getAccuracy()),
-                Map.entry("logic", evaluation.getLogic()),
-                Map.entry("fluency", evaluation.getFluency()),
-                Map.entry("confidence", evaluation.getConfidence()),
-                Map.entry("strengths", String.join(", ", evaluation.getStrengths())),
-                Map.entry("weaknesses", String.join(", ", evaluation.getWeaknesses())),
-                Map.entry("detailedEvaluation", evaluation.getDetailedEvaluation() == null ? "" : evaluation.getDetailedEvaluation()),
-                Map.entry("emotionScore", evaluation.getEmotionScore()),
-                Map.entry("bodyLanguageScore", evaluation.getBodyLanguageScore()),
-                Map.entry("voiceToneScore", evaluation.getVoiceToneScore()),
-                Map.entry("modalityConcern", evaluation.isModalityConcern()),
-                Map.entry("modalityFollowUpSuggestion", evaluation.getModalityFollowUpSuggestion() == null ? "" : evaluation.getModalityFollowUpSuggestion()),
-                Map.entry("followUpCount", followUpCount),
-                Map.entry("maxFollowUps", maxFollowUps),
-                Map.entry("responseLanguage", promptConfig.getResponseLanguage())
-        ));
+        String userPrompt = promptTemplateService.getPrompt("followup-decision-user",
+                new FollowUpDecisionUserPromptVars(
+                        question == null ? "" : question,
+                        answer == null ? "" : answer,
+                        evaluation.getOverallScore(),
+                        evaluation.getAccuracy(),
+                        evaluation.getLogic(),
+                        evaluation.getFluency(),
+                        evaluation.getConfidence(),
+                        String.join(", ", evaluation.getStrengths()),
+                        String.join(", ", evaluation.getWeaknesses()),
+                        evaluation.getDetailedEvaluation() == null ? "" : evaluation.getDetailedEvaluation(),
+                        evaluation.getEmotionScore(),
+                        evaluation.getBodyLanguageScore(),
+                        evaluation.getVoiceToneScore(),
+                        evaluation.isModalityConcern(),
+                        evaluation.getModalityFollowUpSuggestion() == null ? "" : evaluation.getModalityFollowUpSuggestion(),
+                        followUpCount,
+                        maxFollowUps,
+                        promptConfig.getResponseLanguage()
+                ).asMap()
+        );
 
         try {
             FollowUpDecisionResponseDto response = textChatClient.prompt()
@@ -308,16 +311,11 @@ public class MultimodalAnalysisService {
                     .reason("Empty decision response")
                     .build();
         }
-        JSONObject json = new JSONObject();
-        json.set("decisionCode", response.decisionCode());
-        json.set("decision", response.decision());
-        json.set("followUpTypeCode", response.followUpTypeCode());
-        json.set("followUpType", response.followUpType());
         return FollowUpDecisionBO.builder()
-                .decision(resolveDecision(json))
+                .decision(resolveDecision(response))
                 .followUpQuestion(response.followUpQuestion() == null ? "" : response.followUpQuestion())
                 .reason(response.reason() == null ? "" : response.reason())
-                .followUpType(resolveFollowUpType(json))
+                .followUpType(resolveFollowUpType(response))
                 .build();
     }
 
@@ -357,8 +355,8 @@ public class MultimodalAnalysisService {
         return builder.toString().trim();
     }
 
-    private String resolveDecision(JSONObject json) {
-        Integer decisionCode = json.getInt("decisionCode");
+    private String resolveDecision(FollowUpDecisionResponseDto response) {
+        Integer decisionCode = response.decisionCode();
         if (decisionCode != null) {
             return switch (decisionCode) {
                 case 1 -> RouteDecision.DEEP_DIVE.getValue();
@@ -368,15 +366,15 @@ public class MultimodalAnalysisService {
                 default -> RouteDecision.NEXT_QUESTION.getValue();
             };
         }
-        String decision = json.getStr("decision", RouteDecision.NEXT_QUESTION.getValue());
+        String decision = response.decision();
         if (decision == null || decision.isBlank()) {
             return RouteDecision.NEXT_QUESTION.getValue();
         }
         return decision;
     }
 
-    private String resolveFollowUpType(JSONObject json) {
-        Integer followUpTypeCode = json.getInt("followUpTypeCode");
+    private String resolveFollowUpType(FollowUpDecisionResponseDto response) {
+        Integer followUpTypeCode = response.followUpTypeCode();
         if (followUpTypeCode != null) {
             return switch (followUpTypeCode) {
                 case 1 -> "deep_dive";
@@ -386,7 +384,7 @@ public class MultimodalAnalysisService {
                 default -> "";
             };
         }
-        return json.getStr("followUpType", "");
+        return response.followUpType();
     }
 
 }

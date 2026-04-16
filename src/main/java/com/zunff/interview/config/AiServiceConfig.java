@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -28,16 +27,16 @@ public class AiServiceConfig {
     @Bean
     public RestTemplateCustomizer restTemplateCustomizer() {
         return restTemplate -> {
-            restTemplate.getInterceptors().add((ClientHttpRequestInterceptor) (request, body, execution) -> {
-                log.info("=== RestTemplate HTTP Request ===");
-                log.info("URI: {}", request.getURI());
-                log.info("Method: {}", request.getMethod());
-                log.info("Headers: {}", request.getHeaders());
-                log.info("Body length: {}", body.length);
+            restTemplate.getInterceptors().add((request, body, execution) -> {
+                log.debug("=== RestTemplate HTTP Request ===");
+                log.debug("URI: {}", request.getURI());
+                log.debug("Method: {}", request.getMethod());
+                log.debug("Headers: {}", request.getHeaders());
+                log.debug("Body length: {}", body.length);
                 if (body.length > 0 && body.length < 1000) {
-                    log.info("Body: {}", new String(body));
+                    log.debug("Body: {}", new String(body));
                 }
-                log.info("=================================");
+                log.debug("=================================");
                 return execution.execute(request, body);
             });
         };
@@ -50,15 +49,15 @@ public class AiServiceConfig {
     public RestClient.Builder restClientBuilder() {
         return RestClient.builder()
                 .requestInterceptor((request, body, execution) -> {
-                    log.info("=== RestClient HTTP Request ===");
-                    log.info("URI: {}", request.getURI());
-                    log.info("Method: {}", request.getMethod());
-                    log.info("Headers: {}", request.getHeaders());
-                    log.info("Body length: {}", body != null ? body.length : 0);
-                    if (body != null && body.length > 0 && body.length < 2000) {
-                        log.info("Body: {}", new String(body));
+                    log.debug("=== RestClient HTTP Request ===");
+                    log.debug("URI: {}", request.getURI());
+                    log.debug("Method: {}", request.getMethod());
+                    log.debug("Headers: {}", request.getHeaders());
+                    log.debug("Body length: {}", body.length);
+                    if (body.length > 0 && body.length < 2000) {
+                        log.debug("Body: {}", new String(body));
                     }
-                    log.info("==================================");
+                    log.debug("==================================");
                     return execution.execute(request, body);
                 });
     }

@@ -1,8 +1,9 @@
-package com.zunff.interview.state;
+package com.zunff.interview.agent.state;
 
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.JobAnalysisResult;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
@@ -80,6 +81,12 @@ public class InterviewState extends AgentState {
     public static final String KNOWLEDGE_COMPANY = "knowledgeCompany";
     public static final String KNOWLEDGE_JOB_POSITION = "knowledgeJobPosition";
 
+    // ========== 批量题目队列 ==========
+    public static final String TECHNICAL_QUESTIONS_QUEUE = "technicalQuestionsQueue";  // List<GeneratedQuestion>
+    public static final String BUSINESS_QUESTIONS_QUEUE = "businessQuestionsQueue";    // List<GeneratedQuestion>
+    public static final String CURRENT_TECHNICAL_INDEX = "currentTechnicalIndex";      // 当前技术题索引
+    public static final String CURRENT_BUSINESS_INDEX = "currentBusinessIndex";        // 当前业务题索引
+
     // ========== 熔断机制 ==========
     public static final String CONSECUTIVE_LLM_FAILURES = "consecutiveLLMFailures";
     public static final String MAX_LLM_FAILURES = "maxLLMFailures";                // 默认3
@@ -141,6 +148,12 @@ public class InterviewState extends AgentState {
         SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), JobAnalysisResult::new));
         SCHEMA.put(KNOWLEDGE_COMPANY, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(KNOWLEDGE_JOB_POSITION, Channels.base(new LastValueReducer<>(), () -> ""));
+
+        // 批量题目队列
+        SCHEMA.put(TECHNICAL_QUESTIONS_QUEUE, Channels.base(new LastValueReducer<>(), ArrayList::new));
+        SCHEMA.put(BUSINESS_QUESTIONS_QUEUE, Channels.base(new LastValueReducer<>(), ArrayList::new));
+        SCHEMA.put(CURRENT_TECHNICAL_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
+        SCHEMA.put(CURRENT_BUSINESS_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
 
         // 熔断机制
         SCHEMA.put(CONSECUTIVE_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 0));
@@ -389,14 +402,16 @@ public class InterviewState extends AgentState {
      * 技术轮是否完成
      */
     public boolean isTechnicalRoundComplete() {
-        return technicalQuestionsDone() >= maxTechnicalQuestions();
+        // 基于队列索引判断，而不是计数器
+        return !hasMoreTechnicalQuestions();
     }
 
     /**
      * 业务轮是否完成
      */
     public boolean isBusinessRoundComplete() {
-        return businessQuestionsDone() >= maxBusinessQuestions();
+        // 基于队列索引判断，而不是计数器
+        return !hasMoreBusinessQuestions();
     }
 
     // ========== 岗位分析便捷方法 ==========
@@ -421,6 +436,80 @@ public class InterviewState extends AgentState {
 
     public String knowledgeJobPosition() {
         return (String) data().getOrDefault(KNOWLEDGE_JOB_POSITION, "");
+    }
+
+    // ========== 批量题目队列便捷方法 ==========
+
+    /**
+     * 获取技术轮题目队列
+     */
+    @SuppressWarnings("unchecked")
+    public List<GeneratedQuestion> technicalQuestionsQueue() {
+        return (List<GeneratedQuestion>) data().getOrDefault(TECHNICAL_QUESTIONS_QUEUE, new ArrayList<>());
+    }
+
+    /**
+     * 获取业务轮题目队列
+     */
+    @SuppressWarnings("unchecked")
+    public List<GeneratedQuestion> businessQuestionsQueue() {
+        return (List<GeneratedQuestion>) data().getOrDefault(BUSINESS_QUESTIONS_QUEUE, new ArrayList<>());
+    }
+
+    /**
+     * 获取当前技术题索引
+     */
+    public int currentTechnicalIndex() {
+        Object value = data().get(CURRENT_TECHNICAL_INDEX);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    /**
+     * 获取当前业务题索引
+     */
+    public int currentBusinessIndex() {
+        Object value = data().get(CURRENT_BUSINESS_INDEX);
+        return value instanceof Number ? ((Number) value).intValue() : 0;
+    }
+
+    /**
+     * 是否还有技术题
+     */
+    public boolean hasMoreTechnicalQuestions() {
+        List<?> queue = technicalQuestionsQueue();
+        return currentTechnicalIndex() < queue.size();
+    }
+
+    /**
+     * 是否还有业务题
+     */
+    public boolean hasMoreBusinessQuestions() {
+        List<?> queue = businessQuestionsQueue();
+        return currentBusinessIndex() < queue.size();
+    }
+
+    /**
+     * 获取下一个技术题（不消费）
+     */
+    public GeneratedQuestion peekNextTechnicalQuestion() {
+        List<GeneratedQuestion> queue = technicalQuestionsQueue();
+        int index = currentTechnicalIndex();
+        if (index < queue.size()) {
+            return queue.get(index);
+        }
+        return null;
+    }
+
+    /**
+     * 获取下一个业务题（不消费）
+     */
+    public GeneratedQuestion peekNextBusinessQuestion() {
+        List<GeneratedQuestion> queue = businessQuestionsQueue();
+        int index = currentBusinessIndex();
+        if (index < queue.size()) {
+            return queue.get(index);
+        }
+        return null;
     }
 
     // ========== 多模态分析中间结果便捷方法 ==========

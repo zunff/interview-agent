@@ -11,11 +11,15 @@ $roundDisplayName$
 $progressLabel$: $doneCount$/$maxCount$
 Current Question Index: $questionIndex$
 
+## Batch Generation Request
+Number of Questions to Generate: $count$
+Generate $count$ distinct questions of type "$roundDisplayName$".
+
 ## Previously Asked Questions
 $previousQuestions$
 
 <if(hasPreviousQuestions)>
-Generate the next question and avoid duplicates.
+Generate the next questions and avoid duplicates.
 <else>
 $firstQuestionHint$
 <endif>

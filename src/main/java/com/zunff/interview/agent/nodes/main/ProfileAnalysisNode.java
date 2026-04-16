@@ -1,10 +1,10 @@
-package com.zunff.interview.agent.nodes;
+package com.zunff.interview.agent.nodes.main;
 
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;

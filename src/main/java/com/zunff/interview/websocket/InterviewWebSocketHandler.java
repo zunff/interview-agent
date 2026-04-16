@@ -2,7 +2,7 @@ package com.zunff.interview.websocket;
 
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
@@ -14,7 +14,6 @@ import com.zunff.interview.service.extend.AudioStreamService;
 import com.zunff.interview.service.extend.TtsRealtimeService;
 import com.zunff.interview.service.extend.VideoStreamService;
 import com.zunff.interview.service.interview.InterviewBusinessService;
-import com.zunff.interview.state.InterviewState;
 import com.zunff.interview.utils.AudioUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -318,15 +317,6 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    /**
-     * 发送评估结果
-     */
-    public void sendEvaluationResult(String sessionId, EvaluationBO evaluation) {
-        sendMessage(sessionId, WebSocketMessage.of(
-                WebSocketMessage.Type.EVALUATION_RESULT,
-                evaluation
-        ));
-    }
 
     /**
      * 发送最终报告

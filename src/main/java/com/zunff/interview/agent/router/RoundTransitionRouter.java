@@ -2,7 +2,7 @@ package com.zunff.interview.agent.router;
 
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.RouteDecision;
-import com.zunff.interview.state.InterviewState;
+import com.zunff.interview.agent.state.InterviewState;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

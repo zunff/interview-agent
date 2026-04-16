@@ -42,10 +42,13 @@ sequenceDiagram
     end
     客户端->>服务端: self_intro_complete
 
+    %% 批量题目生成（后端异步执行）
+    note over 服务端: 后端进行人物画像分析<br/>并批量生成所有技术轮和业务轮题目
+
     %% 首题下发（文字）
     服务端-->>客户端: answer_received
     服务端-->>客户端: new_question（第一道技术题）<br/>(问题内容)
-    
+
     %% TTS 音频推送流程
     服务端-->>客户端: audio_question_start<br/>(format: "opus")
     loop 音频流推送
@@ -61,18 +64,17 @@ sequenceDiagram
     end
     客户端->>服务端: answer_complete
 
-    %% 评价与下一题
+    %% 下一题
     服务端-->>客户端: answer_received
-    服务端-->>客户端: evaluation_result
-    服务端-->>客户端: new_question（下一题）
-    
+    服务端-->>客户端: new_question（下一题）<br/>从预生成队列获取或实时生成追问
+
     %% TTS 音频推送流程（重复）
     服务端-->>客户端: audio_question_start<br/>(format: "opus")
     loop 音频流推送
         服务端-->>客户端: BinaryMessage<br/>(Opus 音频块)
     end
     服务端-->>客户端: audio_question_end<br/>(sessionId)
-    
+
     服务端-->>客户端: final_report（面试结束）
 
     %% 循环结束
@@ -101,7 +103,12 @@ sequenceDiagram
 - `jobInfo`（必填）：目标岗位信息
 - `maxQuestions`（可选，默认 10）：最大问题数
 - `maxFollowUps`（可选，默认 2）：每题最大追问数
-- 发送后服务端会先返回 `session_created`，然后异步执行图生成第一道题
+- 发送后服务端会先返回 `session_created`，然后异步执行：
+  1. 岗位分析（并行）
+  2. 自我介绍阶段等待（interrupt）
+  3. 人物画像分析
+  4. 批量题目生成（并行生成技术轮和业务轮所有题目）
+  5. 推送第一道技术题
 - 第一道题通过 `new_question` 推送，同时推送 TTS 语音
 
 ### video_frame - 发送视频帧
@@ -161,7 +168,7 @@ sequenceDiagram
 
 ### self_intro_complete - 自我介绍完成信号
 
-**用途**：触发自我介绍 STT 转写、候选人画像分析和第一道技术题生成
+**用途**：触发人物画像分析、批量题目生成和第一道技术题推送
 
 **请求参数**：
 ```json
@@ -173,8 +180,12 @@ sequenceDiagram
 **说明**：
 - 发送此信号表示候选人已完成自我介绍
 - 服务端会停止 ASR 识别，获取实时转录结果，然后恢复图执行
-- 处理完成后会推送 `new_question`（第一道技术题）
+- 后续流程：
+  1. 人物画像分析（结合简历 + 自我介绍）
+  2. 批量题目生成（并行生成技术轮和业务轮所有题目）
+  3. 推送第一道技术题（`new_question`）
 - 此阶段不进行视觉分析，前端只需发送 `audio_start` + `audio_chunk`
+- 批量题目生成通常在 2-5 秒内完成，前端无感知
 
 ### answer_complete - 回答完成信号
 
@@ -297,6 +308,10 @@ sequenceDiagram
 **说明**：
 - 推送问题文本后，会紧接着推送 TTS 语音合成音频
 - TTS 音频通过独立流程推送：`audio_question_start` → BinaryMessage → `audio_question_end`
+- **题目来源**：
+  - 普通题目：从批量预生成的队列中获取（`questionIndex` 为预编号）
+  - 追问题目：实时生成（`isFollowUp` 为 true）
+- 批量预生成机制保证了题目推送的低延迟，追问题目为实时生成以适应动态评估结果
 
 ### evaluation_result - 答案评估结果
 

@@ -1,6 +1,6 @@
 # AI 面试官系统
 
-基于 Spring AI Alibaba + LangGraph4j 构建的多模态 AI 面试系统，支持实时视频分析、语音评估和智能追问。
+基于 Spring AI + LangGraph4j 构建的多模态 AI 面试系统，支持实时视频分析、语音评估和智能追问。
 
 ## 技术栈
 
@@ -8,8 +8,8 @@
 |------|------|------|
 | Java | 21 | 支持 Virtual Threads |
 | Spring Boot | 3.4.4 | 基础框架 |
-| Spring AI | 1.0.0 | Spring 官方 AI 框架 |
-| Spring AI Alibaba | 1.0.0.2 | DashScope 原生集成（Chat/Vision/ASR） |
+| Spring AI | 1.0.0 | Spring 官方 AI 框架（OpenAI 兼容 API） |
+| DashScope SDK | 2.22.5 | 阿里云灵积模型服务 SDK（ASR/TTS） |
 | LangGraph4j | 1.8.11 | 有状态多步骤工作流引擎 |
 | PostgreSQL + pgvector | - | 数据库与向量存储 |
 | MyBatis-Plus | 3.5.9 | ORM 框架 |
@@ -30,7 +30,7 @@
 
 ## 整体架构
 
-系统采用 **LangGraph4j 主图 + 子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析 ‖ 自我介绍 → 技术轮 → 业务轮 → 报告），每个轮次通过可复用的子图实例执行。
+系统采用 **LangGraph4j 主图 + 批量题目生成子图 + 轮次子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析 ‖ 自我介绍 → 人物画像 → 批量题目生成 → 技术轮 → 业务轮 → 报告），批量题目子图并行生成所有题目，每个轮次通过可复用的子图实例执行。
 
 ```mermaid
 graph TD
@@ -38,17 +38,19 @@ graph TD
 
     subgraph InterviewAgentGraph[主图]
         INIT[InitInterviewNode<br/>初始化面试] --> JOB[JobAnalysisNode<br/>岗位分析]
-        INIT --> SELF[SelfIntroNode<br/>自我介绍]
+        INIT --> SELF[SelfIntroNode<br/>自我介绍<br/>interrupt]
 
         JOB --> PROFILE[ProfileAnalysisNode<br/>人物画像分析]
         SELF --> PROFILE
 
-        PROFILE --> TECH[InterviewRoundGraph<br/>技术轮子图]
+        PROFILE --> BATCH[BatchQuestionSubgraph<br/>批量题目生成子图<br/>并行生成所有题目]
+
+        BATCH --> TECH[InterviewRoundGraph<br/>技术轮子图<br/>从队列获取题目]
 
         TECH --> ROUTER{RoundTransitionNode<br/>轮次决策}
 
         ROUTER -->|技术轮未完成| TECH
-        ROUTER -->|切换业务轮| BIZ[InterviewRoundGraph<br/>业务轮子图]
+        ROUTER -->|切换业务轮| BIZ[InterviewRoundGraph<br/>业务轮子图<br/>从队列获取题目]
         ROUTER -->|提前结束| REPORT[ReportGeneratorNode<br/>生成报告]
 
         BIZ --> ROUTER
@@ -60,40 +62,73 @@ graph TD
     START --> INIT
 ```
 
-### 子图架构（Omni 综合评估 + 多分支追问）
+### 批量题目生成子图（并行生成）
 
 ```mermaid
 graph TD
-    SUB_START((START))
+    BATCH_START((START))
 
-    subgraph InterviewRoundGraph[子图]
-        GEN[QuestionGeneratorNode<br/>生成问题] --> ASK[AskQuestionNode<br/>记录问题]
+    subgraph BatchQuestionSubgraph[批量题目生成子图]
+        BATCH_START --> TECH_BASIC[TechBasicGenNode<br/>技术基础题]
+        BATCH_START --> PROJECT[ProjectGenNode<br/>项目经验题]
+        BATCH_START --> BUSINESS[BusinessGenNode<br/>业务理解题]
+        BATCH_START --> SOFT_SKILL[SoftSkillGenNode<br/>软技能题]
 
-        ASK --> EVAL[ComprehensiveEvaluationNode<br/>Omni多模态综合评估]
+        TECH_BASIC --> AGG[AggregateResultsNode<br/>聚合+重新编号]
+        PROJECT --> AGG
+        BUSINESS --> AGG
+        SOFT_SKILL --> AGG
 
-        EVAL --> DECISION{FollowUpDecisionNode<br/>追问决策<br/>LLM决策+路由保护}
+        AGG --> SIDE_EFFECTS[HandleSideEffectsNode<br/>处理副作用]
+        SIDE_EFFECTS --> BATCH_END((END))
+    end
+```
 
-        DECISION -->|得分 < 50| DEEP[DeepDiveNode<br/>深入追问]
-        DECISION -->|得分 > 90| CHALLENGE[ChallengeQuestionNode<br/>挑战问题]
-        DECISION -->|普通追问| FOLLOW[GenerateFollowUpNode<br/>生成追问<br/>累加followUpCount]
-        DECISION -->|下一题| SUB_END((END))
+**批量生成流程**：
+- 人物画像分析完成后，立即调用批量题目生成子图
+- 4类题目并行生成（技术基础、项目经验、业务理解、软技能）
+- 聚合节点负责合并题目并重新编号
+- 生成完成后题目存入状态队列，轮次执行时直接获取（追问除外）
 
-        DEEP --> ASK
-        CHALLENGE --> ASK
-        FOLLOW --> ASK
+### 轮次子图架构（Omni 综合评估 + 多分支追问）
+
+```mermaid
+graph TD
+    START((开始))
+
+    subgraph InterviewRoundGraph[轮次子图]
+        ASK[AskQuestionNode<br/>从队列获取问题]
+        EVAL[ComprehensiveEvaluationNode<br/>Omni多模态综合评估]
+        DECISION{FollowUpDecisionNode<br/>追问决策}
+        DEEP[DeepDiveNode<br/>深入追问]
+        CHALLENGE[ChallengeQuestionNode<br/>挑战问题]
+        FOLLOW[GenerateFollowUpNode<br/>生成追问]
+        END((结束))
     end
 
-    SUB_START --> GEN
+    START --> ASK
+    ASK --> EVAL
+    EVAL --> DECISION
+
+    DECISION -->|得分 &lt; 50<br/>低分深入| DEEP
+    DECISION -->|得分 &gt; 90<br/>高分挑战| CHALLENGE
+    DECISION -->|普通追问| FOLLOW
+    DECISION -->|下一题| END
+
+    DEEP -.->|生成追问问题| ASK
+    CHALLENGE -.->|生成挑战问题| ASK
+    FOLLOW -.->|生成普通追问| ASK
 ```
 
 ### 关键架构特性
 
 | 特性 | 说明 |
 |------|------|
-| **并行初始化** | 岗位分析与自我介绍并行执行，前端需同时收到两个完成信号后才可推进。使用 LangGraph4j 的并行节点执行机制，通过 `addParallelNodeExecutor` 配置虚拟线程池实现真正的并行执行 |
+| **并行初始化** | 岗位分析与自我介绍并行执行，前端需同时收到两个完成信号后才可推进。使用 LangGraph4j 的并行节点执行机制实现真正的并行 |
+| **批量题目生成** | 人物画像分析完成后，通过 BatchQuestionSubgraph 并行生成所有技术轮和业务轮题目，提升响应速度，避免每题等待生成 |
 | **Omni 综合评估** | 一次调用 Qwen-Omni 同时分析文本+音频+视频帧，模型可交叉理解多模态信号 |
 | **时间戳对齐** | 转录文本和关键帧都携带 UTC 时间戳，模型可根据时间对应关系综合判断 |
-| **多分支路由** | 根据得分动态选择追问策略（低分深入/高分挑战/普通追问），追问次数在生成阶段累加而非决策阶段 |
+| **多分支路由** | 根据得分动态选择追问策略（低分深入/高分挑战/普通追问），追问为实时生成 |
 | **多模态降级** | multimodalEnabled=false 时自动降级为纯文本评估（qwen3.5-flash） |
 | **虚拟线程池** | 使用 Java 21 虚拟线程提供高性能异步执行，统一管理所有异步任务（面试启动、TTS 合成、图并行节点等） |
 
@@ -140,12 +175,40 @@ graph LR
     OMNI --> SCORE["综合评分<br/>语义75% + 语音15% + 视觉10%"]
 ```
 
+### 批量题目生成流程
+
+**生成时机**：人物画像分析完成后立即触发
+
+**并行策略**：
+- 使用 LangGraph4j 的并行节点机制，同时启动 4 个生成节点
+- 每个节点独立调用 LLM，生成特定类型的题目
+- 虚拟线程池保证真正的并行执行，而非并发调度
+
+**题目类型**：
+| 节点 | 题目类型 | 数量配置 | 说明 |
+|------|----------|----------|------|
+| TechBasicGenNode | 技术基础 | jobAnalysis.technicalBasicCount | 基于岗位要求的技术栈 |
+| ProjectGenNode | 项目经验 | jobAnalysis.projectCount | 基于简历项目经历 |
+| BusinessGenNode | 业务理解 | jobAnalysis.businessCount | 基于岗位业务场景 |
+| SoftSkillGenNode | 软技能 | jobAnalysis.softSkillCount | 沟通、协作、职业素养 |
+
+**结果处理**：
+1. **聚合**：AggregateResultsNode 将 4 类题目合并为技术轮和业务轮两个队列
+2. **重新编号**：技术轮题目（技术基础 + 项目经验）、业务轮题目（业务理解 + 软技能）分别编号
+3. **降级保护**：如果技术题生成全部失败，使用默认题目避免面试中断
+
+**性能优势**：
+- 相比逐题生成，批量并行生成可节省约 60-70% 的初始化时间
+- 提前发现生成错误，降级策略保证系统可用性
+- 轮次执行时直接从队列获取，无需等待 LLM 响应
+
 ### 熔断与容错
 
 - **LLM 熔断**: 连续失败 3 次自动终止图执行，`CircuitBreakerHelper` 统一管理
 - **重试策略**: 最大重试 3 次，指数退避（1s→2s→4s），仅对 429/5xx 重试
 - **递归限制**: 可配置，防止图执行死循环
 - **节点兜底**: 各节点 catch 异常后返回默认值并递增失败计数
+- **批量生成降级**: 如果技术题生成全部失败，使用预设默认题目
 
 ## 前后端交互
 
@@ -208,14 +271,32 @@ sequenceDiagram
 src/main/java/com/zunff/interview/
 ├── agent/
 │   ├── graph/                           # LangGraph4j 图定义
-│   │   ├── InterviewAgentGraph.java     # 主图（岗位分析 ‖ 自我介绍 → 技术轮 → 业务轮 → 报告）
-│   │   └── InterviewRoundGraph.java     # 轮次子图（综合评估+多分支追问）
+│   │   ├── InterviewAgentGraph.java     # 主图（岗位分析 ‖ 自我介绍 → 人物画像 → 批量题目生成 → 技术轮 → 业务轮 → 报告）
+│   │   ├── InterviewRoundGraph.java     # 轮次子图（综合评估+多分支追问）
+│   │   └── BatchQuestionSubgraph.java   # 批量题目生成子图（并行生成4类题目）
 │   ├── nodes/                           # 图节点
-│   │   ├── ComprehensiveEvaluationNode.java  # Omni多模态综合评估节点
-│   │   ├── FollowUpDecisionNode.java    # 追问决策节点
-│   │   ├── ChallengeQuestionNode.java   # 高分挑战节点
-│   │   ├── DeepDiveNode.java            # 低分深入追问节点
-│   │   └── ...
+│   │   ├── main/                        # 主图节点
+│   │   │   ├── InitInterviewNode.java
+│   │   │   ├── JobAnalysisNode.java
+│   │   │   ├── SelfIntroNode.java
+│   │   │   ├── ProfileAnalysisNode.java
+│   │   │   ├── ReportGeneratorNode.java
+│   │   │   └── RoundTransitionNode.java
+│   │   ├── round/                       # 轮次子图节点
+│   │   │   ├── AskQuestionNode.java     # 从队列获取问题
+│   │   │   ├── ComprehensiveEvaluationNode.java  # Omni多模态综合评估
+│   │   │   ├── FollowUpDecisionNode.java
+│   │   │   ├── ChallengeQuestionNode.java
+│   │   │   ├── DeepDiveNode.java
+│   │   │   └── GenerateFollowUpNode.java
+│   │   └── question/                    # 批量题目生成节点
+│   │       └── gen/
+│   │           ├── TechBasicGenNode.java      # 技术基础题生成
+│   │           ├── ProjectGenNode.java        # 项目经验题生成
+│   │           ├── BusinessGenNode.java       # 业务理解题生成
+│   │           ├── SoftSkillGenNode.java      # 软技能题生成
+│   │           ├── AggregateResultsNode.java  # 结果聚合+重新编号
+│   │           └── HandleSideEffectsNode.java # 副作用处理
 │   └── router/                          # 路由决策
 │       ├── EvaluationRouter.java        # 追问路由（多分支）
 │       └── RoundTransitionRouter.java   # 轮次切换路由
@@ -232,7 +313,8 @@ src/main/java/com/zunff/interview/
 │       ├── AudioStreamService.java      # 音频流（ASR转发+PCM缓存）
 │       └── VideoStreamService.java      # 视频帧缓存
 ├── state/
-│   └── InterviewState.java              # 面试状态定义
+│   ├── InterviewState.java              # 面试状态定义
+│   └── BatchQuestionGenState.java       # 批量题目生成状态
 └── websocket/                           # WebSocket 处理
 ```
 
@@ -251,6 +333,8 @@ src/main/java/com/zunff/interview/
 
 ```yaml
 interview:
+  graph:
+    main-recursion-limit: 25      # 主图最大递归深度（防止死循环）
   session:
     max-technical-questions: 6   # 技术轮最大问题数
     max-business-questions: 4    # 业务轮最大问题数
@@ -261,14 +345,31 @@ interview:
     max-follow-ups-business: 2   # 业务轮每题最大追问数
   multimodal:
     enabled: true                # 多模态评估开关（false 时降级为纯文本评估）
+    omni:
+      model: qwen3.5-omni-plus-2026-03-15  # Omni 多模态模型
+    asr:
+      model: fun-asr-realtime-2026-02-28   # ASR 实时语音识别模型
+      url: wss://dashscope.aliyuncs.com/api-ws/v1/inference
+      language: zh
+      input-audio-format: pcm
+      sample-rate: 16000
+      vocabulary-id:              # 热词表ID（可选，提升专业术语识别准确率）
+  tts:
+    enabled: true                # TTS 语音提问开关
+    model: qwen3-tts-instruct-flash-realtime-2026-01-22
+    voice: Ethan                 # 语音角色
+  knowledge:
+    enabled: true                # 知识库检索开关
 
 spring:
   ai:
-    dashscope:
-      asr:
-        model: fun-asr-realtime-2026-02-28    # ASR 模型
-        url: wss://dashscope.aliyuncs.com/api-ws/v1/inference
-        vocabulary-id:                         # 热词表ID（可选）
+    openai:
+      api-key: ${DASHSCOPE_API_KEY}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      chat:
+        options:
+          model: qwen3.5-plus    # 主对话模型（用于题目生成、追问决策等）
+          temperature: 0.7
 ```
 
 ### ASR 热词配置
@@ -283,8 +384,8 @@ Fun-ASR 支持通过热词表提升程序员面试场景的识别准确率。使
 
 - [LangGraph4j 官方文档](https://langgraph4j.github.io/langgraph4j/)
 - [Spring AI 官方文档](https://docs.spring.io/spring-ai/reference/)
-- [Spring AI Alibaba 官方文档](https://java2ai.com/)
 - [通义千问 API 文档](https://help.aliyun.com/zh/dashscope/)
+- [DashScope OpenAI 兼容 API](https://help.aliyun.com/zh/dashscope/developer-reference/compatibility-of-openai-with-dashscope/)
 
 ## License
 
