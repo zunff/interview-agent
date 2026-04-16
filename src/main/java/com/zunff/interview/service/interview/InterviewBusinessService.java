@@ -189,7 +189,7 @@ public class InterviewBusinessService {
             // 检查是否结束
             if (finalState.isFinished()) {
                 log.info("面试已结束，sessionId: {}", sessionId);
-                return InterviewAnswerResponse.finishedWith(finalState.getFinalReport());
+                return InterviewAnswerResponse.finished();
             }
 
             // 新问题由 AskQuestionNode 统一推送，此处只返回响应
@@ -223,33 +223,28 @@ public class InterviewBusinessService {
     }
 
     /**
-     * 结束面试
+     * 结束面试（手动提前结束）
      */
     public ReportResponse endInterview(String sessionId) {
-        RunnableConfig config = RunnableConfig.builder()
-                .threadId(sessionId)
-                .build();
+        var session = sessionService.getBySessionId(sessionId);
+        if (session == null) {
+            throw new BusinessException(1001, "面试会话不存在");
+        }
 
         try {
-            Map<String, Object> finalUpdate = new HashMap<>();
-            finalUpdate.put(InterviewState.IS_FINISHED, true);
-            interviewAgent.updateState(config, finalUpdate);
-
-            StateSnapshot<InterviewState> snapshot = interviewAgent.getState(config);
-            String report = snapshot != null && snapshot.state() != null
-                    ? snapshot.state().getFinalReport()
-                    : "";
+            // 标记面试结束
+            sessionService.endSession(sessionId);
 
             // 计算平均分
             Double averageScore = evaluationRecordService.calculateAverageScore(sessionId);
-            log.info("面试平均分: {}", averageScore);
+            log.info("面试提前结束，平均分: {}", averageScore);
 
-            sessionService.endSession(sessionId);
-            sessionService.saveReport(sessionId, report);
+            // 从数据库获取报告（如果已生成）
+            String report = session.getReport();
 
             return ReportResponse.builder()
                     .sessionId(sessionId)
-                    .report(report)
+                    .report(report != null ? report : "")
                     .status("ended")
                     .build();
 
@@ -260,7 +255,7 @@ public class InterviewBusinessService {
     }
 
     /**
-     * 获取报告
+     * 获取报告（从数据库读取）
      */
     public ReportResponse getReport(String sessionId) {
         var session = sessionService.getBySessionId(sessionId);
@@ -268,26 +263,16 @@ public class InterviewBusinessService {
             throw new BusinessException(1001, "面试会话不存在");
         }
 
-        RunnableConfig config = RunnableConfig.builder()
-                .threadId(sessionId)
-                .build();
-
-        try {
-            StateSnapshot<InterviewState> snapshot = interviewAgent.getState(config);
-            String report = snapshot != null && snapshot.state() != null
-                    ? snapshot.state().getFinalReport()
-                    : session.getReport();
-
-            return ReportResponse.builder()
-                    .sessionId(sessionId)
-                    .report(report)
-                    .status(session.getStatus())
-                    .build();
-
-        } catch (Exception e) {
-            log.error("获取报告失败", e);
-            throw new BusinessException(1005, "获取报告失败: " + e.getMessage());
+        String report = session.getReport();
+        if (report == null || report.isEmpty()) {
+            throw new BusinessException(1005, "报告尚未生成");
         }
+
+        return ReportResponse.builder()
+                .sessionId(sessionId)
+                .report(report)
+                .status(session.getStatus())
+                .build();
     }
 
     /**

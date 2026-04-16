@@ -4,11 +4,14 @@ import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.model.dto.llm.vars.ReportUserPromptVars;
 import com.zunff.interview.model.entity.EvaluationRecord;
 import com.zunff.interview.service.EvaluationRecordService;
+import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.agent.state.InterviewState;
+import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -18,16 +21,30 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * 报告生成节点
- * 面试结束后生成综合评估报告
+ * 面试结束后生成综合评估报告，并通过 WebSocket 推送给前端
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ReportGeneratorNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
     private final EvaluationRecordService evaluationRecordService;
+    private final InterviewSessionService sessionService;
+    private final InterviewWebSocketHandler webSocketHandler;
+
+    public ReportGeneratorNode(
+            ChatClient.Builder chatClientBuilder,
+            PromptTemplateService promptTemplateService,
+            EvaluationRecordService evaluationRecordService,
+            InterviewSessionService sessionService,
+            @Lazy InterviewWebSocketHandler webSocketHandler) {
+        this.chatClientBuilder = chatClientBuilder;
+        this.promptTemplateService = promptTemplateService;
+        this.evaluationRecordService = evaluationRecordService;
+        this.sessionService = sessionService;
+        this.webSocketHandler = webSocketHandler;
+    }
 
     /**
      * 执行报告生成
@@ -171,8 +188,13 @@ public class ReportGeneratorNode {
 
             String fullReport = reportHeader + report;
 
+            // 保存报告到数据库
+            sessionService.saveReport(sessionId, fullReport);
+
+            // 通过 WebSocket 推送报告给前端
+            webSocketHandler.sendFinalReport(sessionId, fullReport);
+
             Map<String, Object> updates = new HashMap<>();
-            updates.put(InterviewState.FINAL_REPORT, fullReport);
             updates.put(InterviewState.IS_FINISHED, true);
             CircuitBreakerHelper.recordSuccess(updates);
 
@@ -184,7 +206,6 @@ public class ReportGeneratorNode {
             log.error("生成报告失败", e);
             Map<String, Object> updates = new HashMap<>();
             CircuitBreakerHelper.handleFailure(state, updates, e);
-            updates.put(InterviewState.FINAL_REPORT, "报告生成失败，请稍后重试。");
             updates.put(InterviewState.IS_FINISHED, true);
             return CompletableFuture.completedFuture(updates);
         }

@@ -22,9 +22,6 @@ public class InterviewAnswerResponse {
     @Schema(description = "下一个问题（状态为continue时返回）")
     private QuestionInfo question;
 
-    @Schema(description = "面试报告（状态为finished时返回）")
-    private String report;
-
     @Data
     @Builder
     @NoArgsConstructor
@@ -53,10 +50,9 @@ public class InterviewAnswerResponse {
                 .build();
     }
 
-    public static InterviewAnswerResponse finishedWith(String report) {
+    public static InterviewAnswerResponse finished() {
         return InterviewAnswerResponse.builder()
                 .status("finished")
-                .report(report)
                 .build();
     }
 }

@@ -28,34 +28,6 @@ import org.springframework.web.bind.annotation.*;
 public class InterviewController {
 
     private final InterviewBusinessService interviewBusinessService;
-
-    @Operation(summary = "【测试用】提交答案", description = "测试时通过 HTTP 提交文本答案，生产环境使用 WebSocket 的 answer_complete 信号")
-    @PostMapping("/answer")
-    public ApiResponse<InterviewAnswerResponse> submitAnswer(@Valid @RequestBody SubmitAnswerRequest request) {
-        log.info("提交答案，会话: {}", request.getSessionId());
-        InterviewAnswerResponse response = interviewBusinessService.submitAnswer(request);
-        return ApiResponse.success(response);
-    }
-
-
-    @Operation(summary = "获取会话状态", description = "获取当前面试会话的状态信息")
-    @GetMapping("/session/{sessionId}")
-    public ApiResponse<SessionResponse> getSession(
-            @Parameter(description = "面试会话ID", required = true) @PathVariable String sessionId) {
-        SessionResponse response = interviewBusinessService.getSessionStatus(sessionId);
-        return ApiResponse.success(response);
-    }
-
-
-    @Operation(summary = "结束面试", description = "结束当前面试会话并生成评估报告")
-    @PostMapping("/end/{sessionId}")
-    public ApiResponse<ReportResponse> endInterview(
-            @Parameter(description = "面试会话ID", required = true) @PathVariable String sessionId) {
-        log.info("结束面试，会话: {}", sessionId);
-        ReportResponse response = interviewBusinessService.endInterview(sessionId);
-        return ApiResponse.success(response);
-    }
-
     @Operation(summary = "获取面试报告", description = "获取已完成面试的评估报告")
     @GetMapping("/report/{sessionId}")
     public ApiResponse<ReportResponse> getReport(

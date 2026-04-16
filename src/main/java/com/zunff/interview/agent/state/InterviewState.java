@@ -55,7 +55,6 @@ public class InterviewState extends AgentState {
     public static final String DECISION = "decision";  // 路由决策: followUp/deepDive/challengeMode/nextQuestion
 
     // ========== 最终报告 ==========
-    public static final String FINAL_REPORT = "finalReport";
     public static final String IS_FINISHED = "isFinished";
 
     // ========== 轮次管理 ==========
@@ -129,7 +128,6 @@ public class InterviewState extends AgentState {
         SCHEMA.put(FOLLOW_UP_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(FOLLOW_UP_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(DECISION, Channels.base(new LastValueReducer<>(), () -> "nextQuestion"));
-        SCHEMA.put(FINAL_REPORT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(IS_FINISHED, Channels.base(new LastValueReducer<>(), () -> false));
         SCHEMA.put(MAX_TECHNICAL_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 6));
         SCHEMA.put(MAX_BUSINESS_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 4));
@@ -314,10 +312,6 @@ public class InterviewState extends AgentState {
     @SuppressWarnings("unchecked")
     public List<String> questions() {
         return (List<String>) data().getOrDefault(QUESTIONS, new ArrayList<>());
-    }
-
-    public String getFinalReport() {
-        return (String) data().getOrDefault(FINAL_REPORT, "");
     }
 
     // ========== 轮次管理便捷方法 ==========
