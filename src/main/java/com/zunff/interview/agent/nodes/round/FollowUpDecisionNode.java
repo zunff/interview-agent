@@ -1,10 +1,11 @@
 package com.zunff.interview.agent.nodes.round;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.agent.state.InterviewState;
+import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
-import com.zunff.interview.agent.state.InterviewState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -29,8 +30,6 @@ public class FollowUpDecisionNode {
 
     private final MultimodalAnalysisService multimodalAnalysisService;
 
-    private static final String NEXT_QUESTION = "nextQuestion";
-
     /**
      * 执行追问决策（两阶段决策）
      */
@@ -44,13 +43,12 @@ public class FollowUpDecisionNode {
         int maxFollowUps = state.maxFollowUpsForCurrentRound();
 
         // ========== 阶段一：快速预判（基于规则） ==========
-        if (shouldSkipFollowUpByCode(evaluation, generatedQuestion, state)) {
-            String quickDecision = quickDecisionByCode(evaluation, generatedQuestion, state);
-            log.info("快速预判命中，决策: {}", quickDecision);
+        RouteDecision quickDecision = tryQuickDecision(evaluation, generatedQuestion, state);
+        if (quickDecision != null) {
+            log.info("快速预判命中，决策: {}", quickDecision.getValue());
 
             Map<String, Object> updates = new HashMap<>();
-            updates.put(InterviewState.DECISION, quickDecision);
-            CircuitBreakerHelper.recordSuccess(updates);
+            updates.put(InterviewState.DECISION, quickDecision.getValue());
             return CompletableFuture.completedFuture(updates);
         }
 
@@ -69,73 +67,62 @@ public class FollowUpDecisionNode {
             log.info("LLM 精细决策: {}", decision);
 
             return CompletableFuture.completedFuture(updates);
-
         } catch (Exception e) {
             log.error("LLM 决策失败，降级为 nextQuestion", e);
             Map<String, Object> updates = new HashMap<>();
             CircuitBreakerHelper.handleFailure(state, updates, e);
-            updates.put(InterviewState.DECISION, NEXT_QUESTION);
+            updates.put(InterviewState.DECISION, RouteDecision.NEXT_QUESTION.getValue());
             return CompletableFuture.completedFuture(updates);
         }
     }
 
     /**
-     * 快速预判：基于规则快速决定是否跳过 LLM 决策
-     * @return true 表示可以直接跳过追问（返回 nextQuestion），false 表示需要 LLM 精细决策
+     * 尝试快速决策（基于规则）
+     * @return 返回决策结果，如果返回 null 表示需要 LLM 精细决策
      */
-    private boolean shouldSkipFollowUpByCode(EvaluationBO eval, GeneratedQuestion question, InterviewState state) {
+    private RouteDecision tryQuickDecision(EvaluationBO eval, GeneratedQuestion question, InterviewState state) {
         int followUpCount = state.followUpCount();
         int maxFollowUps = state.maxFollowUpsForCurrentRound();
 
-        // 已达上限，跳过
-        if (followUpCount >= maxFollowUps) return true;
+        // 已达上限，直接返回 nextQuestion
+        if (followUpCount >= maxFollowUps) {
+            return RouteDecision.NEXT_QUESTION;
+        }
 
-        // 高分 + 无异常 + 已有追问，跳过
+        // Hard 难度 + 低分，优先 deepDive
+        if (question != null && "hard".equals(question.getDifficulty()) && eval.getOverallScore() < 50) {
+            return RouteDecision.DEEP_DIVE;
+        }
+
+        // Hard 难度 + 中等低分（50-60），需要 LLM 精细决策
+        if (question != null && "hard".equals(question.getDifficulty()) && eval.getOverallScore() < 60) {
+            return null; // 需要 LLM 精细决策
+        }
+
+        // Easy 难度 + 高分，直接返回 nextQuestion
+        if (question != null && "easy".equals(question.getDifficulty()) && eval.getOverallScore() >= 70) {
+            return RouteDecision.NEXT_QUESTION;
+        }
+
+        // 高分 + 无异常 + 已有追问，直接返回 nextQuestion
         if (eval.getOverallScore() >= 85
                 && !eval.isModalityConcern()
                 && eval.getWeaknesses().isEmpty()
                 && followUpCount >= 1) {
-            return true;
+            return RouteDecision.NEXT_QUESTION;
         }
 
-        // Hard 难度 + 低分，**必须追问**（不跳过 LLM）
-        if (question != null && "hard".equals(question.getDifficulty()) && eval.getOverallScore() < 60) {
-            return false;
+        // 高分 + 无弱点，返回 challengeMode
+        if (eval.getOverallScore() > 90 && eval.getWeaknesses().isEmpty()) {
+            return RouteDecision.CHALLENGE_MODE;
         }
 
-        // Easy 难度 + 高分，跳过
-        if (question != null && "easy".equals(question.getDifficulty()) && eval.getOverallScore() >= 70) {
-            return true;
+        // 中等分数 + 有弱点或多模态异常，返回 followUp
+        if (eval.getOverallScore() < 70 || !eval.getWeaknesses().isEmpty() || eval.isModalityConcern()) {
+            return RouteDecision.FOLLOW_UP;
         }
 
         // 其他情况需要 LLM 精细决策
-        return false;
-    }
-
-    /**
-     * 基于规则的快速路由决策（不调用 LLM）
-     */
-    private String quickDecisionByCode(EvaluationBO eval, GeneratedQuestion question, InterviewState state) {
-        int followUpCount = state.followUpCount();
-        int maxFollowUps = state.maxFollowUpsForCurrentRound();
-
-        if (followUpCount >= maxFollowUps) return NEXT_QUESTION;
-
-        // Hard 题目低分优先 deepDive
-        if (question != null && "hard".equals(question.getDifficulty()) && eval.getOverallScore() < 50) {
-            return "deepDive";
-        }
-
-        // 高分优先 challengeMode
-        if (eval.getOverallScore() > 90 && eval.getWeaknesses().isEmpty()) {
-            return "challengeMode";
-        }
-
-        // 中等分数 + 有弱点或多模态异常
-        if (eval.getOverallScore() < 70 || !eval.getWeaknesses().isEmpty() || eval.isModalityConcern()) {
-            return "followUp";
-        }
-
-        return NEXT_QUESTION;
+        return null;
     }
 }

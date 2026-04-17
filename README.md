@@ -76,8 +76,7 @@ graph TD
         BUSINESS --> AGG
         SOFT_SKILL --> AGG
 
-        AGG --> SIDE_EFFECTS[HandleSideEffectsNode<br/>处理副作用]
-        SIDE_EFFECTS --> BATCH_END((END))
+        AGG --> BATCH_END((END))
     end
 ```
 

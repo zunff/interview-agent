@@ -1,11 +1,12 @@
 package com.zunff.interview.agent.nodes.round;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
+import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.GeneratedQuestion;
-import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,7 +56,7 @@ public class GenerateFollowUpNode {
             Map<String, Object> updates = new HashMap<>();
             CircuitBreakerHelper.handleFailure(state, updates, e);
             // 失败时进入下一题
-            updates.put(InterviewState.DECISION, "nextQuestion");
+            updates.put(InterviewState.DECISION, RouteDecision.NEXT_QUESTION.getValue());
             return CompletableFuture.completedFuture(updates);
         }
     }
@@ -78,8 +79,13 @@ public class GenerateFollowUpNode {
             promptVars.put("difficulty", "medium");
         }
 
-        promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join("\n- ", evaluation.getWeaknesses()) : "无明显弱点");
-        promptVars.put("modalitySuggestion", evaluation.getModalityFollowUpSuggestion() != null ? evaluation.getModalityFollowUpSuggestion() : "");
+        promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join("\n- ", evaluation.getWeaknesses()) : "No obvious weaknesses");
+
+        // 传递多模态分数，而不是预生成的建议文本
+        promptVars.put("emotionScore", evaluation.getEmotionScore());
+        promptVars.put("bodyLanguageScore", evaluation.getBodyLanguageScore());
+        promptVars.put("voiceToneScore", evaluation.getVoiceToneScore());
+        promptVars.put("modalityConcern", evaluation.isModalityConcern());
 
         String systemPrompt = promptTemplateService.getPrompt("followup-question-generation", promptVars);
 

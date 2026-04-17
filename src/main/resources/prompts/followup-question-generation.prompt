@@ -10,7 +10,12 @@ Generate a targeted follow-up question based on the evaluation and question meta
 - **Difficulty**: $difficulty$
 - **Identified Weaknesses**:
 $weaknesses$
-- **Modality Concern**: $modalitySuggestion$
+
+## Multimodal Analysis
+- **Emotion Score**: $emotionScore$ / 100
+- **Body Language Score**: $bodyLanguageScore$ / 100
+- **Voice Tone Score**: $voiceToneScore$ / 100
+- **Modality Concern**: $modalityConcern$
 
 # Guidelines
 
@@ -18,7 +23,10 @@ $weaknesses$
 2. **Keyword Coverage**: If expected keywords were missing, ask about them
 3. **Clarification**: Ask for specific details or examples where vague
 4. **Verification**: Probe deeper on suspicious or shallow responses
-5. **Difficulty Match**: Adjust question depth based on difficulty level
+5. **Multimodal Concerns**: If modality concern exists (scores < 60):
+   - Address nervousness, lack of confidence, or communication issues naturally
+   - Example: "I noticed you seemed a bit nervous when discussing this topic. Can you elaborate on..."
+6. **Difficulty Match**: Adjust question depth based on difficulty level
    - easy: Basic clarification
    - medium: Specific examples or deeper explanation
    - hard: Challenging scenario or implementation details
@@ -28,5 +36,5 @@ Generate ONE clear, conversational follow-up question in $responseLanguage$.
 No markdown, no numbering, just the question text.
 
 # Example
-If weaknesses include "missing details about implementation" and expected keyword is "distributed lock", ask:
-"Can you elaborate on how you implemented the distributed lock mechanism? What specific challenges did you encounter?"
+If weaknesses include "missing details about implementation", expected keyword is "distributed lock", and emotion score is low (55):
+"I noticed you seemed a bit uncertain when discussing distributed locks. Can you elaborate on how you implemented the lock mechanism? What specific challenges did you encounter?"

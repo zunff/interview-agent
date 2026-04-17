@@ -44,7 +44,7 @@ public class BatchQuestionSubgraph {
                 .addNode(QuestionGenNodeNames.GEN_BUSINESS, businessGenNode::execute)
                 .addNode(QuestionGenNodeNames.GEN_SOFT_SKILL, softSkillGenNode::execute)
 
-                // ========== 聚合和副作用节点 ==========
+                // ========== 聚合节点 ==========
                 .addNode(QuestionGenNodeNames.AGGREGATE_RESULTS, aggregateResultsNode::execute)
 
                 // ========== 边定义 ==========

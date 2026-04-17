@@ -9,8 +9,8 @@ import lombok.Getter;
 @Getter
 public enum RouteDecision {
 
-    FOLLOW_UP("followUp"),
     NEXT_QUESTION("nextQuestion"),
+    FOLLOW_UP("followUp"),           // 普通追问
     DEEP_DIVE("deepDive"),           // 低分深入追问
     CHALLENGE_MODE("challengeMode"),  // 高分挑战模式
     ROUND_COMPLETE("roundComplete");  // 轮次结束

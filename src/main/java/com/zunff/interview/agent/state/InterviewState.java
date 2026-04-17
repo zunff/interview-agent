@@ -2,6 +2,7 @@ package com.zunff.interview.agent.state;
 
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
+import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.JobAnalysisResult;
@@ -310,7 +311,7 @@ public class InterviewState extends AgentState {
      * 获取路由决策
      */
     public String decision() {
-        return (String) data().getOrDefault(DECISION, "nextQuestion");
+        return (String) data().getOrDefault(DECISION, RouteDecision.NEXT_QUESTION.getValue());
     }
 
     public boolean isFinished() {

@@ -10,7 +10,6 @@ import com.zunff.interview.model.bo.FollowUpDecisionBO;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
-import com.zunff.interview.model.dto.llm.vars.FollowUpDecisionUserPromptVars;
 import com.zunff.interview.model.dto.llm.resp.EvaluationResponseDto;
 import com.zunff.interview.model.dto.llm.resp.FollowUpDecisionResponseDto;
 import com.zunff.interview.model.dto.llm.resp.FollowUpRouteDecisionDto;
@@ -104,15 +103,7 @@ public class MultimodalAnalysisService {
             promptVars.put("frameTimestamps", hasFrames ? formatFrameTimestamps(framesWithTimestamps) : "无关键帧时间戳");
 
             // 添加题目元信息
-            if (generatedQuestion != null) {
-                promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
-                promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "No specific keywords");
-                promptVars.put("reason", generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated");
-            } else {
-                promptVars.put("difficulty", "medium");
-                promptVars.put("expectedKeywords", "No specific keywords");
-                promptVars.put("reason", "No specific intention stated");
-            }
+            fillEvaluationPromptVars(generatedQuestion, promptVars);
 
             String userPrompt = promptTemplateService.getPrompt("omni-evaluation-user", promptVars);
 
@@ -153,15 +144,7 @@ public class MultimodalAnalysisService {
             promptVars.put("candidateAnswer", transcribedText == null ? "" : transcribedText);
 
             // 添加题目元信息
-            if (generatedQuestion != null) {
-                promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
-                promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "No specific keywords");
-                promptVars.put("reason", generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated");
-            } else {
-                promptVars.put("difficulty", "medium");
-                promptVars.put("expectedKeywords", "No specific keywords");
-                promptVars.put("reason", "No specific intention stated");
-            }
+            fillEvaluationPromptVars(generatedQuestion, promptVars);
 
             String userPrompt = promptTemplateService.getPrompt("omni-text-evaluation-user", promptVars);
 
@@ -184,67 +167,15 @@ public class MultimodalAnalysisService {
         }
     }
 
-    /**
-     * 简化版追问决策（基于 EvaluationBO 中的多模态分数字段）
-     *
-     * @param question      当前问题
-     * @param answer        候选人回答
-     * @param evaluation    评估结果（包含 emotionScore/bodyLanguageScore/voiceToneScore）
-     * @param followUpCount 已追问次数
-     * @param maxFollowUps  追问上限
-     * @return 追问决策结果
-     */
-    public FollowUpDecisionBO decideFollowUpSimple(
-            String question,
-            String answer,
-            EvaluationBO evaluation,
-            int followUpCount,
-            int maxFollowUps) {
-
-        log.info("开始追问决策，当前追问次数: {}/{}", followUpCount, maxFollowUps);
-
-        String systemPrompt = promptTemplateService.getPrompt("followup-decision", Map.of(
-                "responseLanguage", promptConfig.getResponseLanguage()
-        ));
-
-        String userPrompt = promptTemplateService.getPrompt("followup-decision-user",
-                new FollowUpDecisionUserPromptVars(
-                        question == null ? "" : question,
-                        answer == null ? "" : answer,
-                        evaluation.getOverallScore(),
-                        evaluation.getAccuracy(),
-                        evaluation.getLogic(),
-                        evaluation.getFluency(),
-                        evaluation.getConfidence(),
-                        String.join(", ", evaluation.getStrengths()),
-                        String.join(", ", evaluation.getWeaknesses()),
-                        evaluation.getDetailedEvaluation() == null ? "" : evaluation.getDetailedEvaluation(),
-                        evaluation.getEmotionScore(),
-                        evaluation.getBodyLanguageScore(),
-                        evaluation.getVoiceToneScore(),
-                        evaluation.isModalityConcern(),
-                        evaluation.getModalityFollowUpSuggestion() == null ? "" : evaluation.getModalityFollowUpSuggestion(),
-                        followUpCount,
-                        maxFollowUps,
-                        promptConfig.getResponseLanguage()
-                ).asMap()
-        );
-
-        try {
-            FollowUpDecisionResponseDto response = textChatClient.prompt()
-                    .system(systemPrompt)
-                    .user(userPrompt)
-                    .call()
-                    .entity(FollowUpDecisionResponseDto.class);
-
-            return toFollowUpDecisionBO(response);
-
-        } catch (Exception e) {
-            log.error("追问决策失败", e);
-            return FollowUpDecisionBO.builder()
-                    .decision("nextQuestion")
-                    .reason("追问决策失败，跳过追问")
-                    .build();
+    private void fillEvaluationPromptVars(GeneratedQuestion generatedQuestion, Map<String, Object> promptVars) {
+        if (generatedQuestion != null) {
+            promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
+            promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "No specific keywords");
+            promptVars.put("reason", generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated");
+        } else {
+            promptVars.put("difficulty", "medium");
+            promptVars.put("expectedKeywords", "No specific keywords");
+            promptVars.put("reason", "No specific intention stated");
         }
     }
 
@@ -272,10 +203,10 @@ public class MultimodalAnalysisService {
         // 添加题目元信息
         if (generatedQuestion != null) {
             promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
-            promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "无特定关键词");
+            promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "No specific keywords");
         } else {
             promptVars.put("difficulty", "medium");
-            promptVars.put("expectedKeywords", "无特定关键词");
+            promptVars.put("expectedKeywords", "No specific keywords");
         }
 
         promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join(", ", evaluation.getWeaknesses()) : "");
@@ -333,7 +264,6 @@ public class MultimodalAnalysisService {
                     .strengths(parseStringList(json, "strengths"))
                     .weaknesses(parseStringList(json, "weaknesses"))
                     .detailedEvaluation(json.getStr("detailedEvaluation", ""))
-                    .modalityFollowUpSuggestion(buildOmniFollowUpSuggestion(emotionScore, bodyLanguageScore, voiceToneScore))
                     .modalityConcern(emotionScore < 60 || bodyLanguageScore < 60 || voiceToneScore < 60)
                     .build();
 
@@ -345,29 +275,6 @@ public class MultimodalAnalysisService {
                     .overallScore(60)
                     .build();
         }
-    }
-
-    /**
-     * 根据多模态分值返回追问建议
-     */
-    private String buildOmniFollowUpSuggestion(int emotionScore, int bodyLanguageScore, int voiceToneScore) {
-        StringBuilder suggestion = new StringBuilder();
-
-        if (emotionScore < 60) {
-            suggestion.append("表情得分较低(").append(emotionScore).append(")，可能存在紧张或不自信");
-        }
-
-        if (bodyLanguageScore < 60) {
-            if (suggestion.length() > 0) suggestion.append("；");
-            suggestion.append("肢体语言得分较低(").append(bodyLanguageScore).append(")，可能缺乏自信或沟通经验");
-        }
-
-        if (voiceToneScore < 60) {
-            if (suggestion.length() > 0) suggestion.append("；");
-            suggestion.append("语音得分较低(").append(voiceToneScore).append(")，可能语速不稳、语气不自信或有过多的停顿");
-        }
-
-        return suggestion.toString();
     }
 
     private EvaluationBO toEvaluationBO(EvaluationResponseDto response) {
@@ -393,7 +300,6 @@ public class MultimodalAnalysisService {
                 .strengths(response.strengths() == null ? List.of() : response.strengths())
                 .weaknesses(response.weaknesses() == null ? List.of() : response.weaknesses())
                 .detailedEvaluation(response.detailedEvaluation() == null ? "" : response.detailedEvaluation())
-                .modalityFollowUpSuggestion(buildOmniFollowUpSuggestion(emotionScore, bodyLanguageScore, voiceToneScore))
                 .modalityConcern(emotionScore < 60 || bodyLanguageScore < 60 || voiceToneScore < 60)
                 .build();
     }

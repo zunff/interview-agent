@@ -1,9 +1,10 @@
 package com.zunff.interview.agent.nodes.round;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
-import com.zunff.interview.agent.state.InterviewState;
+import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,7 +80,7 @@ public class DeepDiveNode {
             Map<String, Object> updates = new HashMap<>();
             CircuitBreakerHelper.handleFailure(state, updates, e);
             // 失败时进入下一题
-            updates.put(InterviewState.DECISION, "nextQuestion");
+            updates.put(InterviewState.DECISION, RouteDecision.NEXT_QUESTION.getValue());
             return CompletableFuture.completedFuture(updates);
         }
     }
