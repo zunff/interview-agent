@@ -13,7 +13,10 @@ The question must be in `$responseLanguage$`.
 4. Keep it open-ended but scaffolded.
 5. Use one focused question only.
 
-## Output
-Output only the follow-up question text.
-No explanation, no prefix, no markdown.
-Keep length concise (roughly one sentence).
+## Output Format
+
+Return a JSON object with the following fields:
+- followUpQuestion: The deep-dive question text (in $responseLanguage$)
+- difficulty: Always "hard"
+- expectedKeywords: List of 4-6 key concepts or keywords that should be covered in the answer, including hints for the candidate
+- reason: Brief explanation (2-3 sentences) of why this diagnostic question is needed

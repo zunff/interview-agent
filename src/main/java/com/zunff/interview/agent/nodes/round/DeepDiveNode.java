@@ -5,6 +5,8 @@ import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.constant.RouteDecision;
+import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.dto.llm.resp.FollowUpQuestionResponseDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,15 +74,28 @@ public class DeepDiveNode {
 
             ChatClient chatClient = chatClientBuilder.build();
 
-            String deepDiveQuestion = chatClient.prompt()
+            FollowUpQuestionResponseDto response = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
+                    .entity(FollowUpQuestionResponseDto.class);
+
+            String deepDiveQuestion = response.getFollowUpQuestion();
+
+            // 构建 GeneratedQuestion 元数据对象
+            GeneratedQuestion deepDiveMeta = GeneratedQuestion.builder()
+                    .question(deepDiveQuestion)
+                    .questionType(QuestionType.DEEP_DIVE.getDisplayName())
+                    .expectedKeywords(response.getExpectedKeywords() != null ? response.getExpectedKeywords() : java.util.List.of())
+                    .difficulty(response.getDifficulty() != null ? response.getDifficulty() : "hard")
+                    .reason(response.getReason() != null ? response.getReason() : "")
+                    .questionIndex(-1)
+                    .build();
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.CURRENT_QUESTION, deepDiveQuestion);
-            updates.put(InterviewState.QUESTION_TYPE, QuestionType.DEEP_DIVE.getDisplayName());
+            updates.put(InterviewState.QUESTION_TYPE, deepDiveMeta.getQuestionType());
+            updates.put(InterviewState.CURRENT_GENERATED_QUESTION, deepDiveMeta);
             updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
             CircuitBreakerHelper.recordSuccess(updates);
 

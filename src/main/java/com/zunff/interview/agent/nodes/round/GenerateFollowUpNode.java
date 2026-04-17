@@ -7,6 +7,7 @@ import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.dto.llm.resp.FollowUpQuestionResponseDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,12 +39,25 @@ public class GenerateFollowUpNode {
         GeneratedQuestion generatedQuestion = state.getCurrentGeneratedQuestion();
 
         try {
-            String followUpQuestion = generateFollowUpQuestion(evaluation, generatedQuestion, state.formatFollowUpChain());
+            ChatClient chatClient = chatClientBuilder.build();
+            FollowUpQuestionResponseDto response = generateFollowUpQuestion(evaluation, generatedQuestion, state.formatFollowUpChain(), chatClient);
+            String followUpQuestion = response.getFollowUpQuestion();
             log.info("生成追问: {}", followUpQuestion);
+
+            // 构建 GeneratedQuestion 元数据对象
+            GeneratedQuestion followUpMeta = GeneratedQuestion.builder()
+                    .question(followUpQuestion)
+                    .questionType(QuestionType.FOLLOW_UP.getDisplayName())
+                    .expectedKeywords(response.getExpectedKeywords() != null ? response.getExpectedKeywords() : java.util.List.of())
+                    .difficulty(response.getDifficulty() != null ? response.getDifficulty() : "medium")
+                    .reason(response.getReason() != null ? response.getReason() : "")
+                    .questionIndex(-1)
+                    .build();
 
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.CURRENT_QUESTION, followUpQuestion);
-            updates.put(InterviewState.QUESTION_TYPE, QuestionType.FOLLOW_UP.getDisplayName());
+            updates.put(InterviewState.QUESTION_TYPE, followUpMeta.getQuestionType());
+            updates.put(InterviewState.CURRENT_GENERATED_QUESTION, followUpMeta);
             updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
             CircuitBreakerHelper.recordSuccess(updates);
 
@@ -64,7 +78,7 @@ public class GenerateFollowUpNode {
     /**
      * 生成针对性追问（包含追问链路上下文）
      */
-    private String generateFollowUpQuestion(EvaluationBO evaluation, GeneratedQuestion question, String followUpChain) {
+    private FollowUpQuestionResponseDto generateFollowUpQuestion(EvaluationBO evaluation, GeneratedQuestion question, String followUpChain, ChatClient chatClient) {
         // 构建提示词变量
         Map<String, Object> promptVars = new HashMap<>();
         promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
@@ -94,11 +108,10 @@ public class GenerateFollowUpNode {
         String systemPrompt = promptTemplateService.getPrompt("followup-question-generation", promptVars);
         String userPrompt = promptTemplateService.getPrompt("followup-question-generation-user", promptVars);
 
-        ChatClient chatClient = chatClientBuilder.build();
         return chatClient.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)
                 .call()
-                .content();
+                .entity(FollowUpQuestionResponseDto.class);
     }
 }
