@@ -38,7 +38,7 @@ public class GenerateFollowUpNode {
         GeneratedQuestion generatedQuestion = state.getCurrentGeneratedQuestion();
 
         try {
-            String followUpQuestion = generateFollowUpQuestion(evaluation, generatedQuestion);
+            String followUpQuestion = generateFollowUpQuestion(evaluation, generatedQuestion, state.formatFollowUpChain());
             log.info("生成追问: {}", followUpQuestion);
 
             Map<String, Object> updates = new HashMap<>();
@@ -62,13 +62,14 @@ public class GenerateFollowUpNode {
     }
 
     /**
-     * 生成针对性追问
+     * 生成针对性追问（包含追问链路上下文）
      */
-    private String generateFollowUpQuestion(EvaluationBO evaluation, GeneratedQuestion question) {
+    private String generateFollowUpQuestion(EvaluationBO evaluation, GeneratedQuestion question, String followUpChain) {
         // 构建提示词变量
         Map<String, Object> promptVars = new HashMap<>();
         promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
 
+        // 初始题目信息
         if (question != null) {
             promptVars.put("question", question.getQuestion() != null ? question.getQuestion() : "");
             promptVars.put("expectedKeywords", question.getExpectedKeywords() != null ? String.join(", ", question.getExpectedKeywords()) : "");
@@ -79,6 +80,9 @@ public class GenerateFollowUpNode {
             promptVars.put("difficulty", "medium");
         }
 
+        // 追问链路（已包含当前回答的评估）
+        promptVars.put("followUpChain", followUpChain);
+
         promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join("\n- ", evaluation.getWeaknesses()) : "No obvious weaknesses");
 
         // 传递多模态分数，而不是预生成的建议文本
@@ -88,10 +92,12 @@ public class GenerateFollowUpNode {
         promptVars.put("modalityConcern", evaluation.isModalityConcern());
 
         String systemPrompt = promptTemplateService.getPrompt("followup-question-generation", promptVars);
+        String userPrompt = promptTemplateService.getPrompt("followup-question-generation-user", promptVars);
 
         ChatClient chatClient = chatClientBuilder.build();
         return chatClient.prompt()
                 .system(systemPrompt)
+                .user(userPrompt)
                 .call()
                 .content();
     }

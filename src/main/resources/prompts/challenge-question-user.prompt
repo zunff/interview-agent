@@ -4,6 +4,9 @@ $originalQuestion$
 ## Strong Answer Summary
 $answerSummary$
 
+## Follow-up Conversation Chain
+$followUpChain$
+
 Generate one harder challenge question that probes depth and application.
 The final question must be in $responseLanguage$.
 

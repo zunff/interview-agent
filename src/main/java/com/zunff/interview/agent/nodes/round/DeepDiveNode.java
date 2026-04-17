@@ -50,10 +50,23 @@ public class DeepDiveNode {
                 }
             }
 
+            // 获取期望关键词，用作提示引导
+            String expectedKeywordsText = "None provided.";
+            if (evaluation != null && evaluation.getGeneratedQuestion() != null
+                    && evaluation.getGeneratedQuestion().getExpectedKeywords() != null
+                    && !evaluation.getGeneratedQuestion().getExpectedKeywords().isEmpty()) {
+                expectedKeywordsText = String.join(", ", evaluation.getGeneratedQuestion().getExpectedKeywords());
+            }
+
+            // 获取更新后的追问链路
+            String followUpChainText = state.formatFollowUpChain();
+
             String userPrompt = promptTemplateService.getPrompt("deep-dive-question-user", Map.of(
                     "originalQuestion", originalQuestion == null ? "" : originalQuestion,
                     "answer", answer == null ? "" : answer,
-                    "weaknesses", weaknessesText.length() == 0 ? "None provided." : weaknessesText.toString().trim(),
+                    "weaknesses", weaknessesText.isEmpty() ? "None provided." : weaknessesText.toString().trim(),
+                    "expectedKeywords", expectedKeywordsText,
+                    "followUpChain", followUpChainText,
                     "responseLanguage", promptConfig.getResponseLanguage()
             ));
 

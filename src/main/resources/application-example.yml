@@ -21,7 +21,7 @@ spring:
       base-url: https://dashscope.aliyuncs.com/compatible-mode
       chat:
         options:
-          model: qwen3.5-plus
+          model: qwen3.5-flash
           temperature: 0.7
       embedding:
         options:
@@ -36,7 +36,7 @@ spring:
 
 interview:
   graph:
-    main-recursion-limit: 25
+    main-recursion-limit: 500
   multimodal:
     enabled: true                # 是否启用多模态分析
     omni:
@@ -44,7 +44,6 @@ interview:
     # ASR 实时语音识别配置（DashScope SDK + fun-asr-realtime）
     asr:
       model: fun-asr-realtime-2026-02-28
-      url: wss://dashscope.aliyuncs.com/api-ws/v1/inference
       language: zh
       input-audio-format: pcm
       sample-rate: 16000
@@ -63,6 +62,3 @@ interview:
 logging:
   level:
     root: INFO
-    org.bsc.langgraph4j: DEBUG
-    org.springframework.ai: DEBUG
-    com.zunff.interview: DEBUG

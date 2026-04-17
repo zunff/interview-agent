@@ -46,9 +46,13 @@ public class ChallengeQuestionNode {
                     ? answer.substring(0, 200) + "..."
                     : (answer != null ? answer : "");
 
+            // 获取更新后的追问链路
+            String followUpChainText = state.formatFollowUpChain();
+
             String userPrompt = promptTemplateService.getPrompt("challenge-question-user", Map.of(
                     "originalQuestion", originalQuestion == null ? "" : originalQuestion,
                     "answerSummary", answerSummary,
+                    "followUpChain", followUpChainText,
                     "responseLanguage", promptConfig.getResponseLanguage()
             ));
 

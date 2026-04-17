@@ -3,6 +3,7 @@ package com.zunff.interview.agent.nodes.round;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.FollowUpChainEntity;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
@@ -49,7 +50,7 @@ public class ComprehensiveEvaluationNode {
                 transcriptEntries.size(),
                 framesWithTimestamps.size(),
                 answerAudio != null && !answerAudio.isEmpty() ? "有" : "无",
-                generatedQuestion != null ? generatedQuestion.getDifficulty() : "未知");
+                generatedQuestion.getDifficulty());
 
         // 根据问题类型选择评估模板
         QuestionType type = QuestionType.fromDisplayName(questionType);
@@ -68,6 +69,16 @@ public class ComprehensiveEvaluationNode {
             );
 
             Map<String, Object> updates = new HashMap<>();
+
+            if (type.isFollowUpType()) {
+                FollowUpChainEntity entry = FollowUpChainEntity.builder()
+                        .followUpQuestion(question)
+                        .detailedEvaluation(evaluation.getDetailedEvaluation())
+                        .overallScore(evaluation.getOverallScore())
+                        .build();
+                updates.put(InterviewState.FOLLOW_UP_CHAIN, List.of(entry));
+                log.info("记录追问链路: 问题={}, 得分={}", question, evaluation.getOverallScore());
+            }
             updates.put(InterviewState.CURRENT_EVALUATION, evaluation);
             CircuitBreakerHelper.recordSuccess(updates);
 

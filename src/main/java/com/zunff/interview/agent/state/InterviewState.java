@@ -4,6 +4,7 @@ import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.FollowUpChainEntity;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.JobAnalysisResult;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
@@ -55,6 +56,7 @@ public class InterviewState extends AgentState {
     public static final String FOLLOW_UP_COUNT = "followUpCount";
     public static final String FOLLOW_UP_QUESTION = "followUpQuestion";
     public static final String DECISION = "decision";  // 路由决策: followUp/deepDive/challengeMode/nextQuestion
+    public static final String FOLLOW_UP_CHAIN = "followUpChain"; // 追问链路：记录追问问题和详细评价
 
     // ========== 最终报告 ==========
     public static final String IS_FINISHED = "isFinished";
@@ -117,20 +119,21 @@ public class InterviewState extends AgentState {
         SCHEMA.put(TECHNICAL_ROUND_SCORES, Channels.appender(ArrayList::new));
         SCHEMA.put(BUSINESS_ROUND_SCORES, Channels.appender(ArrayList::new));
 
-        // 实时ASR转录结果
-        SCHEMA.put(TRANSCRIPT_ENTRIES, Channels.appender(ArrayList::new));
+        // 实时ASR转录结果（每次回答替换，不累积）
+        SCHEMA.put(TRANSCRIPT_ENTRIES, Channels.base(new LastValueReducer<>(), ArrayList::new));
 
         // 最后值类型：使用 base + LastValueReducer
         SCHEMA.put(QUESTION_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(CURRENT_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC.getDisplayName()));
-        SCHEMA.put(CURRENT_GENERATED_QUESTION, Channels.base(new LastValueReducer<>(), () -> null));
+        SCHEMA.put(CURRENT_GENERATED_QUESTION, Channels.base(new LastValueReducer<>(), GeneratedQuestion::new));
         SCHEMA.put(ANSWER_TEXT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(ANSWER_AUDIO, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(CURRENT_EVALUATION, Channels.base(new LastValueReducer<>(), EvaluationBO::new));
         SCHEMA.put(FOLLOW_UP_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(FOLLOW_UP_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(DECISION, Channels.base(new LastValueReducer<>(), () -> "nextQuestion"));
+        SCHEMA.put(FOLLOW_UP_CHAIN, Channels.appender(ArrayList::new)); // 追问链路累积
         SCHEMA.put(IS_FINISHED, Channels.base(new LastValueReducer<>(), () -> false));
         SCHEMA.put(MAX_TECHNICAL_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 6));
         SCHEMA.put(MAX_BUSINESS_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 4));
@@ -598,6 +601,34 @@ public class InterviewState extends AgentState {
      */
     public EvaluationBO getCurrentEvaluation() {
         return (EvaluationBO) data().getOrDefault(CURRENT_EVALUATION, new EvaluationBO());
+    }
+
+    /**
+     * 获取追问链路
+     */
+    @SuppressWarnings("unchecked")
+    public List<FollowUpChainEntity> followUpChain() {
+        return (List<FollowUpChainEntity>) data().getOrDefault(FOLLOW_UP_CHAIN, new ArrayList<>());
+    }
+
+    /**
+     * 格式化追问链路用于提示词（英文格式）
+     */
+    public String formatFollowUpChain() {
+        List<FollowUpChainEntity> chain = followUpChain();
+        if (chain == null || chain.isEmpty()) {
+            return "No follow-up history";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < chain.size(); i++) {
+            FollowUpChainEntity entry = chain.get(i);
+            sb.append(String.format("%n### Follow-up %d%n", i + 1));
+            sb.append(String.format("**Question**: %s%n", entry.getFollowUpQuestion()));
+            sb.append(String.format("**Score**: %d%n", entry.getOverallScore()));
+            sb.append(String.format("**Evaluation**: %s%n", entry.getDetailedEvaluation()));
+        }
+        return sb.toString();
     }
 
     // ========== 熔断机制便捷方法 ==========

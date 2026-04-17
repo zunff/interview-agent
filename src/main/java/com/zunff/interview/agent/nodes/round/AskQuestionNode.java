@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -100,6 +101,7 @@ public class AskQuestionNode {
 
         // 清空追问次数，开始新问题
         updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
+        updates.put(InterviewState.FOLLOW_UP_CHAIN, new ArrayList<>()); // 清空追问链路
         log.info("新问题开始，清空追问次数: {} -> 0", state.followUpCount());
 
         // 更新对应轮次的索引
