@@ -3,6 +3,7 @@ package com.zunff.interview.agent.nodes.round;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
@@ -40,13 +41,15 @@ public class ComprehensiveEvaluationNode {
         List<TranscriptEntry> transcriptEntries = state.transcriptEntries();
         List<FrameWithTimestamp> framesWithTimestamps = state.answerFramesWithTimestamps();
         String answerAudio = (String) state.data().get(InterviewState.ANSWER_AUDIO);
+        GeneratedQuestion generatedQuestion = state.getCurrentGeneratedQuestion(); // 获取题目元信息
 
-        log.info("评估数据：问题类型={}, 转录文本长度={}, 转录条目数={}, 视频帧数={}, 音频={}",
+        log.info("评估数据：问题类型={}, 转录文本长度={}, 转录条目数={}, 视频帧数={}, 音频={}, 难度={}",
                 questionType,
                 answerText != null ? answerText.length() : 0,
                 transcriptEntries.size(),
                 framesWithTimestamps.size(),
-                answerAudio != null && !answerAudio.isEmpty() ? "有" : "无");
+                answerAudio != null && !answerAudio.isEmpty() ? "有" : "无",
+                generatedQuestion != null ? generatedQuestion.getDifficulty() : "未知");
 
         // 根据问题类型选择评估模板
         QuestionType type = QuestionType.fromDisplayName(questionType);
@@ -60,7 +63,8 @@ public class ComprehensiveEvaluationNode {
                     transcriptEntries,
                     framesWithTimestamps,
                     answerAudio,
-                    evaluationPrompt
+                    evaluationPrompt,
+                    generatedQuestion  // 传递题目元信息
             );
 
             Map<String, Object> updates = new HashMap<>();
@@ -81,6 +85,7 @@ public class ComprehensiveEvaluationNode {
                     .emotionScore(70).bodyLanguageScore(70).voiceToneScore(70)
                     .overallScore(60)
                     .detailedEvaluation("评估失败，使用默认评分")
+                    .generatedQuestion(generatedQuestion)  // 即使失败也关联元信息
                     .build();
             updates.put(InterviewState.CURRENT_EVALUATION, defaultEval);
             return CompletableFuture.completedFuture(updates);

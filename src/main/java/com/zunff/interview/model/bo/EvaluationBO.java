@@ -1,5 +1,6 @@
 package com.zunff.interview.model.bo;
 
+import com.zunff.interview.model.dto.GeneratedQuestion;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -69,4 +70,7 @@ public class EvaluationBO implements Serializable {
 
     /** 是否存在多模态异常 */
     private boolean modalityConcern;
+
+    /** 关联的题目元信息（包含 difficulty、expectedKeywords 等） */
+    private GeneratedQuestion generatedQuestion;
 }

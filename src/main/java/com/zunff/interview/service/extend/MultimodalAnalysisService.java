@@ -7,23 +7,26 @@ import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.bo.FollowUpDecisionBO;
+import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.model.dto.llm.vars.FollowUpDecisionUserPromptVars;
 import com.zunff.interview.model.dto.llm.resp.EvaluationResponseDto;
 import com.zunff.interview.model.dto.llm.resp.FollowUpDecisionResponseDto;
+import com.zunff.interview.model.dto.llm.resp.FollowUpRouteDecisionDto;
 import com.zunff.interview.utils.JsonExtractionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * 多模态分析服务
  * 核心方法：comprehensiveOmniEvaluation() — 一次 Omni 调用综合评估
- * 辅助方法：decideFollowUpSimple() — 基于评估结果进行追问决策
+ * 辅助方法：decideFollowUpRoute() — 基于评估结果进行路由决策（只返回路由，不生成问题）
  *
  * 模型分工：
  * - omniModalService (qwen3.5-omni-plus): Omni 多模态综合评估（视频帧+音频+文本）
@@ -63,6 +66,7 @@ public class MultimodalAnalysisService {
      * @param framesWithTimestamps  视频帧（带时间戳）
      * @param base64WavAudio        WAV音频（Base64编码）
      * @param evaluationPromptName  评估Prompt模板名称
+     * @param generatedQuestion     题目元信息（包含难度、期望关键词等）
      * @return 综合评估结果
      */
     public EvaluationBO comprehensiveOmniEvaluation(
@@ -71,7 +75,8 @@ public class MultimodalAnalysisService {
             List<TranscriptEntry> transcriptEntries,
             List<FrameWithTimestamp> framesWithTimestamps,
             String base64WavAudio,
-            String evaluationPromptName) {
+            String evaluationPromptName,
+            GeneratedQuestion generatedQuestion) {
 
         boolean hasFrames = framesWithTimestamps != null && !framesWithTimestamps.isEmpty();
         boolean hasAudio = base64WavAudio != null && !base64WavAudio.isEmpty();
@@ -85,18 +90,31 @@ public class MultimodalAnalysisService {
         // multimodalEnabled=false 或无任何多模态数据时，降级为纯文本评估
         if (!multimodalEnabled || (!hasFrames && !hasAudio)) {
             log.info("多模态未启用或无多模态数据，使用纯文本评估");
-            return textOnlyEvaluation(question, transcribedText, evaluationPromptName);
+            return textOnlyEvaluation(question, transcribedText, evaluationPromptName, generatedQuestion);
         }
 
         try {
             // 加载评估模板
             String systemPrompt = promptTemplateService.getPrompt("evaluation-omni-" + evaluationPromptName);
 
-            String userPrompt = promptTemplateService.getPrompt("omni-evaluation-user", Map.of(
-                    "question", question == null ? "" : question,
-                    "candidateAnswer", formatTranscriptEntries(transcriptEntries, transcribedText),
-                    "frameTimestamps", hasFrames ? formatFrameTimestamps(framesWithTimestamps) : "无关键帧时间戳"
-            ));
+            // 构建提示词变量，包含题目元信息
+            Map<String, Object> promptVars = new HashMap<>();
+            promptVars.put("question", question == null ? "" : question);
+            promptVars.put("candidateAnswer", formatTranscriptEntries(transcriptEntries, transcribedText));
+            promptVars.put("frameTimestamps", hasFrames ? formatFrameTimestamps(framesWithTimestamps) : "无关键帧时间戳");
+
+            // 添加题目元信息
+            if (generatedQuestion != null) {
+                promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
+                promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "No specific keywords");
+                promptVars.put("reason", generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated");
+            } else {
+                promptVars.put("difficulty", "medium");
+                promptVars.put("expectedKeywords", "No specific keywords");
+                promptVars.put("reason", "No specific intention stated");
+            }
+
+            String userPrompt = promptTemplateService.getPrompt("omni-evaluation-user", promptVars);
 
             // 3. 提取纯帧数据用于 Omni 调用
             List<String> base64Frames = framesWithTimestamps.stream()
@@ -107,7 +125,12 @@ public class MultimodalAnalysisService {
             String response = omniModalService.analyzeMultimodal(base64Frames, base64WavAudio, systemPrompt, userPrompt);
 
             // 5. 解析返回的 JSON
-            return parseOmniEvaluationResponse(response);
+            EvaluationBO evaluation = parseOmniEvaluationResponse(response);
+
+            // 6. 关联 GeneratedQuestion
+            evaluation.setGeneratedQuestion(generatedQuestion);
+
+            return evaluation;
 
         } catch (Exception e) {
             log.error("Omni多模态综合评估失败", e);
@@ -119,15 +142,28 @@ public class MultimodalAnalysisService {
      * 纯文本评估（降级方案）
      * 使用 qwen-plus 文本模型进行评估，多模态分数字段返回默认值
      */
-    private EvaluationBO textOnlyEvaluation(String question, String transcribedText, String evaluationPromptName) {
+    private EvaluationBO textOnlyEvaluation(String question, String transcribedText, String evaluationPromptName, GeneratedQuestion generatedQuestion) {
         try {
             // 加载评估模板
             String systemPrompt = promptTemplateService.getPrompt("evaluation-omni-" + evaluationPromptName);
 
-            String userPrompt = promptTemplateService.getPrompt("omni-text-evaluation-user", Map.of(
-                    "question", question == null ? "" : question,
-                    "candidateAnswer", transcribedText == null ? "" : transcribedText
-            ));
+            // 构建提示词变量，包含题目元信息
+            Map<String, Object> promptVars = new HashMap<>();
+            promptVars.put("question", question == null ? "" : question);
+            promptVars.put("candidateAnswer", transcribedText == null ? "" : transcribedText);
+
+            // 添加题目元信息
+            if (generatedQuestion != null) {
+                promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
+                promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "No specific keywords");
+                promptVars.put("reason", generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated");
+            } else {
+                promptVars.put("difficulty", "medium");
+                promptVars.put("expectedKeywords", "No specific keywords");
+                promptVars.put("reason", "No specific intention stated");
+            }
+
+            String userPrompt = promptTemplateService.getPrompt("omni-text-evaluation-user", promptVars);
 
             EvaluationResponseDto response = textChatClient.prompt()
                     .system(systemPrompt)
@@ -135,7 +171,12 @@ public class MultimodalAnalysisService {
                     .call()
                     .entity(EvaluationResponseDto.class);
 
-            return toEvaluationBO(response);
+            EvaluationBO evaluation = toEvaluationBO(response);
+
+            // 关联 GeneratedQuestion
+            evaluation.setGeneratedQuestion(generatedQuestion);
+
+            return evaluation;
 
         } catch (Exception e) {
             log.error("纯文本评估失败", e);
@@ -204,6 +245,59 @@ public class MultimodalAnalysisService {
                     .decision("nextQuestion")
                     .reason("追问决策失败，跳过追问")
                     .build();
+        }
+    }
+
+    /**
+     * 追问路由决策（只返回路由，不生成问题）
+     *
+     * @param evaluation        评估结果
+     * @param generatedQuestion 题目元信息（包含 difficulty、expectedKeywords）
+     * @param followUpCount     已追问次数
+     * @param maxFollowUps      追问上限
+     * @return 路由决策（followUp / deepDive / challengeMode / nextQuestion）
+     */
+    public String decideFollowUpRoute(
+            EvaluationBO evaluation,
+            GeneratedQuestion generatedQuestion,
+            int followUpCount,
+            int maxFollowUps) {
+
+        log.info("开始LLM路由决策，当前追问次数: {}/{}", followUpCount, maxFollowUps);
+
+        // 构建简化的提示词变量
+        Map<String, Object> promptVars = new HashMap<>();
+        promptVars.put("overallScore", evaluation.getOverallScore());
+
+        // 添加题目元信息
+        if (generatedQuestion != null) {
+            promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
+            promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "无特定关键词");
+        } else {
+            promptVars.put("difficulty", "medium");
+            promptVars.put("expectedKeywords", "无特定关键词");
+        }
+
+        promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join(", ", evaluation.getWeaknesses()) : "");
+        promptVars.put("modalityConcern", evaluation.isModalityConcern());
+        promptVars.put("followUpCount", followUpCount);
+        promptVars.put("maxFollowUps", maxFollowUps);
+
+        try {
+            String systemPrompt = promptTemplateService.getPrompt("followup-route-decision", promptVars);
+
+            FollowUpRouteDecisionDto response = textChatClient.prompt()
+                    .system(systemPrompt)
+                    .call()
+                    .entity(FollowUpRouteDecisionDto.class);
+
+            String decision = response.decision();
+            log.info("LLM路由决策结果: {}, 原因: {}", decision, response.reason());
+            return decision;
+
+        } catch (Exception e) {
+            log.error("LLM路由决策失败", e);
+            return "nextQuestion"; // 失败时默认进入下一题
         }
     }
 

@@ -38,6 +38,7 @@ public class InterviewState extends AgentState {
     public static final String CURRENT_QUESTION = "currentQuestion";
     public static final String QUESTION_INDEX = "questionIndex";
     public static final String QUESTION_TYPE = "questionType";
+    public static final String CURRENT_GENERATED_QUESTION = "currentGeneratedQuestion"; // 完整的 GeneratedQuestion 对象
 
     // ========== 回答与评估 ==========
     public static final String ANSWER_TEXT = "answerText";
@@ -122,6 +123,7 @@ public class InterviewState extends AgentState {
         SCHEMA.put(QUESTION_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(CURRENT_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC.getDisplayName()));
+        SCHEMA.put(CURRENT_GENERATED_QUESTION, Channels.base(new LastValueReducer<>(), () -> null));
         SCHEMA.put(ANSWER_TEXT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(ANSWER_AUDIO, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(CURRENT_EVALUATION, Channels.base(new LastValueReducer<>(), EvaluationBO::new));
@@ -270,6 +272,13 @@ public class InterviewState extends AgentState {
 
     public String questionType() {
         return (String) data().getOrDefault(QUESTION_TYPE, QuestionType.TECHNICAL_BASIC.getDisplayName());
+    }
+
+    /**
+     * 获取当前题目的完整 GeneratedQuestion 对象
+     */
+    public GeneratedQuestion getCurrentGeneratedQuestion() {
+        return (GeneratedQuestion) data().get(CURRENT_GENERATED_QUESTION);
     }
 
     public String answerText() {

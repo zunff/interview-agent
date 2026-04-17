@@ -96,6 +96,7 @@ public class AskQuestionNode {
         updates.put(InterviewState.CURRENT_QUESTION, nextQuestion.getQuestion());
         updates.put(InterviewState.QUESTION_TYPE, nextQuestion.getQuestionType());
         updates.put(InterviewState.QUESTION_INDEX, nextQuestion.getQuestionIndex());
+        updates.put(InterviewState.CURRENT_GENERATED_QUESTION, nextQuestion); // 保存完整对象
 
         // 清空追问次数，开始新问题
         updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
