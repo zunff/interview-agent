@@ -64,3 +64,45 @@ Root object must have key `questions` (array). Each element: `question` (string)
 
 - `expectedKeywords`: **1–8** short items; evaluation hints, not a literal answer key.
 - `reason`: max **2 short sentences**.
+
+# Style Examples (illustrative — DO NOT copy wording)
+
+The examples below show the **style, granularity, and personalization pattern** we expect. They are **not** a template to paraphrase. Always produce original questions tied to the real inputs.
+
+Examples are written in Chinese for clarity. If `$responseLanguage$` is not Chinese, **translate the style** into the target language — do not reuse the exact wording.
+
+**Illustrative candidate signals (example only):**
+- `techStack`: Java, Spring Boot, Redis, MySQL, Kafka
+- `keyProjects`: "订单服务 — 后端负责人，峰值 5k QPS，用 Redis 做热点缓存 + Kafka 做异步对账"
+- `positionLevel`: `mid`, `difficultyPreference`: `standard`, range `easy`–`hard`
+
+**Good output (style reference):**
+```json
+{
+  "questions": [
+    {
+      "question": "你在订单服务里用 Redis 做热点缓存，典型的缓存与数据库不一致场景有哪些？你当时是怎么处理的？",
+      "expectedKeywords": ["双写一致性", "先删缓存再更新", "延迟双删", "binlog/canal"],
+      "difficulty": "medium",
+      "reason": "候选人自述用 Redis 扛 QPS，缓存一致性是其主场景必答点。"
+    },
+    {
+      "question": "Kafka 消费端在订单对账里，你怎么保证消息不重复消费？",
+      "expectedKeywords": ["幂等", "offset 提交", "唯一键/去重表", "事务消息"],
+      "difficulty": "medium",
+      "reason": "对账强调准确性，考察其消费端关键设计。"
+    },
+    {
+      "question": "假设 Redis 主节点突然挂掉，你做过哪些兜底来避免订单服务整体不可用？",
+      "expectedKeywords": ["哨兵/Cluster", "降级策略", "本地缓存", "限流熔断"],
+      "difficulty": "hard",
+      "reason": "考察线上稳定性思维与容灾方案。"
+    }
+  ]
+}
+```
+
+**Anti-examples (avoid these patterns):**
+- Bad: "请介绍一下 Redis 的数据结构，并说说缓存穿透、缓存击穿、缓存雪崩的区别。"（多部分、教科书式，未锚定候选人项目）
+- Bad: "Kafka 是干什么的？"（过于基础，与候选人 `mid` 级别与 `standard` 偏好不符）
+- Bad: "请在黑板上写出一个分布式锁实现。"（"黑板/写代码"指令，非对话式面试风格）

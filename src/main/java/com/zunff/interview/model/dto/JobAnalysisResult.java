@@ -214,4 +214,36 @@ public class JobAnalysisResult implements Serializable {
         summary.append("  - Total planned: ").append(totalQuestions).append("\n");
         return summary.toString();
     }
+
+    /**
+     * 生成专门用于向量检索的查询文本
+     * 只保留与面试题目语义相关的字段，最大化技术信号密度
+     *
+     * @return 优化后的查询文本
+     */
+    public String generateRagQuery() {
+        StringBuilder sb = new StringBuilder();
+
+        // 岗位类型（技术驱动型/业务驱动型/均衡型）
+        if (jobType != null) {
+            sb.append(jobType.getDisplayName()).append(" ");
+        }
+
+        // 技术栈（核心信号）
+        if (techStackSummary != null && !techStackSummary.isEmpty()) {
+            sb.append(techStackSummary).append(" ");
+        }
+
+        // 业务领域
+        if (businessDomain != null && !businessDomain.isEmpty()) {
+            sb.append(businessDomain).append(" ");
+        }
+
+        // 关键要求（核心技能点）
+        if (keyRequirements != null && !keyRequirements.isEmpty()) {
+            sb.append(keyRequirements).append(" ");
+        }
+
+        return sb.toString().trim();
+    }
 }

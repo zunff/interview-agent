@@ -51,3 +51,45 @@ Root: `questions` (array). Each item: `question`, `expectedKeywords`, `difficult
 
 - `expectedKeywords`: **1–8** short items (concepts or decision dimensions to listen for).
 - `reason`: max **2 short sentences**.
+
+# Style Examples (illustrative — DO NOT copy wording)
+
+These show how to frame **business-decision** questions anchored to both the role and the candidate. They are **not** a template to paraphrase.
+
+Examples are in Chinese. If `$responseLanguage$` is not Chinese, **translate the style** — do not reuse the exact wording.
+
+**Illustrative context (example only):**
+- Job context: 金融风控后端岗，关注误杀率/漏杀率、合规、跨团队协作
+- Candidate: 有风控策略后端经验，`concerns` 含 "业务语言能力待验证"
+- `positionLevel`: `mid`, `difficultyPreference`: `standard`, range `easy`–`hard`
+
+**Good output (style reference):**
+```json
+{
+  "questions": [
+    {
+      "question": "风控策略的误杀率和漏杀率，你觉得在你做过的场景里应该优先优化哪个？当时是怎么判断的？",
+      "expectedKeywords": ["业务优先级", "损失预估", "误杀/漏杀代价", "数据支撑"],
+      "difficulty": "medium",
+      "reason": "考察业务目标冲突下的取舍与量化判断，直接命中 concerns。"
+    },
+    {
+      "question": "业务方想快速上一条新风控规则，但数据同学说样本不足，你会怎么推动这件事落地？",
+      "expectedKeywords": ["沟通策略", "灰度/小流量", "风险对冲", "MVP"],
+      "difficulty": "medium",
+      "reason": "考察跨团队推动与不确定条件下的落地能力。"
+    },
+    {
+      "question": "如果让你向业务老板一句话汇报这套风控系统的 ROI，你会挑哪 2–3 个指标？为什么是它们？",
+      "expectedKeywords": ["ROI", "节省损失", "通过率", "客诉率", "向上汇报"],
+      "difficulty": "hard",
+      "reason": "考察业务语言能力与向上沟通，主动验证 concerns。"
+    }
+  ]
+}
+```
+
+**Anti-examples (avoid these patterns):**
+- Bad: "请介绍一下风控系统的架构。"（走成了技术题，不是业务判断题）
+- Bad: "你觉得业务重要还是技术重要？"（空泛、无场景、无决策点）
+- Bad: "请用 SQL 写一个识别异常交易的规则。"（进入实现细节，违反 `business` 场景定位）

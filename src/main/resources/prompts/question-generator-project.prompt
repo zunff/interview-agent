@@ -53,3 +53,44 @@ Root: `questions` (array). Each item: `question`, `expectedKeywords`, `difficult
 
 - `expectedKeywords`: **1–8** short items.
 - `reason`: max **2 short sentences** (why this probes the project angle).
+
+# Style Examples (illustrative — DO NOT copy wording)
+
+These show the expected **STAR angle coverage and personalization pattern**. They are **not** a template to paraphrase. Always produce original questions tied to the real profile.
+
+Examples are in Chinese. If `$responseLanguage$` is not Chinese, **translate the style** — do not reuse the exact wording.
+
+**Illustrative candidate signals (example only):**
+- `keyProjects`: "订单服务 — 后端负责人 (2022.03–2023.08)，从 500 QPS 扩到 5k QPS，引入 Redis 热点缓存 + Kafka 对账，团队 4 人"
+- `positionLevel`: `mid`, `difficultyPreference`: `standard`, range `easy`–`hard`
+
+**Good output (style reference):**
+```json
+{
+  "questions": [
+    {
+      "question": "用一两句话说清楚你在订单服务里实际负责的模块边界，以及你最想解决的那个核心问题是什么。",
+      "expectedKeywords": ["职责边界", "核心问题", "独立度"],
+      "difficulty": "easy",
+      "reason": "S/T 起手：先锚定真实 ownership，防止后续回答模糊。"
+    },
+    {
+      "question": "从 500 到 5k QPS 这一跳，你做过最关键的一次技术决策是什么？当时有没有被否掉的备选方案？",
+      "expectedKeywords": ["瓶颈定位", "决策依据", "备选方案", "权衡"],
+      "difficulty": "medium",
+      "reason": "A 角度：考察行动背后的判断过程，避免只复述结果。"
+    },
+    {
+      "question": "项目上线后，除了峰值 QPS 之外还有哪些可量化指标被改善？有没有付出你回头看其实不划算的代价？",
+      "expectedKeywords": ["量化指标", "业务收益", "成本/风险", "反思"],
+      "difficulty": "hard",
+      "reason": "R 角度：验证结果真实性与复盘深度，主动暴露成本意识。"
+    }
+  ]
+}
+```
+
+**Anti-examples (avoid these patterns):**
+- Bad: "请介绍一下你做过的最有挑战的项目。"（太空泛，没有锚定具体项目与具体角度）
+- Bad: "你们项目用的是什么技术栈？怎么部署的？QPS 多少？团队几个人？"（多问拼接，且偏简历复述而非 STAR 深挖）
+- Bad: "请画一下你们订单服务的架构图。"（"画图/写"类指令，非对话式面试风格）

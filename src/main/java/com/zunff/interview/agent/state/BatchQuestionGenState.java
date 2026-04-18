@@ -5,7 +5,6 @@ import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import lombok.Getter;
-import lombok.Setter;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
 import org.bsc.langgraph4j.state.Channels;
@@ -166,12 +165,6 @@ public class BatchQuestionGenState extends AgentState {
         return sb.toString().trim();
     }
 
-    /**
-     * 兼容方法：jobContext()
-     */
-    public String jobContext() {
-        return getJobContext();
-    }
 
     /**
      * 兼容方法：sessionId()

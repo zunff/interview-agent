@@ -60,7 +60,7 @@ public class QuestionGenerationService {
 
         try {
             String candidateProfile = state.candidateProfile();
-            String jobContext = state.jobContext();
+            String jobContext = state.getJobContext();
 
             LevelMatchResult levelMatch = state.levelMatchResult();
             String positionLevel = levelMatch != null ? levelMatch.positionLevel().getDescription() : JobAnalysisResult.PositionLevel.MID_LEVEL.getDescription();
@@ -69,10 +69,16 @@ public class QuestionGenerationService {
             String difficultyRangeMax = levelMatch != null ? levelMatch.difficultyRangeMax().getCode() : Difficulty.HARD.getCode();
             String difficultyPreference = levelMatch != null ? levelMatch.difficultyPreference().getCode() : DifficultyPreference.STANDARD.getCode();
 
-            // 从知识库检索参考题目
+            // 从知识库检索参考题目(仅在知识库启用且公司信息存在时)
             String referenceContext = "";
-            if (knowledgeConfig.isEnabled()) {
+            boolean shouldSearchKnowledge = knowledgeConfig.isEnabled()
+                    && state.knowledgeCompany() != null
+                    && !state.knowledgeCompany().isBlank();
+
+            if (shouldSearchKnowledge) {
                 referenceContext = searchReferenceQuestions(jobContext, state, questionType);
+            } else if (knowledgeConfig.isEnabled()) {
+                log.info("知识库已启用，但公司信息为空，跳过知识库检索");
             }
 
             String promptTemplateName = "question-generator-" + questionType.getEvaluationPrompt();

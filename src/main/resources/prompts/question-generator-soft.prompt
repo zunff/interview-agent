@@ -53,3 +53,45 @@ Root: `questions` (array). Each item: `question`, `expectedKeywords`, `difficult
 
 - `expectedKeywords`: **1–8** short items (behaviors or signals to listen for).
 - `reason`: max **2 short sentences** (which dimension this targets).
+
+# Style Examples (illustrative — DO NOT copy wording)
+
+These show **concrete behavioral scenarios** with one clear dimension each. They are **not** a template to paraphrase.
+
+Examples are in Chinese. If `$responseLanguage$` is not Chinese, **translate the style** — do not reuse the exact wording.
+
+**Illustrative context (example only):**
+- Role: 后端工程师，需跨产品/算法协作
+- Candidate `highlights`: "主动牵头推动跨团队对接"; `concerns`: "面对冲突时的处理方式待验证"
+- `positionLevel`: `mid`, `difficultyPreference`: `standard`, range `easy`–`hard`
+
+**Good output (style reference):**
+```json
+{
+  "questions": [
+    {
+      "question": "最近一次你主动学了一项本职工作之外的技能或领域，是什么？为什么选它？",
+      "expectedKeywords": ["学习驱动力", "自我认知", "方法", "应用"],
+      "difficulty": "easy",
+      "reason": "学习力维度，低压力起手。"
+    },
+    {
+      "question": "说一次你和产品经理在优先级上有明显分歧的经历，你当时是怎么处理的，最后结果怎么样？",
+      "expectedKeywords": ["倾听", "数据/场景支持", "妥协/坚持", "结果"],
+      "difficulty": "medium",
+      "reason": "跨角色冲突处理，直接命中候选人 concerns。"
+    },
+    {
+      "question": "带新人或带过小组的话，有没有一次你事后认为自己做得不好的经历？回头看你会怎么改？",
+      "expectedKeywords": ["自省", "失败承认", "改进动作", "他人视角"],
+      "difficulty": "hard",
+      "reason": "领导力与复盘深度，避免候选人只给正面叙事。"
+    }
+  ]
+}
+```
+
+**Anti-examples (avoid these patterns):**
+- Bad: "请做一下自我介绍。"（非行为题、无场景）
+- Bad: "你觉得你沟通能力怎么样？"（自评题，无具体情境）
+- Bad: "你在上一段工作中最大的优点和缺点是什么？再举个例子，再说一次沟通失败的经历。"（多问拼接、焦点发散）

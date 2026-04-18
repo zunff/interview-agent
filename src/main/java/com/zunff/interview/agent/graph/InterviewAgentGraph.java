@@ -148,7 +148,7 @@ public class InterviewAgentGraph {
 
         Map<String, Object> subInputMap = new HashMap<>();
         subInputMap.put(BatchQuestionGenState.CANDIDATE_PROFILE, mainState.candidateProfile());
-        subInputMap.put(BatchQuestionGenState.JOB_CONTEXT, jobAnalysis != null ? jobAnalysis.generateJobSummary() : "");
+        subInputMap.put(BatchQuestionGenState.JOB_CONTEXT, jobAnalysis != null ? jobAnalysis.generateRagQuery() : "");
         subInputMap.put(BatchQuestionGenState.SESSION_ID, mainState.sessionId());
         subInputMap.put(BatchQuestionGenState.KNOWLEDGE_COMPANY, Optional.ofNullable(mainState.knowledgeCompany()).orElse(""));
         subInputMap.put(BatchQuestionGenState.KNOWLEDGE_JOB_POSITION, Optional.ofNullable(mainState.knowledgeJobPosition()).orElse(""));

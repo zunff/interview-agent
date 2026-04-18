@@ -146,6 +146,13 @@
             <version>${hutool.version}</version>
         </dependency>
 
+        <!-- Apache Commons Text (字符串相似度计算) -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>1.12.0</version>
+        </dependency>
+
         <!-- MyBatis-Plus -->
         <dependency>
             <groupId>com.baomidou</groupId>
