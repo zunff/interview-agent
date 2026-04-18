@@ -2,6 +2,7 @@ package com.zunff.interview.agent.nodes.round;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.agent.state.InterviewState;
+import com.zunff.interview.constant.Difficulty;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.GeneratedQuestion;
@@ -9,6 +10,7 @@ import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -81,48 +83,55 @@ public class FollowUpDecisionNode {
      * @return 返回决策结果，如果返回 null 表示需要 LLM 精细决策
      */
     private RouteDecision tryQuickDecision(EvaluationBO eval, GeneratedQuestion question, InterviewState state) {
-        int followUpCount = state.followUpCount();
-        int maxFollowUps = state.maxFollowUpsForCurrentRound();
+        int score = eval.getOverallScore();
+        int used = state.followUpCount();
+        int max = state.maxFollowUpsForCurrentRound();
+        int remaining = max - used;
 
-        // 已达上限，直接返回 nextQuestion
-        if (followUpCount >= maxFollowUps) {
+        Difficulty difficulty = question != null && question.getDifficulty() != null
+                ? Difficulty.fromCode(question.getDifficulty())
+                : Difficulty.MEDIUM;
+        boolean hasWeakness = !CollectionUtils.isEmpty(eval.getWeaknesses());
+        boolean concern = eval.isModalityConcern();
+
+        // 1. 已达追问上限
+        if (used >= max) {
             return RouteDecision.NEXT_QUESTION;
         }
 
-        // Hard 难度 + 低分，优先 deepDive
-        if (question != null && "hard".equals(question.getDifficulty()) && eval.getOverallScore() < 50) {
+        // 2. Hard 题极低分：深度挖掘（需至少还剩 2 次追问额度，避免用掉最后一次）
+        if (difficulty == Difficulty.HARD && score < 50 && remaining >= 2) {
             return RouteDecision.DEEP_DIVE;
         }
 
-        // Hard 难度 + 中等低分（50-60），需要 LLM 精细决策
-        if (question != null && "hard".equals(question.getDifficulty()) && eval.getOverallScore() < 60) {
-            return null; // 需要 LLM 精细决策
-        }
-
-        // Easy 难度 + 高分，直接返回 nextQuestion
-        if (question != null && "easy".equals(question.getDifficulty()) && eval.getOverallScore() >= 70) {
-            return RouteDecision.NEXT_QUESTION;
-        }
-
-        // 高分 + 无异常 + 已有追问，直接返回 nextQuestion
-        if (eval.getOverallScore() >= 85
-                && !eval.isModalityConcern()
-                && eval.getWeaknesses().isEmpty()
-                && followUpCount >= 1) {
-            return RouteDecision.NEXT_QUESTION;
-        }
-
-        // 高分 + 无弱点，返回 challengeMode
-        if (eval.getOverallScore() > 90 && eval.getWeaknesses().isEmpty()) {
+        // 3. 极高分、无弱点、无多模态异常、首轮、且预算足够一次有意义的挑战
+        if (score > 90 && !hasWeakness && !concern && used == 0 && remaining >= 2) {
             return RouteDecision.CHALLENGE_MODE;
         }
 
-        // 中等分数 + 有弱点或多模态异常，返回 followUp
-        if (eval.getOverallScore() < 70 || !eval.getWeaknesses().isEmpty() || eval.isModalityConcern()) {
+        // 4. Easy 题表现尚可且无多模态异常：换题
+        if (difficulty == Difficulty.EASY && score >= 70 && !concern) {
+            return RouteDecision.NEXT_QUESTION;
+        }
+
+        // 5. 高分、稳定、已追问过：收尾换题
+        if (score >= 85 && !hasWeakness && !concern && used >= 1) {
+            return RouteDecision.NEXT_QUESTION;
+        }
+
+        // 6. 仅剩最后一次追问额度：能收尾则换题，否则普通追问
+        if (remaining <= 1) {
+            return (score >= 70 && !concern && !hasWeakness)
+                    ? RouteDecision.NEXT_QUESTION
+                    : RouteDecision.FOLLOW_UP;
+        }
+
+        // 7. 明显低分且有不足：直接普通追问，不消耗 LLM
+        if (score < 50 && hasWeakness) {
             return RouteDecision.FOLLOW_UP;
         }
 
-        // 其他情况需要 LLM 精细决策
+        // 8. 其余交给 LLM 精细决策
         return null;
     }
 }

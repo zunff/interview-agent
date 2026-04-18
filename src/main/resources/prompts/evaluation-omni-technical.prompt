@@ -4,7 +4,7 @@ Scope:
 Evaluate ONLY the current question and the current answer in the user message. Do not assume prior answers, follow-up chains, or any context not explicitly provided.
 
 Score these fields (integers 0–100):
-- accuracy: correctness vs expected keywords and question intent
+- accuracy: correctness vs question intent and expected-keyword **coverage** (keywords may be short anchor phrases from follow-up generation; score semantic equivalence, not literal string match)
 - logic: reasoning structure and correctness
 - fluency: clarity and organization of technical content
 - confidence: depth and certainty of claims

@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,7 +27,7 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class GenerateFollowUpNode {
+public class BasicFollowUpGenNode {
 
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
@@ -79,31 +80,7 @@ public class GenerateFollowUpNode {
      * 生成针对性追问（包含追问链路上下文）
      */
     private FollowUpQuestionResponseDto generateFollowUpQuestion(EvaluationBO evaluation, GeneratedQuestion question, String followUpChain, ChatClient chatClient) {
-        // 构建提示词变量
-        Map<String, Object> promptVars = new HashMap<>();
-        promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
-
-        // 初始题目信息
-        if (question != null) {
-            promptVars.put("question", question.getQuestion() != null ? question.getQuestion() : "");
-            promptVars.put("expectedKeywords", question.getExpectedKeywords() != null ? String.join(", ", question.getExpectedKeywords()) : "");
-            promptVars.put("difficulty", question.getDifficulty() != null ? question.getDifficulty() : "medium");
-        } else {
-            promptVars.put("question", evaluation.getQuestion() != null ? evaluation.getQuestion() : "");
-            promptVars.put("expectedKeywords", "");
-            promptVars.put("difficulty", "medium");
-        }
-
-        // 追问链路（已包含当前回答的评估）
-        promptVars.put("followUpChain", followUpChain);
-
-        promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join("\n- ", evaluation.getWeaknesses()) : "No obvious weaknesses");
-
-        // 传递多模态分数，而不是预生成的建议文本
-        promptVars.put("emotionScore", evaluation.getEmotionScore());
-        promptVars.put("bodyLanguageScore", evaluation.getBodyLanguageScore());
-        promptVars.put("voiceToneScore", evaluation.getVoiceToneScore());
-        promptVars.put("modalityConcern", evaluation.isModalityConcern());
+        Map<String, Object> promptVars = buildFollowUpGenerationPromptVars(evaluation, question, followUpChain);
 
         String systemPrompt = promptTemplateService.getPrompt("followup-question-generation", promptVars);
         String userPrompt = promptTemplateService.getPrompt("followup-question-generation-user", promptVars);
@@ -113,5 +90,55 @@ public class GenerateFollowUpNode {
                 .user(userPrompt)
                 .call()
                 .entity(FollowUpQuestionResponseDto.class);
+    }
+
+    private Map<String, Object> buildFollowUpGenerationPromptVars(
+            EvaluationBO evaluation,
+            GeneratedQuestion question,
+            String followUpChain) {
+
+        Map<String, Object> promptVars = new HashMap<>();
+        promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
+        promptVars.put("followUpChain", followUpChain != null ? followUpChain : "");
+
+        if (question != null) {
+            promptVars.put("question", question.getQuestion() != null ? question.getQuestion() : "");
+            promptVars.put("expectedKeywords", question.getExpectedKeywords() != null ? String.join(", ", question.getExpectedKeywords()) : "");
+            promptVars.put("difficulty", question.getDifficulty() != null ? question.getDifficulty() : "medium");
+            promptVars.put("questionIntent", question.getReason() != null ? question.getReason() : "No specific intention stated");
+            promptVars.put("questionType", question.getQuestionType() != null ? question.getQuestionType() : "unknown");
+        } else {
+            promptVars.put("question", evaluation.getQuestion() != null ? evaluation.getQuestion() : "");
+            promptVars.put("expectedKeywords", "");
+            promptVars.put("difficulty", "medium");
+            promptVars.put("questionIntent", "No specific intention stated");
+            promptVars.put("questionType", "unknown");
+        }
+
+        promptVars.put("answer", evaluation.getAnswer() != null ? evaluation.getAnswer() : "");
+        promptVars.put("overallScore", evaluation.getOverallScore());
+        promptVars.put("accuracy", evaluation.getAccuracy());
+        promptVars.put("logic", evaluation.getLogic());
+        promptVars.put("fluency", evaluation.getFluency());
+        promptVars.put("confidence", evaluation.getConfidence());
+
+        promptVars.put("strengths", formatBulletList(evaluation.getStrengths()));
+        promptVars.put("weaknesses", formatBulletList(evaluation.getWeaknesses()));
+        promptVars.put("detailedEvaluation",
+                evaluation.getDetailedEvaluation() != null ? evaluation.getDetailedEvaluation() : "None provided.");
+
+        promptVars.put("emotionScore", evaluation.getEmotionScore());
+        promptVars.put("bodyLanguageScore", evaluation.getBodyLanguageScore());
+        promptVars.put("voiceToneScore", evaluation.getVoiceToneScore());
+        promptVars.put("modalityConcern", evaluation.isModalityConcern());
+
+        return promptVars;
+    }
+
+    private static String formatBulletList(java.util.List<String> items) {
+        if (CollectionUtils.isEmpty(items)) {
+            return "None provided.";
+        }
+        return "- " + String.join("\n- ", items);
     }
 }

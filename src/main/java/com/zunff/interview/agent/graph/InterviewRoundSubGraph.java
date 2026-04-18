@@ -1,11 +1,11 @@
 package com.zunff.interview.agent.graph;
 
 import com.zunff.interview.agent.nodes.round.AskQuestionNode;
-import com.zunff.interview.agent.nodes.round.ChallengeQuestionNode;
+import com.zunff.interview.agent.nodes.round.ChallengeFollowUpGenNode;
 import com.zunff.interview.agent.nodes.round.ComprehensiveEvaluationNode;
-import com.zunff.interview.agent.nodes.round.DeepDiveNode;
+import com.zunff.interview.agent.nodes.round.DeepDiveFollowUpGenNode;
 import com.zunff.interview.agent.nodes.round.FollowUpDecisionNode;
-import com.zunff.interview.agent.nodes.round.GenerateFollowUpNode;
+import com.zunff.interview.agent.nodes.round.BasicFollowUpGenNode;
 import com.zunff.interview.agent.router.RoundRouter;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.agent.names.NodeNames;
@@ -36,7 +36,7 @@ import static org.bsc.langgraph4j.StateGraph.START;
 public class InterviewRoundSubGraph {
 
     private final AskQuestionNode askQuestionNode;
-    private final GenerateFollowUpNode generateFollowUpNode;
+    private final BasicFollowUpGenNode basicFollowUpGenNode;
     private final RoundRouter roundRouter;
 
     // Omni多模态综合评估节点（替代并行三分支）
@@ -44,24 +44,24 @@ public class InterviewRoundSubGraph {
 
     // 条件分支节点
     private final FollowUpDecisionNode followUpDecisionNode;
-    private final ChallengeQuestionNode challengeQuestionNode;
-    private final DeepDiveNode deepDiveNode;
+    private final ChallengeFollowUpGenNode challengeFollowUpGenNode;
+    private final DeepDiveFollowUpGenNode deepDiveFollowUpGenNode;
 
     public InterviewRoundSubGraph(
             AskQuestionNode askQuestionNode,
-            GenerateFollowUpNode generateFollowUpNode,
+            BasicFollowUpGenNode basicFollowUpGenNode,
             RoundRouter roundRouter,
             ComprehensiveEvaluationNode comprehensiveEvaluationNode,
             FollowUpDecisionNode followUpDecisionNode,
-            ChallengeQuestionNode challengeQuestionNode,
-            DeepDiveNode deepDiveNode) {
+            ChallengeFollowUpGenNode challengeFollowUpGenNode,
+            DeepDiveFollowUpGenNode deepDiveFollowUpGenNode) {
         this.askQuestionNode = askQuestionNode;
-        this.generateFollowUpNode = generateFollowUpNode;
+        this.basicFollowUpGenNode = basicFollowUpGenNode;
         this.roundRouter = roundRouter;
         this.comprehensiveEvaluationNode = comprehensiveEvaluationNode;
         this.followUpDecisionNode = followUpDecisionNode;
-        this.challengeQuestionNode = challengeQuestionNode;
-        this.deepDiveNode = deepDiveNode;
+        this.challengeFollowUpGenNode = challengeFollowUpGenNode;
+        this.deepDiveFollowUpGenNode = deepDiveFollowUpGenNode;
     }
 
     /**
@@ -96,9 +96,9 @@ public class InterviewRoundSubGraph {
 
                 // 条件分支节点
                 .addNode(followUpDecision, followUpDecisionNode::execute)
-                .addNode(generateFollowUp, generateFollowUpNode::execute)
-                .addNode(generateChallenge, challengeQuestionNode::execute)
-                .addNode(generateDeepDive, deepDiveNode::execute)
+                .addNode(generateFollowUp, basicFollowUpGenNode::execute)
+                .addNode(generateChallenge, challengeFollowUpGenNode::execute)
+                .addNode(generateDeepDive, deepDiveFollowUpGenNode::execute)
 
                 // ========== 定义边 ==========
                 // 直接从 START 进入 askQuestion

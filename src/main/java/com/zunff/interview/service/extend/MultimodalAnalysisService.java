@@ -197,29 +197,15 @@ public class MultimodalAnalysisService {
 
         log.info("开始LLM路由决策，当前追问次数: {}/{}", followUpCount, maxFollowUps);
 
-        // 构建简化的提示词变量
-        Map<String, Object> promptVars = new HashMap<>();
-        promptVars.put("overallScore", evaluation.getOverallScore());
-
-        // 添加题目元信息
-        if (generatedQuestion != null) {
-            promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
-            promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null ? String.join(", ", generatedQuestion.getExpectedKeywords()) : "No specific keywords");
-        } else {
-            promptVars.put("difficulty", "medium");
-            promptVars.put("expectedKeywords", "No specific keywords");
-        }
-
-        promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join(", ", evaluation.getWeaknesses()) : "");
-        promptVars.put("modalityConcern", evaluation.isModalityConcern());
-        promptVars.put("followUpCount", followUpCount);
-        promptVars.put("maxFollowUps", maxFollowUps);
+        Map<String, Object> promptVars = buildFollowUpRoutePromptVars(evaluation, generatedQuestion, followUpCount, maxFollowUps);
 
         try {
             String systemPrompt = promptTemplateService.getPrompt("followup-route-decision", promptVars);
+            String userPrompt = promptTemplateService.getPrompt("followup-route-decision-user", promptVars);
 
             FollowUpRouteDecisionDto response = textChatClient.prompt()
                     .system(systemPrompt)
+                    .user(userPrompt)
                     .call()
                     .entity(FollowUpRouteDecisionDto.class);
 
@@ -231,6 +217,56 @@ public class MultimodalAnalysisService {
             log.error("LLM路由决策失败", e);
             return "nextQuestion"; // 失败时默认进入下一题
         }
+    }
+
+    private Map<String, Object> buildFollowUpRoutePromptVars(
+            EvaluationBO evaluation,
+            GeneratedQuestion generatedQuestion,
+            int followUpCount,
+            int maxFollowUps) {
+        Map<String, Object> promptVars = new HashMap<>();
+        int remainingFollowUps = maxFollowUps - followUpCount;
+
+        promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
+        promptVars.put("overallScore", evaluation.getOverallScore());
+        promptVars.put("accuracy", evaluation.getAccuracy());
+        promptVars.put("logic", evaluation.getLogic());
+        promptVars.put("fluency", evaluation.getFluency());
+        promptVars.put("confidence", evaluation.getConfidence());
+        promptVars.put("emotionScore", evaluation.getEmotionScore());
+        promptVars.put("bodyLanguageScore", evaluation.getBodyLanguageScore());
+        promptVars.put("voiceToneScore", evaluation.getVoiceToneScore());
+        promptVars.put("modalityConcern", evaluation.isModalityConcern());
+
+        String questionText = evaluation.getQuestion();
+        if (questionText == null && generatedQuestion != null) {
+            questionText = generatedQuestion.getQuestion();
+        }
+        promptVars.put("question", questionText != null ? questionText : "");
+
+        String answerText = evaluation.getAnswer();
+        promptVars.put("answer", answerText != null ? answerText : "");
+
+        if (generatedQuestion != null) {
+            promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
+            promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null
+                    ? String.join(", ", generatedQuestion.getExpectedKeywords())
+                    : "No specific keywords");
+            promptVars.put("questionIntent", generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated");
+        } else {
+            promptVars.put("difficulty", "medium");
+            promptVars.put("expectedKeywords", "No specific keywords");
+            promptVars.put("questionIntent", "No specific intention stated");
+        }
+
+        promptVars.put("strengths", evaluation.getStrengths() != null ? String.join(", ", evaluation.getStrengths()) : "");
+        promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join(", ", evaluation.getWeaknesses()) : "");
+        promptVars.put("detailedEvaluation", evaluation.getDetailedEvaluation() != null ? evaluation.getDetailedEvaluation() : "");
+
+        promptVars.put("followUpCount", followUpCount);
+        promptVars.put("maxFollowUps", maxFollowUps);
+        promptVars.put("remainingFollowUps", remainingFollowUps);
+        return promptVars;
     }
 
     // ========== 解析方法 ==========
