@@ -20,6 +20,7 @@ public class JobAnalysisResult implements Serializable {
      * 岗位级别枚举
      */
     @Getter
+    @AllArgsConstructor
     public enum PositionLevel {
         JUNIOR(1, "junior", "初级", "0-2年", 0, 2),
         MID_LEVEL(2, "mid", "中级", "2-5年", 2, 5),
@@ -32,16 +33,6 @@ public class JobAnalysisResult implements Serializable {
         private final String experienceRange;
         private final int minYears;
         private final int maxYears;
-
-        PositionLevel(int code, String description, String displayName, String experienceRange,
-                      int minYears, int maxYears) {
-            this.code = code;
-            this.description = description;
-            this.displayName = displayName;
-            this.experienceRange = experienceRange;
-            this.minYears = minYears;
-            this.maxYears = maxYears;
-        }
 
         public static PositionLevel fromCode(Integer code) {
             if (code == null) {
@@ -75,6 +66,7 @@ public class JobAnalysisResult implements Serializable {
      * 岗位类型
      */
     @Getter
+    @AllArgsConstructor
     public enum JobType {
         /**
          * 技术驱动型：技术要求高，技术问题占比高
@@ -94,12 +86,6 @@ public class JobAnalysisResult implements Serializable {
         private final int code;
         private final String description;
         private final String displayName;
-
-        JobType(int code, String description, String displayName) {
-            this.code = code;
-            this.description = description;
-            this.displayName = displayName;
-        }
 
         public static JobType fromCode(Integer code) {
             if (code == null) {

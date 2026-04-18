@@ -15,8 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Prompt 模板管理服务
  * 统一管理和加载 prompt 模板文件
  *
- * 使用 '<' 和 '>' 作为变量分隔符，避免与 JSON 花括号冲突
- * 模板变量语法: <变量名>
+ * 使用 '$' 和 '$' 作为变量分隔符，避免与 JSON 花括号冲突
+ * 模板变量语法: $变量名$
  */
 @Slf4j
 @Service

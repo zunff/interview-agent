@@ -8,6 +8,8 @@ import com.zunff.interview.model.dto.FollowUpChainEntity;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.JobAnalysisResult;
 import com.zunff.interview.model.dto.LevelMatchResult;
+import com.zunff.interview.constant.Difficulty;
+import com.zunff.interview.constant.DifficultyPreference;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
@@ -165,11 +167,9 @@ public class InterviewState extends AgentState {
                 () -> new LevelMatchResult(
                         JobAnalysisResult.PositionLevel.MID_LEVEL,
                         JobAnalysisResult.PositionLevel.MID_LEVEL,
-                        0.8,
-                        "easy",
-                        "hard",
-                        "standard",
-                        "Default level match"
+                        Difficulty.EASY,
+                        Difficulty.HARD,
+                        DifficultyPreference.STANDARD
                 )));
 
         // 批量题目队列

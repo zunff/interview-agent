@@ -1,6 +1,8 @@
 package com.zunff.interview.agent.nodes.main;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.constant.Difficulty;
+import com.zunff.interview.constant.DifficultyPreference;
 import com.zunff.interview.model.dto.JobAnalysisResult;
 import com.zunff.interview.model.dto.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
@@ -80,13 +82,12 @@ public class ProfileAnalysisNode {
             LevelMatchResult levelMatch = buildLevelMatchFromResponse(response, positionLevel);
             updates.put(InterviewState.LEVEL_MATCH_RESULT, levelMatch);
 
-            log.info("级别匹配完成: positionLevel={}, candidateLevel={}, fitScore={}%, difficultyRange={}-{}, preference={}",
+            log.info("级别匹配完成: positionLevel={}, candidateLevel={}, difficultyRange={}-{}, preference={}",
                     positionLevel.getDisplayName(),
                     levelMatch.candidateLevel().getDisplayName(),
-                    (int) (levelMatch.matchScore() * 100),
-                    levelMatch.difficultyRangeMin(),
-                    levelMatch.difficultyRangeMax(),
-                    levelMatch.difficultyPreference());
+                    levelMatch.difficultyRangeMin().getCode(),
+                    levelMatch.difficultyRangeMax().getCode(),
+                    levelMatch.difficultyPreference().getCode());
 
             CircuitBreakerHelper.recordSuccess(updates);
 
@@ -108,45 +109,27 @@ public class ProfileAnalysisNode {
      * 从 LLM 返回的 CandidateProfileResponseDto 构建 LevelMatchResult
      */
     private LevelMatchResult buildLevelMatchFromResponse(CandidateProfileResponseDto response, JobAnalysisResult.PositionLevel positionLevel) {
-        // 候选人级别：优先使用 LLM 返回的 candidateLevelCode，否则从 workYears 推断
+        // 候选人级别：LLM 返回 candidateLevelCode 优先，否则默认 MID_LEVEL
         JobAnalysisResult.PositionLevel candidateLevel;
         if (response.candidateLevelCode() != null) {
             candidateLevel = JobAnalysisResult.PositionLevel.fromCode(response.candidateLevelCode());
-        } else if (response.workYears() != null) {
-            candidateLevel = JobAnalysisResult.PositionLevel.inferFromExperience(response.workYears());
         } else {
             candidateLevel = JobAnalysisResult.PositionLevel.MID_LEVEL;
         }
 
-        // 匹配度：LLM 返回的 0-100 转换为 0.0-1.0
-        double matchScore = response.positionFitScore() != null
-                ? response.positionFitScore() / 100.0
-                : 0.8;
-
-        // 难度范围：LLM 返回优先，否则降级
-        String difficultyRangeMin = response.difficultyRangeMin() != null
-                ? response.difficultyRangeMin() : "easy";
-        String difficultyRangeMax = response.difficultyRangeMax() != null
-                ? response.difficultyRangeMax() : "hard";
+        // 难度范围
+        Difficulty difficultyRangeMin = Difficulty.fromCode(response.difficultyRangeMin());
+        Difficulty difficultyRangeMax = Difficulty.fromCode(response.difficultyRangeMax());
 
         // 难度偏好
-        String difficultyPreference = response.difficultyPreference() != null
-                ? response.difficultyPreference() : "standard";
-
-        // 匹配原因
-        String matchReason = String.format("Position: %s, Candidate: %s, Fit: %d%%",
-                positionLevel.getDisplayName(),
-                candidateLevel.getDisplayName(),
-                (int) (matchScore * 100));
+        DifficultyPreference difficultyPreference = DifficultyPreference.fromCode(response.difficultyPreference());
 
         return new LevelMatchResult(
                 positionLevel,
                 candidateLevel,
-                matchScore,
                 difficultyRangeMin,
                 difficultyRangeMax,
-                difficultyPreference,
-                matchReason
+                difficultyPreference
         );
     }
 
@@ -157,11 +140,9 @@ public class ProfileAnalysisNode {
         return new LevelMatchResult(
                 positionLevel,
                 JobAnalysisResult.PositionLevel.MID_LEVEL,
-                0.8,
-                "easy",
-                "hard",
-                "standard",
-                "Default level match (fallback)"
+                Difficulty.EASY,
+                Difficulty.HARD,
+                DifficultyPreference.STANDARD
         );
     }
 }

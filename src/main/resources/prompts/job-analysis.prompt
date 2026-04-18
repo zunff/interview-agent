@@ -9,32 +9,40 @@ The analysis result will be used by:
 - ReportGeneratorNode: to evaluate overall match
 
 Question categories:
-1. technicalBasicCount - Technical foundation questions
-2. projectCount - Project experience questions
-3. businessCount - Business scenario questions
-4. softSkillCount - Soft skill questions
+1. technicalBasicCount — technical foundation
+2. projectCount — project experience
+3. businessCount — business scenario
+4. softSkillCount — soft skills
 
-Role type (via jobTypeCode):
-- 1 = TECHNICAL_DRIVEN — high technical requirements, more technical questions
-- 2 = BUSINESS_DRIVEN — high business requirements, more business questions
-- 3 = BALANCED — balanced technical and business requirements
+Role type (jobTypeCode is authoritative):
+- 1 = TECHNICAL_DRIVEN — high technical bar; weight technical + project counts
+- 2 = BUSINESS_DRIVEN — high business/domain bar; weight business + soft skill counts
+- 3 = BALANCED — technical and business both matter
 
-Rules:
-1. Suggested total questions: 8-12 (adjust based on role complexity)
-2. technicalBasicCount >= 2
-3. projectCount >= 2
-4. businessCount >= 1
-5. softSkillCount >= 1
-6. Allocation must reflect role focus:
-   - TECHNICAL_DRIVEN: technicalBasicCount + projectCount should be higher (e.g., 7-8 questions)
-   - BUSINESS_DRIVEN: businessCount + softSkillCount should be higher (e.g., 5-6 questions)
-   - BALANCED: roughly equal distribution between technical and business rounds
-7. CRITICAL: Respect frontend constraints injected in user prompt. Total counts MUST NOT exceed these limits.
+Tie-break when ambiguous:
+- JD emphasizes stacks, system design, performance, infra, coding — lean TECHNICAL_DRIVEN (1)
+- JD emphasizes domain growth, cross-functional collaboration, stakeholder communication, GTM — lean BUSINESS_DRIVEN (2)
+- Otherwise BALANCED (3)
+
+## Question allocation (order of priority)
+1. **CRITICAL:** Obey CRITICAL CONSTRAINTS in the user message:  
+   (technicalBasicCount + projectCount) ≤ max technical cap, and (businessCount + softSkillCount) ≤ max business cap. Never exceed.
+2. **Target totals:** When caps allow, aim for **8–12** questions total (all four counts). If caps force a lower total, that is correct — do not invent higher numbers.
+3. **Soft floors** (apply only **after** caps are satisfied; if caps are tight, get as close as possible and prefer satisfying the caps over these floors):  
+   technicalBasicCount ≥ 2, projectCount ≥ 2, businessCount ≥ 1, softSkillCount ≥ 1
+4. **Focus shaping** (within caps):
+   - TECHNICAL_DRIVEN: technicalBasicCount + projectCount should dominate (e.g. ~7–8 of total **when** caps allow that split)
+   - BUSINESS_DRIVEN: businessCount + softSkillCount should dominate (e.g. ~5–6 of total **when** caps allow)
+   - BALANCED: technical round and business round totals should be roughly balanced
+
+5. **totalQuestions** must exactly equal:  
+   technicalBasicCount + projectCount + businessCount + softSkillCount  
+   (no separate invented total)
 
 Metadata extraction:
-1. Extract `company` and `jobPosition` from the same input.
+1. Extract company and jobPosition from the same input.
 2. Use only supported values and normalization rules below.
-3. If uncertain, return empty string "".
+3. If uncertain, return "".
 
 Supported companies (strict list only):
 阿里巴巴, 美团, 腾讯, 华为, 字节跳动, 京东, 微软, 百度
@@ -60,21 +68,22 @@ Job position normalization:
 - 数分 / 数据开发 -> 数据工程师
 - 云原生 / 云服务工程师 -> 云计算工程师
 
-`jobTypeCode` is authoritative for role type.
+Position Level (positionLevelCode):
+- 1 = Junior (0–2 years, basic skills)
+- 2 = Mid-Level (2–5 years, solid fundamentals)
+- 3 = Senior (5–10 years, deep expertise)
+- 4 = Expert (10+ years, leadership/innovation)
 
-Position Level (via positionLevelCode):
-- 1 = Junior (entry-level, 0-2 years, basic skills)
-- 2 = Mid-Level (intermediate, 2-5 years, solid fundamentals)
-- 3 = Senior (advanced, 5-10 years, deep expertise)
-- 4 = Expert (top-level, 10+ years, leadership/innovation)
+Infer from JD: stated years, seniority signals, technical depth, leadership scope.
 
-Infer level from job description considering:
-- Required experience years mentioned
-- Salary range indicators
-- Technical depth requirements
-- Leadership expectations
+Text fields (keyRequirements, techStackSummary, businessDomain, softSkillsRequired):
+- Use the **same primary language** as the job posting (if mixed, match the dominant one).
+- Short, scannable phrases or one short paragraph each; no filler; no markdown.
 
-Required JSON fields:
-jobTypeCode (int), positionLevelCode (int 1-4), company (string), jobPosition (string), technicalBasicCount, projectCount, businessCount, softSkillCount, totalQuestions (integers), keyRequirements, techStackSummary, businessDomain, softSkillsRequired (strings).
+## Required JSON (exact top-level keys, camelCase only, no extra keys)
+jobTypeCode (int), positionLevelCode (int 1–4),
+company (string), jobPosition (string),
+technicalBasicCount, projectCount, businessCount, softSkillCount, totalQuestions (integers),
+keyRequirements, techStackSummary, businessDomain, softSkillsRequired (strings).
 
-Output: one JSON object only. No markdown, code fences, or surrounding text. Do not output company/job values outside the supported lists.
+Output: one JSON object only. No markdown, code fences, or surrounding text. Do not output company or jobPosition values outside the supported lists.

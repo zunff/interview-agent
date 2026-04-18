@@ -1,5 +1,8 @@
 package com.zunff.interview.model.dto;
 
+import com.zunff.interview.constant.Difficulty;
+import com.zunff.interview.constant.DifficultyPreference;
+
 import java.io.Serial;
 import java.io.Serializable;
 
@@ -10,11 +13,9 @@ import java.io.Serializable;
 public record LevelMatchResult(
         JobAnalysisResult.PositionLevel positionLevel,
         JobAnalysisResult.PositionLevel candidateLevel,
-        double matchScore,
-        String difficultyRangeMin,
-        String difficultyRangeMax,
-        String difficultyPreference,
-        String matchReason
+        Difficulty difficultyRangeMin,
+        Difficulty difficultyRangeMax,
+        DifficultyPreference difficultyPreference
 ) implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -23,7 +24,7 @@ public record LevelMatchResult(
      * 获取难度范围描述
      */
     public String getDifficultyRange() {
-        return difficultyRangeMin + "-" + difficultyRangeMax;
+        return difficultyRangeMin.getCode() + "-" + difficultyRangeMax.getCode();
     }
 
     /**

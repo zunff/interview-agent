@@ -4,7 +4,11 @@ import com.zunff.interview.config.KnowledgeConfig;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.dto.JobAnalysisResult;
 import com.zunff.interview.model.dto.LevelMatchResult;
+import com.zunff.interview.constant.Difficulty;
+import com.zunff.interview.constant.DifficultyPreference;
+import com.zunff.interview.model.dto.llm.vars.QuestionGeneratorUserPromptVars;
 import com.zunff.interview.model.dto.llm.resp.LlmQuestionListResultDto;
 import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
 import com.zunff.interview.service.extend.PromptTemplateService;
@@ -70,37 +74,29 @@ public class QuestionGenerationService {
                 referenceContext = searchReferenceQuestions(jobContext, state, questionType);
             }
 
-            // 构建 user prompt（复用现有模板）
             // 获取级别匹配变量
             LevelMatchResult levelMatch = state.levelMatchResult();
-            String positionLevel = levelMatch != null ? levelMatch.positionLevel().getDescription() : "mid";
-            String candidateLevel = levelMatch != null ? levelMatch.candidateLevel().getDescription() : "mid";
-            String matchScore = levelMatch != null ? String.valueOf((int) (levelMatch.matchScore() * 100)) : "80";
-            String difficultyRangeMin = levelMatch != null ? levelMatch.difficultyRangeMin() : "easy";
-            String difficultyRangeMax = levelMatch != null ? levelMatch.difficultyRangeMax() : "hard";
-            String difficultyPreference = levelMatch != null ? levelMatch.difficultyPreference() : "standard";
+            String positionLevel = levelMatch != null ? levelMatch.positionLevel().getDescription() : JobAnalysisResult.PositionLevel.MID_LEVEL.getDescription();
+            String candidateLevel = levelMatch != null ? levelMatch.candidateLevel().getDescription() : JobAnalysisResult.PositionLevel.MID_LEVEL.getDescription();
+            String difficultyRangeMin = levelMatch != null ? levelMatch.difficultyRangeMin().getCode() : Difficulty.EASY.getCode();
+            String difficultyRangeMax = levelMatch != null ? levelMatch.difficultyRangeMax().getCode() : Difficulty.HARD.getCode();
+            String difficultyPreference = levelMatch != null ? levelMatch.difficultyPreference().getCode() : DifficultyPreference.STANDARD.getCode();
 
-            String userPrompt = promptTemplateService.getPrompt("question-generator-user", Map.ofEntries(
-                    Map.entry("candidateProfile", candidateProfile == null ? "" : candidateProfile),
-                    Map.entry("jobInfo", jobContext == null ? "" : jobContext),
-                    Map.entry("roundDisplayName", questionType.getDisplayName()),
-                    Map.entry("progressLabel", "Batch generation"),
-                    Map.entry("doneCount", 0),
-                    Map.entry("maxCount", count),
-                    Map.entry("questionIndex", 1),
-                    Map.entry("hasPreviousQuestions", false),
-                    Map.entry("previousQuestions", "无"),
-                    Map.entry("firstQuestionHint", ""),
-                    Map.entry("referenceContext", referenceContext.isBlank() ? "None" : referenceContext),
-                    Map.entry("responseLanguage", promptConfig.getResponseLanguage()),
-                    Map.entry("count", count),
-                    Map.entry("positionLevel", positionLevel),
-                    Map.entry("candidateLevel", candidateLevel),
-                    Map.entry("matchScore", matchScore),
-                    Map.entry("difficultyRangeMin", difficultyRangeMin),
-                    Map.entry("difficultyRangeMax", difficultyRangeMax),
-                    Map.entry("difficultyPreference", difficultyPreference)
-            ));
+            // 构建 user prompt
+            QuestionGeneratorUserPromptVars vars = new QuestionGeneratorUserPromptVars(
+                    candidateProfile == null ? "" : candidateProfile,
+                    jobContext == null ? "" : jobContext,
+                    questionType.getDisplayName(),
+                    count,
+                    referenceContext.isBlank() ? "None" : referenceContext,
+                    promptConfig.getResponseLanguage(),
+                    positionLevel,
+                    candidateLevel,
+                    difficultyRangeMin,
+                    difficultyRangeMax,
+                    difficultyPreference
+            );
+            String userPrompt = promptTemplateService.getPrompt("question-generator-user", vars.asMap());
 
             ChatClient chatClient = chatClientBuilder.build();
 
