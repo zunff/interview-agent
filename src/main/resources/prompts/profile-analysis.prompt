@@ -11,12 +11,24 @@ Guidelines:
 4. Keep output concise and factual.
 5. If data is missing: use empty string/array, workYears=0, impressionScore=5.
 
+## Level Matching (CRITICAL)
+Based on candidate's experience depth, project complexity, and technical breadth:
+- candidateLevelCode: 1=Junior (0-2yr), 2=Mid (2-5yr), 3=Senior (5-10yr), 4=Expert (10+yr)
+- positionFitScore: How well candidate matches the target position (0-100)
+- difficultyRangeMin/Max: Recommended question difficulty range (easy/medium/hard)
+- difficultyPreference: One of "fundamentals_focused", "slightly_lowered", "standard", "moderate_challenge", "mostly_hard", "maximum_difficulty"
+
+Consider: Does candidate's project experience show depth matching their years? Are technical skills advanced for their level?
+
 Required JSON fields:
 techStack (string array);
 keyProjects (array of objects: name, role, highlights (string array));
 workYears (int), education (string);
 selfIntroConsistency, selfIntroConsistencyCode;
 highlights, concerns (string arrays);
-impressionScore (int), summary (string).
+impressionScore (int), summary (string);
+candidateLevelCode (int 1-4), positionFitScore (int 0-100);
+difficultyRangeMin (string: easy/medium/hard), difficultyRangeMax (string);
+difficultyPreference (string).
 
 Output: one JSON object only. No markdown, code fences, or surrounding text.

@@ -130,12 +130,16 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         int maxBusinessQuestions = data.getInt("maxBusinessQuestions", 4);
         int maxFollowUps = data.getInt("maxFollowUps", 2);
 
+        // 岗位级别相关参数（可选）
+        String positionLevel = data.getStr("positionLevel");
+
         if (resume == null || resume.isEmpty() || jobInfo == null || jobInfo.isEmpty()) {
             sendErrorMessage(wsSession, "简历和岗位信息不能为空");
             return;
         }
 
-        log.info("收到 start_interview 请求，简历长度: {}, 岗位: {}", resume.length(), jobInfo);
+        log.info("收到 start_interview 请求，简历长度: {}, 岗位: {}, 级别: {}",
+                resume.length(), jobInfo, positionLevel);
 
         // 创建会话
         InterviewSession session = sessionService.createSession(resume, jobInfo, maxTechnicalQuestions, maxBusinessQuestions, maxFollowUps);
@@ -155,7 +159,8 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         virtualThreadExecutor.submit(() -> {
             try {
                 InterviewState result = interviewBusinessService.executeInterviewGraph(
-                        sessionId, resume, jobInfo, maxTechnicalQuestions, maxBusinessQuestions, maxFollowUps);
+                        sessionId, resume, jobInfo, maxTechnicalQuestions, maxBusinessQuestions, maxFollowUps,
+                        positionLevel);
 
                 if (result == null) {
                     sendErrorMessage(sessionId, "面试启动失败");

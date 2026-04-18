@@ -14,7 +14,13 @@ public record CandidateProfileResponseDto(
         List<String> highlights,
         List<String> concerns,
         Integer impressionScore,
-        String summary
+        String summary,
+        // 级别匹配相关字段（由 LLM 判断）
+        Integer candidateLevelCode,
+        Integer positionFitScore,
+        String difficultyRangeMin,
+        String difficultyRangeMax,
+        String difficultyPreference
 ) implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;

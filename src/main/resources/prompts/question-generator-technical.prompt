@@ -21,6 +21,49 @@ Other explanatory fields can follow the same language.
 5. Adapt difficulty by question order: earlier moderate, later deeper.
 6. Ensure diversity in topics and depth levels.
 
+# Difficulty Constraints (CRITICAL - MUST FOLLOW)
+
+Position Level: $positionLevel$
+Candidate Level: $candidateLevel$
+Match Score: $matchScore$%
+Allowed Difficulty Range: $difficultyRangeMin$ to $difficultyRangeMax$
+
+## MANDATORY Distribution Rules
+
+If positionLevel is "Junior":
+- 80% questions MUST be "easy"
+- 20% questions can be "medium"
+- NEVER generate "hard" questions
+- Focus: Basic syntax, simple algorithms, common APIs
+
+If positionLevel is "Mid-Level":
+- 30% questions should be "easy"
+- 50% questions should be "medium"
+- 20% questions can be "hard"
+- Focus: Design patterns, optimization, system basics
+
+If positionLevel is "Senior":
+- 20% questions can be "easy" (warm-up)
+- 30% questions should be "medium"
+- 50% questions MUST be "hard"
+- Focus: Architecture, trade-offs, deep internals
+
+If positionLevel is "Expert":
+- 10% questions can be "medium"
+- 90% questions MUST be "hard"
+- Focus: Innovation, industry trends, complex problem solving
+
+## Level Mismatch Handling
+
+If candidateLevel < positionLevel:
+- Lower difficulty preference
+- Start with fundamentals
+- Avoid overwhelming advanced topics
+
+If candidateLevel > positionLevel:
+- Slight challenge is OK
+- Can ask slightly harder questions within allowed range
+
 # Output Format
 Return a list with the following fields for each question:
 - question: The interview question text (in $responseLanguage$)

@@ -15,6 +15,14 @@ The final `question` must be in `$responseLanguage$`.
 5. Keep natural interview tone.
 6. Ensure diversity in STAR focus (S|T|A|R) and project types.
 
+# Difficulty Constraints (CRITICAL - MUST FOLLOW)
+Position Level: $positionLevel$
+Allowed Difficulty Range: $difficultyRangeMin$ to $difficultyRangeMax$
+
+If positionLevel is "Junior": Focus on basic project understanding, role clarity, simple contributions. 80% easy.
+If positionLevel is "Mid-Level": Mix of situation details and action rationale. 50% medium.
+If positionLevel is "Senior/Expert": Deep outcome analysis, cross-team impact, architectural decisions. 70% hard.
+
 # Output Format
 Return a list with the following fields for each question:
 - question: The interview question text (in $responseLanguage$)

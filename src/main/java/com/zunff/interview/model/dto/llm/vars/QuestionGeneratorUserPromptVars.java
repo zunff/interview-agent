@@ -19,7 +19,13 @@ public record QuestionGeneratorUserPromptVars(
         String previousQuestions,
         String firstQuestionHint,
         String referenceContext,
-        String responseLanguage
+        String responseLanguage,
+        String positionLevel,
+        String candidateLevel,
+        String matchScore,
+        String difficultyRangeMin,
+        String difficultyRangeMax,
+        String difficultyPreference
 ) {
     public Map<String, Object> asMap() {
         return BeanUtil.beanToMap(this);

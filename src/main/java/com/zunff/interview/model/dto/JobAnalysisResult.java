@@ -17,6 +17,61 @@ public class JobAnalysisResult implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
+     * 岗位级别枚举
+     */
+    @Getter
+    public enum PositionLevel {
+        JUNIOR(1, "junior", "初级", "0-2年", 0, 2),
+        MID_LEVEL(2, "mid", "中级", "2-5年", 2, 5),
+        SENIOR(3, "senior", "高级", "5-10年", 5, 10),
+        EXPERT(4, "expert", "专家", "10+年", 10, 99);
+
+        private final int code;
+        private final String description;
+        private final String displayName;
+        private final String experienceRange;
+        private final int minYears;
+        private final int maxYears;
+
+        PositionLevel(int code, String description, String displayName, String experienceRange,
+                      int minYears, int maxYears) {
+            this.code = code;
+            this.description = description;
+            this.displayName = displayName;
+            this.experienceRange = experienceRange;
+            this.minYears = minYears;
+            this.maxYears = maxYears;
+        }
+
+        public static PositionLevel fromCode(Integer code) {
+            if (code == null) {
+                return MID_LEVEL;
+            }
+            for (PositionLevel level : values()) {
+                if (level.code == code) {
+                    return level;
+                }
+            }
+            return MID_LEVEL;
+        }
+
+        public static PositionLevel fromValue(String value) {
+            if (value == null || value.isBlank()) {
+                return MID_LEVEL;
+            }
+            String normalized = value.trim().toLowerCase();
+            for (PositionLevel level : values()) {
+                if (level.name().equalsIgnoreCase(normalized)
+                        || level.description.equalsIgnoreCase(normalized)
+                        || level.displayName.equals(value)) {
+                    return level;
+                }
+            }
+            return MID_LEVEL;
+        }
+    }
+
+    /**
      * 岗位类型
      */
     @Getter
@@ -124,6 +179,11 @@ public class JobAnalysisResult implements Serializable {
     private String softSkillsRequired;
 
     /**
+     * 岗位级别
+     */
+    private PositionLevel positionLevel;
+
+    /**
      * 获取技术轮题目总数
      */
     public int getTechnicalRoundTotal() {
@@ -143,6 +203,9 @@ public class JobAnalysisResult implements Serializable {
     public String generateJobSummary() {
         StringBuilder summary = new StringBuilder();
         summary.append("Job Type: ").append(jobType.getDisplayName()).append("\n");
+        if (positionLevel != null) {
+            summary.append("Position Level: ").append(positionLevel.getDescription()).append("\n");
+        }
         if (keyRequirements != null && !keyRequirements.isEmpty()) {
             summary.append("Key Requirements: ").append(keyRequirements).append("\n");
         }

@@ -15,6 +15,14 @@ The final `question` must be in `$responseLanguage$`.
 5. Avoid duplicates with previous questions.
 6. Ensure diversity in business scenarios and decision-making contexts.
 
+# Difficulty Constraints (CRITICAL - MUST FOLLOW)
+Position Level: $positionLevel$
+Allowed Difficulty Range: $difficultyRangeMin$ to $difficultyRangeMax$
+
+If positionLevel is "Junior": Focus on basic business understanding, team collaboration, simple trade-offs.
+If positionLevel is "Mid-Level": Balance of scenario analysis and stakeholder considerations.
+If positionLevel is "Senior/Expert": Complex business decisions, ROI analysis, strategic thinking.
+
 # Output Format
 Return a list with the following fields for each question:
 - question: The interview question text (in $responseLanguage$)

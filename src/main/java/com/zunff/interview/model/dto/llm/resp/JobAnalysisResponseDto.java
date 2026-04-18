@@ -12,7 +12,8 @@ public record JobAnalysisResponseDto(
         String businessDomain,
         String softSkillsRequired,
         String company,
-        String jobPosition
+        String jobPosition,
+        Integer positionLevelCode
 ) {
 }
 

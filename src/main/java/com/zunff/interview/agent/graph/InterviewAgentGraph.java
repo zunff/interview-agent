@@ -156,6 +156,7 @@ public class InterviewAgentGraph {
         subInputMap.put(BatchQuestionGenState.PROJECT_COUNT, jobAnalysis != null ? jobAnalysis.getProjectCount() : mainState.maxTechnicalQuestions() - mainState.maxTechnicalQuestions() / 2);
         subInputMap.put(BatchQuestionGenState.BUSINESS_COUNT, jobAnalysis != null ? jobAnalysis.getBusinessCount() : mainState.maxBusinessQuestions() / 2);
         subInputMap.put(BatchQuestionGenState.SOFT_SKILL_COUNT, jobAnalysis != null ? jobAnalysis.getSoftSkillCount() : mainState.maxBusinessQuestions() - mainState.maxBusinessQuestions() / 2);
+        subInputMap.put(BatchQuestionGenState.LEVEL_MATCH_RESULT, mainState.levelMatchResult());
 
         // 2. 异步调用子图
         RunnableConfig config = RunnableConfig.builder()

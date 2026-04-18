@@ -93,16 +93,25 @@ sequenceDiagram
   "type": "start_interview",
   "resume": "简历文本内容",
   "jobInfo": "Java初级后端",
-  "maxQuestions": 10,
-  "maxFollowUps": 2
+  "maxTechnicalQuestions": 6,
+  "maxBusinessQuestions": 4,
+  "maxFollowUps": 2,
+  "positionLevel": "senior"
 }
 ```
 
+**字段说明**：
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `resume` | string | 是 | - | 候选人简历文本 |
+| `jobInfo` | string | 是 | - | 目标岗位信息（JD） |
+| `maxTechnicalQuestions` | int | 否 | 6 | 技术轮最大问题数 |
+| `maxBusinessQuestions` | int | 否 | 4 | 业务轮最大问题数 |
+| `maxFollowUps` | int | 否 | 2 | 每题最大追问数 |
+| `positionLevel` | string | 否 | LLM推断 | 岗位级别：`junior`/`mid`/`senior`/`expert` |
+
 **说明**：
-- `resume`（必填）：候选人简历文本
-- `jobInfo`（必填）：目标岗位信息
-- `maxQuestions`（可选，默认 10）：最大问题数
-- `maxFollowUps`（可选，默认 2）：每题最大追问数
+- `positionLevel` 可选，如果不传则由 LLM 从 JD 中推断
 - 发送后服务端会先返回 `session_created`，然后异步执行：
   1. 岗位分析（并行）
   2. 自我介绍阶段等待（interrupt）

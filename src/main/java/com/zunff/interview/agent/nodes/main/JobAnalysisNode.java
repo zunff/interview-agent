@@ -73,6 +73,10 @@ public class JobAnalysisNode {
                 log.warn("岗位分析解析失败，使用默认配置");
             }
 
+            // 处理岗位级别（优先级：前端传入 > LLM返回 > 默认）
+            JobAnalysisResult.PositionLevel positionLevel = determinePositionLevel(state, response);
+            result.setPositionLevel(positionLevel);
+
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.JOB_ANALYSIS_RESULT, result);
             updates.put(InterviewState.KNOWLEDGE_COMPANY, response.company());
@@ -94,12 +98,14 @@ public class JobAnalysisNode {
                     WebSocketMessage.Type.JOB_ANALYSIS_COMPLETE,
                     Map.of(
                             "jobType", result.getJobType().getDisplayName(),
-                            "totalQuestions", result.getTotalQuestions()
+                            "totalQuestions", result.getTotalQuestions(),
+                            "positionLevel", positionLevel.getDisplayName()
                     )
             ));
 
-            log.info("岗位分析完成: 类型={}, 技术基础={}, 项目={}, 业务={}, 软技能={}, 公司={}, 岗位={}, 实际技术轮={}, 实际业务轮={}",
+            log.info("岗位分析完成: 类型={}, 级别={}, 技术基础={}, 项目={}, 业务={}, 软技能={}, 公司={}, 岗位={}, 实际技术轮={}, 实际业务轮={}",
                     result.getJobType().getDisplayName(),
+                    positionLevel.getDisplayName(),
                     result.getTechnicalBasicCount(),
                     result.getProjectCount(),
                     result.getBusinessCount(),
@@ -133,12 +139,32 @@ public class JobAnalysisNode {
                     WebSocketMessage.Type.JOB_ANALYSIS_COMPLETE,
                     Map.of(
                             "jobType", defaultResult.getJobType().getDisplayName(),
-                            "totalQuestions", defaultResult.getTotalQuestions()
+                            "totalQuestions", defaultResult.getTotalQuestions(),
+                            "positionLevel", "Mid-Level"
                     )
             ));
 
             return CompletableFuture.completedFuture(updates);
         }
+    }
+
+    /**
+     * 确定岗位级别（优先级：前端传入 > LLM返回 > 默认）
+     */
+    private JobAnalysisResult.PositionLevel determinePositionLevel(InterviewState state, JobAnalysisResponseDto response) {
+        // 1. 前端传入级别
+        String positionLevelStr = state.positionLevel();
+        if (positionLevelStr != null && !positionLevelStr.isEmpty()) {
+            return JobAnalysisResult.PositionLevel.fromValue(positionLevelStr);
+        }
+
+        // 2. LLM 返回的级别
+        if (response != null && response.positionLevelCode() != null) {
+            return JobAnalysisResult.PositionLevel.fromCode(response.positionLevelCode());
+        }
+
+        // 3. 默认
+        return JobAnalysisResult.PositionLevel.MID_LEVEL;
     }
 
     /**

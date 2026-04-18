@@ -4,6 +4,7 @@ import com.zunff.interview.config.KnowledgeConfig;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.dto.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.resp.LlmQuestionListResultDto;
 import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
 import com.zunff.interview.service.extend.PromptTemplateService;
@@ -70,6 +71,15 @@ public class QuestionGenerationService {
             }
 
             // 构建 user prompt（复用现有模板）
+            // 获取级别匹配变量
+            LevelMatchResult levelMatch = state.levelMatchResult();
+            String positionLevel = levelMatch != null ? levelMatch.positionLevel().getDescription() : "mid";
+            String candidateLevel = levelMatch != null ? levelMatch.candidateLevel().getDescription() : "mid";
+            String matchScore = levelMatch != null ? String.valueOf((int) (levelMatch.matchScore() * 100)) : "80";
+            String difficultyRangeMin = levelMatch != null ? levelMatch.difficultyRangeMin() : "easy";
+            String difficultyRangeMax = levelMatch != null ? levelMatch.difficultyRangeMax() : "hard";
+            String difficultyPreference = levelMatch != null ? levelMatch.difficultyPreference() : "standard";
+
             String userPrompt = promptTemplateService.getPrompt("question-generator-user", Map.ofEntries(
                     Map.entry("candidateProfile", candidateProfile == null ? "" : candidateProfile),
                     Map.entry("jobInfo", jobContext == null ? "" : jobContext),
@@ -83,7 +93,13 @@ public class QuestionGenerationService {
                     Map.entry("firstQuestionHint", ""),
                     Map.entry("referenceContext", referenceContext.isBlank() ? "None" : referenceContext),
                     Map.entry("responseLanguage", promptConfig.getResponseLanguage()),
-                    Map.entry("count", count)
+                    Map.entry("count", count),
+                    Map.entry("positionLevel", positionLevel),
+                    Map.entry("candidateLevel", candidateLevel),
+                    Map.entry("matchScore", matchScore),
+                    Map.entry("difficultyRangeMin", difficultyRangeMin),
+                    Map.entry("difficultyRangeMax", difficultyRangeMax),
+                    Map.entry("difficultyPreference", difficultyPreference)
             ));
 
             ChatClient chatClient = chatClientBuilder.build();

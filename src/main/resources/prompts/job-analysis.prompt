@@ -62,7 +62,19 @@ Job position normalization:
 
 `jobTypeCode` is authoritative for role type.
 
+Position Level (via positionLevelCode):
+- 1 = Junior (entry-level, 0-2 years, basic skills)
+- 2 = Mid-Level (intermediate, 2-5 years, solid fundamentals)
+- 3 = Senior (advanced, 5-10 years, deep expertise)
+- 4 = Expert (top-level, 10+ years, leadership/innovation)
+
+Infer level from job description considering:
+- Required experience years mentioned
+- Salary range indicators
+- Technical depth requirements
+- Leadership expectations
+
 Required JSON fields:
-jobTypeCode (int), company (string), jobPosition (string), technicalBasicCount, projectCount, businessCount, softSkillCount, totalQuestions (integers), keyRequirements, techStackSummary, businessDomain, softSkillsRequired (strings).
+jobTypeCode (int), positionLevelCode (int 1-4), company (string), jobPosition (string), technicalBasicCount, projectCount, businessCount, softSkillCount, totalQuestions (integers), keyRequirements, techStackSummary, businessDomain, softSkillsRequired (strings).
 
 Output: one JSON object only. No markdown, code fences, or surrounding text. Do not output company/job values outside the supported lists.

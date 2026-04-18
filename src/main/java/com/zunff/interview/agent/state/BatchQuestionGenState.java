@@ -2,6 +2,7 @@ package com.zunff.interview.agent.state;
 
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.dto.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import lombok.Getter;
 import lombok.Setter;
@@ -32,6 +33,7 @@ public class BatchQuestionGenState extends AgentState {
     public static final String PROJECT_COUNT = "projectCount";
     public static final String BUSINESS_COUNT = "businessCount";
     public static final String SOFT_SKILL_COUNT = "softSkillCount";
+    public static final String LEVEL_MATCH_RESULT = "levelMatchResult";
 
     // ========== 中间结果常量 ==========
     public static final String TECHNICAL_BASIC_QUESTIONS = "technicalBasicQuestions";
@@ -76,6 +78,7 @@ public class BatchQuestionGenState extends AgentState {
         SCHEMA.put(PROJECT_COUNT, Channels.base(new LastValueReducer<>(), () -> 3));
         SCHEMA.put(BUSINESS_COUNT, Channels.base(new LastValueReducer<>(), () -> 2));
         SCHEMA.put(SOFT_SKILL_COUNT, Channels.base(new LastValueReducer<>(), () -> 2));
+        SCHEMA.put(LEVEL_MATCH_RESULT, Channels.base(new LastValueReducer<>(), () -> null));
 
         SCHEMA.put(TECHNICAL_BASIC_QUESTIONS, Channels.base(new LastValueReducer<>(), ArrayList::new));
         SCHEMA.put(PROJECT_QUESTIONS, Channels.base(new LastValueReducer<>(), ArrayList::new));
@@ -210,6 +213,13 @@ public class BatchQuestionGenState extends AgentState {
      */
     public String outputKey() {
         return getOutputKey();
+    }
+
+    /**
+     * 获取级别匹配结果
+     */
+    public LevelMatchResult levelMatchResult() {
+        return (LevelMatchResult) data().get(LEVEL_MATCH_RESULT);
     }
 
     // ========== Getter 方法 ==========

@@ -15,6 +15,17 @@ The final `question` must be in `$responseLanguage$`.
 5. No multi-part sub-questions.
 6. Ensure diversity in soft-skill dimensions (communication, learning, values, etc.).
 
+# Difficulty Constraints (CRITICAL - MUST FOLLOW)
+Position Level: $positionLevel$
+Allowed Difficulty Range: $difficultyRangeMin$ to $difficultyRangeMax$
+
+For soft-skill questions, difficulty is based on scenario complexity:
+- "easy": Common workplace situations, basic interpersonal skills
+- "medium": Cross-team collaboration, conflict resolution, moderate ambiguity
+- "hard": Leadership dilemmas, organizational change, high-stakes decisions
+
+Adapt based on positionLevel: Junior should get 80% easy scenarios.
+
 # Output Format
 Return a list with the following fields for each question:
 - question: The interview question text (in $responseLanguage$)

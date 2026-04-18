@@ -7,6 +7,7 @@ import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.dto.FollowUpChainEntity;
 import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.dto.LevelMatchResult;
 import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
@@ -85,6 +86,10 @@ public class InterviewState extends AgentState {
     public static final String KNOWLEDGE_COMPANY = "knowledgeCompany";
     public static final String KNOWLEDGE_JOB_POSITION = "knowledgeJobPosition";
 
+    // ========== 岗位级别 ==========
+    public static final String POSITION_LEVEL = "positionLevel";
+    public static final String LEVEL_MATCH_RESULT = "levelMatchResult";
+
     // ========== 批量题目队列 ==========
     public static final String TECHNICAL_QUESTIONS_QUEUE = "technicalQuestionsQueue";  // List<GeneratedQuestion>
     public static final String BUSINESS_QUESTIONS_QUEUE = "businessQuestionsQueue";    // List<GeneratedQuestion>
@@ -153,6 +158,19 @@ public class InterviewState extends AgentState {
         SCHEMA.put(JOB_ANALYSIS_RESULT, Channels.base(new LastValueReducer<>(), JobAnalysisResult::new));
         SCHEMA.put(KNOWLEDGE_COMPANY, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(KNOWLEDGE_JOB_POSITION, Channels.base(new LastValueReducer<>(), () -> ""));
+
+        // 岗位级别
+        SCHEMA.put(POSITION_LEVEL, Channels.base(new LastValueReducer<>(), () -> ""));
+        SCHEMA.put(LEVEL_MATCH_RESULT, Channels.base(new LastValueReducer<>(),
+                () -> new LevelMatchResult(
+                        JobAnalysisResult.PositionLevel.MID_LEVEL,
+                        JobAnalysisResult.PositionLevel.MID_LEVEL,
+                        0.8,
+                        "easy",
+                        "hard",
+                        "standard",
+                        "Default level match"
+                )));
 
         // 批量题目队列
         SCHEMA.put(TECHNICAL_QUESTIONS_QUEUE, Channels.base(new LastValueReducer<>(), ArrayList::new));
@@ -509,6 +527,27 @@ public class InterviewState extends AgentState {
 
     public String knowledgeJobPosition() {
         return (String) data().getOrDefault(KNOWLEDGE_JOB_POSITION, "");
+    }
+
+    /**
+     * 获取前端传入的岗位级别
+     */
+    public String positionLevel() {
+        return (String) data().getOrDefault(POSITION_LEVEL, "");
+    }
+
+    /**
+     * 获取级别匹配结果
+     */
+    public LevelMatchResult levelMatchResult() {
+        return (LevelMatchResult) data().get(LEVEL_MATCH_RESULT);
+    }
+
+    /**
+     * 是否有级别匹配结果
+     */
+    public boolean hasLevelMatchResult() {
+        return data().containsKey(LEVEL_MATCH_RESULT) && data().get(LEVEL_MATCH_RESULT) != null;
     }
 
     // ========== 批量题目队列便捷方法 ==========
