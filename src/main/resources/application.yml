@@ -51,17 +51,5 @@ interview:
     response-language: zh-CN     # Candidate-facing output language
   video:
     analysis-interval: 5000      # 视频分析间隔(ms)
-    frame-rate: 1                # 每秒采样帧数
     max-frames-per-analysis: 10  # 每次分析最大帧数
-  audio:
-    sample-rate: 16000           # 音频采样率
-    chunk-duration: 1000         # 音频块时长(ms)
-  session:
-    max-technical-questions: 6   # 技术轮最大问题数
-    max-business-questions: 4    # 业务轮最大问题数
-    round-pass-score: 75         # 轮次通过分数阈值
-    high-score-threshold: 85     # 高分阈值
-    consecutive-high-for-early-end: 3  # 连续高分次数触发提前结束
-    max-follow-ups-technical: 3  # 技术轮每题最大追问数
-    max-follow-ups-business: 2   # 业务轮每题最大追问数
-    answer-timeout: 120000       # 回答超时(ms)
+

@@ -14,6 +14,7 @@ import com.zunff.interview.model.dto.llm.resp.EvaluationResponseDto;
 import com.zunff.interview.model.dto.llm.resp.FollowUpDecisionResponseDto;
 import com.zunff.interview.model.dto.llm.resp.FollowUpRouteDecisionDto;
 import com.zunff.interview.utils.JsonExtractionUtils;
+import com.zunff.interview.utils.OmniOverallScoreUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 
@@ -252,6 +253,9 @@ public class MultimodalAnalysisService {
             int fluency = json.getInt("fluency", 70);
             int confidence = json.getInt("confidence", 70);
 
+            int overallScore = OmniOverallScoreUtils.computeOverallScore(
+                    accuracy, logic, fluency, confidence, emotionScore, bodyLanguageScore, voiceToneScore);
+
             return EvaluationBO.builder()
                     .accuracy(accuracy)
                     .logic(logic)
@@ -260,7 +264,7 @@ public class MultimodalAnalysisService {
                     .emotionScore(emotionScore)
                     .bodyLanguageScore(bodyLanguageScore)
                     .voiceToneScore(voiceToneScore)
-                    .overallScore(json.getInt("overallScore", 70))
+                    .overallScore(overallScore)
                     .strengths(parseStringList(json, "strengths"))
                     .weaknesses(parseStringList(json, "weaknesses"))
                     .detailedEvaluation(json.getStr("detailedEvaluation", ""))
@@ -269,34 +273,42 @@ public class MultimodalAnalysisService {
 
         } catch (Exception e) {
             log.error("解析Omni评估结果失败: {}", e.getMessage());
+            int fallbackOverall = OmniOverallScoreUtils.computeOverallScore(60, 60, 60, 60, 70, 70, 70);
             return EvaluationBO.builder()
                     .accuracy(60).logic(60).fluency(60).confidence(60)
                     .emotionScore(70).bodyLanguageScore(70).voiceToneScore(70)
-                    .overallScore(60)
+                    .overallScore(fallbackOverall)
                     .build();
         }
     }
 
     private EvaluationBO toEvaluationBO(EvaluationResponseDto response) {
         if (response == null) {
+            int fallbackOverall = OmniOverallScoreUtils.computeOverallScore(60, 60, 60, 60, 70, 70, 70);
             return EvaluationBO.builder()
                     .accuracy(60).logic(60).fluency(60).confidence(60)
                     .emotionScore(70).bodyLanguageScore(70).voiceToneScore(70)
-                    .overallScore(60)
+                    .overallScore(fallbackOverall)
                     .build();
         }
         int emotionScore = response.emotionScore() == null ? 70 : response.emotionScore();
         int bodyLanguageScore = response.bodyLanguageScore() == null ? 70 : response.bodyLanguageScore();
         int voiceToneScore = response.voiceToneScore() == null ? 70 : response.voiceToneScore();
+        int accuracy = response.accuracy() == null ? 70 : response.accuracy();
+        int logic = response.logic() == null ? 70 : response.logic();
+        int fluency = response.fluency() == null ? 70 : response.fluency();
+        int confidence = response.confidence() == null ? 70 : response.confidence();
+        int overallScore = OmniOverallScoreUtils.computeOverallScore(
+                accuracy, logic, fluency, confidence, emotionScore, bodyLanguageScore, voiceToneScore);
         return EvaluationBO.builder()
-                .accuracy(response.accuracy() == null ? 70 : response.accuracy())
-                .logic(response.logic() == null ? 70 : response.logic())
-                .fluency(response.fluency() == null ? 70 : response.fluency())
-                .confidence(response.confidence() == null ? 70 : response.confidence())
+                .accuracy(accuracy)
+                .logic(logic)
+                .fluency(fluency)
+                .confidence(confidence)
                 .emotionScore(emotionScore)
                 .bodyLanguageScore(bodyLanguageScore)
                 .voiceToneScore(voiceToneScore)
-                .overallScore(response.overallScore() == null ? 70 : response.overallScore())
+                .overallScore(overallScore)
                 .strengths(response.strengths() == null ? List.of() : response.strengths())
                 .weaknesses(response.weaknesses() == null ? List.of() : response.weaknesses())
                 .detailedEvaluation(response.detailedEvaluation() == null ? "" : response.detailedEvaluation())

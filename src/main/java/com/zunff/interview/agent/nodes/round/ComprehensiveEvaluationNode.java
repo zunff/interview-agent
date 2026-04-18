@@ -9,6 +9,7 @@ import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.dto.analysis.TranscriptEntry;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.agent.state.InterviewState;
+import com.zunff.interview.utils.OmniOverallScoreUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -94,7 +95,7 @@ public class ComprehensiveEvaluationNode {
             EvaluationBO defaultEval = EvaluationBO.builder()
                     .accuracy(60).logic(60).fluency(60).confidence(60)
                     .emotionScore(70).bodyLanguageScore(70).voiceToneScore(70)
-                    .overallScore(60)
+                    .overallScore(OmniOverallScoreUtils.computeOverallScore(60, 60, 60, 60, 70, 70, 70))
                     .detailedEvaluation("评估失败，使用默认评分")
                     .generatedQuestion(generatedQuestion)  // 即使失败也关联元信息
                     .build();
