@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zunff.interview.mapper.EvaluationRecordMapper;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.dto.GeneratedQuestion;
 import com.zunff.interview.model.entity.EvaluationRecord;
 import com.zunff.interview.service.EvaluationRecordService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class EvaluationRecordServiceImpl extends ServiceImpl<EvaluationRecordMap
     @Override
     @Transactional
     public void saveEvaluation(String sessionId, EvaluationBO evaluation) {
+        GeneratedQuestion gq = evaluation.getGeneratedQuestion();
         EvaluationRecord entity = EvaluationRecord.builder()
                 .sessionId(sessionId)
                 .questionIndex(evaluation.getQuestionIndex())
@@ -41,6 +43,10 @@ public class EvaluationRecordServiceImpl extends ServiceImpl<EvaluationRecordMap
                 .strengths(evaluation.getStrengths())
                 .weaknesses(evaluation.getWeaknesses())
                 .detailedEvaluation(evaluation.getDetailedEvaluation())
+                .modalityConcern(evaluation.isModalityConcern())
+                .questionType(gq != null ? gq.getQuestionType() : null)
+                .difficulty(gq != null ? gq.getDifficulty() : null)
+                .expectedKeywords(gq != null ? gq.getExpectedKeywords() : null)
                 .createTime(LocalDateTime.now())
                 .build();
 

@@ -19,6 +19,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -61,12 +62,12 @@ public class QuestionGenerationService {
             String candidateProfile = state.candidateProfile();
             String jobContext = state.jobContext();
 
-            // 获取 prompt 模板（复用现有模板）
-            String promptTemplateName = "question-generator-" + questionType.getEvaluationPrompt();
-            String systemPrompt = promptTemplateService.getPrompt(promptTemplateName, Map.of(
-                    "responseLanguage", promptConfig.getResponseLanguage(),
-                    "count", count
-            ));
+            LevelMatchResult levelMatch = state.levelMatchResult();
+            String positionLevel = levelMatch != null ? levelMatch.positionLevel().getDescription() : JobAnalysisResult.PositionLevel.MID_LEVEL.getDescription();
+            String candidateLevel = levelMatch != null ? levelMatch.candidateLevel().getDescription() : JobAnalysisResult.PositionLevel.MID_LEVEL.getDescription();
+            String difficultyRangeMin = levelMatch != null ? levelMatch.difficultyRangeMin().getCode() : Difficulty.EASY.getCode();
+            String difficultyRangeMax = levelMatch != null ? levelMatch.difficultyRangeMax().getCode() : Difficulty.HARD.getCode();
+            String difficultyPreference = levelMatch != null ? levelMatch.difficultyPreference().getCode() : DifficultyPreference.STANDARD.getCode();
 
             // 从知识库检索参考题目
             String referenceContext = "";
@@ -74,13 +75,16 @@ public class QuestionGenerationService {
                 referenceContext = searchReferenceQuestions(jobContext, state, questionType);
             }
 
-            // 获取级别匹配变量
-            LevelMatchResult levelMatch = state.levelMatchResult();
-            String positionLevel = levelMatch != null ? levelMatch.positionLevel().getDescription() : JobAnalysisResult.PositionLevel.MID_LEVEL.getDescription();
-            String candidateLevel = levelMatch != null ? levelMatch.candidateLevel().getDescription() : JobAnalysisResult.PositionLevel.MID_LEVEL.getDescription();
-            String difficultyRangeMin = levelMatch != null ? levelMatch.difficultyRangeMin().getCode() : Difficulty.EASY.getCode();
-            String difficultyRangeMax = levelMatch != null ? levelMatch.difficultyRangeMax().getCode() : Difficulty.HARD.getCode();
-            String difficultyPreference = levelMatch != null ? levelMatch.difficultyPreference().getCode() : DifficultyPreference.STANDARD.getCode();
+            String promptTemplateName = "question-generator-" + questionType.getEvaluationPrompt();
+            Map<String, Object> systemVars = new HashMap<>();
+            systemVars.put("responseLanguage", promptConfig.getResponseLanguage());
+            systemVars.put("count", count);
+            systemVars.put("positionLevel", positionLevel);
+            systemVars.put("candidateLevel", candidateLevel);
+            systemVars.put("difficultyRangeMin", difficultyRangeMin);
+            systemVars.put("difficultyRangeMax", difficultyRangeMax);
+            systemVars.put("difficultyPreference", difficultyPreference);
+            String systemPrompt = promptTemplateService.getPrompt(promptTemplateName, systemVars);
 
             // 构建 user prompt
             QuestionGeneratorUserPromptVars vars = new QuestionGeneratorUserPromptVars(

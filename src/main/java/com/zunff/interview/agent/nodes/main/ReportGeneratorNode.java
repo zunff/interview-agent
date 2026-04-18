@@ -1,6 +1,8 @@
 package com.zunff.interview.agent.nodes.main;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
+import com.zunff.interview.config.PromptConfig;
+import com.zunff.interview.model.dto.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.vars.ReportUserPromptVars;
 import com.zunff.interview.model.entity.EvaluationRecord;
 import com.zunff.interview.service.EvaluationRecordService;
@@ -8,16 +10,17 @@ import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * 报告生成节点
@@ -27,8 +30,12 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class ReportGeneratorNode {
 
+    private static final int MAX_ANSWER_CHARS = 8000;
+    private static final int MAX_FOLLOW_UP_CHAIN_CHARS = 12000;
+
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
+    private final PromptConfig promptConfig;
     private final EvaluationRecordService evaluationRecordService;
     private final InterviewSessionService sessionService;
     private final InterviewWebSocketHandler webSocketHandler;
@@ -36,11 +43,13 @@ public class ReportGeneratorNode {
     public ReportGeneratorNode(
             ChatClient.Builder chatClientBuilder,
             PromptTemplateService promptTemplateService,
+            PromptConfig promptConfig,
             EvaluationRecordService evaluationRecordService,
             InterviewSessionService sessionService,
             @Lazy InterviewWebSocketHandler webSocketHandler) {
         this.chatClientBuilder = chatClientBuilder;
         this.promptTemplateService = promptTemplateService;
+        this.promptConfig = promptConfig;
         this.evaluationRecordService = evaluationRecordService;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
@@ -55,21 +64,17 @@ public class ReportGeneratorNode {
         String sessionId = state.sessionId();
         String candidateProfile = state.candidateProfileAsText();
 
-        // 优先使用岗位分析结果
         String jobContext = state.hasJobAnalysisResult()
                 ? state.jobAnalysisResult().generateJobSummary()
                 : state.jobInfo();
 
-        // 从数据库读取评估记录（避免状态冗余）
         List<EvaluationRecord> evaluations = evaluationRecordService.getBySessionId(sessionId);
 
-        // 获取轮次信息
         int technicalQuestionsDone = state.technicalQuestionsDone();
         int businessQuestionsDone = state.businessQuestionsDone();
         double technicalAvgScore = state.technicalAverageScore();
         double businessAvgScore = state.businessAverageScore();
 
-        // 计算各维度平均分
         double avgScore = 0;
         double avgAccuracy = 0, avgLogic = 0, avgFluency = 0, avgConfidence = 0;
         double avgEmotion = 0, avgBodyLanguage = 0, avgVoiceTone = 0;
@@ -100,35 +105,23 @@ public class ReportGeneratorNode {
             avgVoiceTone = (double) totalVoiceTone / totalQuestions;
         }
 
-        // 构建详细的评估摘要
-        StringBuilder evalSummary = new StringBuilder();
-        for (int i = 0; i < evaluations.size(); i++) {
-            EvaluationRecord eval = evaluations.get(i);
-            evalSummary.append("\n### 问题 ").append(i + 1).append("\n");
-            evalSummary.append("- 问题：").append(eval.getQuestion()).append("\n");
-            evalSummary.append("- 回答摘要：").append(truncate(eval.getAnswer(), 150)).append("\n");
-            evalSummary.append("- 综合得分：").append(eval.getOverallScore()).append("\n");
-            evalSummary.append("  - 内容维度：准确度 ").append(eval.getAccuracy());
-            evalSummary.append(" | 逻辑性 ").append(eval.getLogic());
-            evalSummary.append(" | 流畅度 ").append(eval.getFluency());
-            evalSummary.append(" | 自信度 ").append(eval.getConfidence()).append("\n");
-            evalSummary.append("  - 多模态：表情 ").append(eval.getEmotionScore());
-            evalSummary.append(" | 肢体 ").append(eval.getBodyLanguageScore());
-            evalSummary.append(" | 语调 ").append(eval.getVoiceToneScore()).append("\n");
-            if (eval.getStrengths() != null && !eval.getStrengths().isEmpty()) {
-                evalSummary.append("  - 优点：").append(String.join("、", eval.getStrengths())).append("\n");
-            }
-            if (eval.getWeaknesses() != null && !eval.getWeaknesses().isEmpty()) {
-                evalSummary.append("  - 不足：").append(String.join("、", eval.getWeaknesses())).append("\n");
-            }
-        }
+        String evalSummaryText = evaluations.isEmpty()
+                ? "No evaluation records."
+                : buildEvalSummary(evaluations);
 
-        // 从模板加载 system prompt
-        String systemPrompt = promptTemplateService.getPrompt("report-generator");
+        String technicalRoundScoresText = formatScoresList(state.technicalRoundScores());
+        String businessRoundScoresText = formatScoresList(state.businessRoundScores());
+        String levelMatchSummary = formatLevelMatchSummary(state);
+        String followUpChainText = truncateChain(state.formatFollowUpChain());
+        String interviewEndContext = buildInterviewEndContext(state);
 
-        String evalSummaryText = evalSummary.length() == 0 ? "无评估记录" : evalSummary.toString();
+        Map<String, Object> systemVars = new HashMap<>();
+        systemVars.put("responseLanguage", promptConfig.getResponseLanguage());
+        String systemPrompt = promptTemplateService.getPrompt("report-generator", systemVars);
+
         String userPrompt = promptTemplateService.getPrompt("report-generator-user",
                 new ReportUserPromptVars(
+                        promptConfig.getResponseLanguage(),
                         candidateProfile,
                         jobContext,
                         technicalQuestionsDone,
@@ -144,6 +137,11 @@ public class ReportGeneratorNode {
                         avgBodyLanguage,
                         avgVoiceTone,
                         totalQuestions,
+                        technicalRoundScoresText,
+                        businessRoundScoresText,
+                        levelMatchSummary,
+                        followUpChainText,
+                        interviewEndContext,
                         evalSummaryText
                 ).asMap());
 
@@ -156,13 +154,11 @@ public class ReportGeneratorNode {
                     .call()
                     .content();
 
-            // 添加总体评分到报告开头
             StringBuilder reportHeader = new StringBuilder();
             reportHeader.append("# 面试评估报告\n\n");
             reportHeader.append("> **综合得分**：").append(String.format("%.1f", avgScore)).append(" / 100\n");
             reportHeader.append("> **面试问题数**：").append(totalQuestions).append("\n\n");
 
-            // 各维度平均分概览
             reportHeader.append("## 综合评估概览\n\n");
             reportHeader.append("### 内容维度\n");
             reportHeader.append("| 准确度 | 逻辑性 | 流畅度 | 自信度 |\n");
@@ -176,7 +172,6 @@ public class ReportGeneratorNode {
             reportHeader.append(String.format("| %.1f | %.1f | %.1f |\n\n",
                     avgEmotion, avgBodyLanguage, avgVoiceTone));
 
-            // 轮次表现摘要
             reportHeader.append("## 轮次表现\n\n");
             reportHeader.append("| 轮次 | 问题数 | 平均分 |\n");
             reportHeader.append("|------|--------|--------|\n");
@@ -188,10 +183,8 @@ public class ReportGeneratorNode {
 
             String fullReport = reportHeader + report;
 
-            // 保存报告到数据库
             sessionService.saveReport(sessionId, fullReport);
 
-            // 通过 WebSocket 推送报告给前端
             webSocketHandler.sendFinalReport(sessionId, fullReport);
 
             Map<String, Object> updates = new HashMap<>();
@@ -211,10 +204,105 @@ public class ReportGeneratorNode {
         }
     }
 
-    private String truncate(String text, int maxLength) {
-        if (text == null) return "";
-        if (text.length() <= maxLength) return text;
-        return text.substring(0, maxLength) + "...";
+    private String buildEvalSummary(List<EvaluationRecord> evaluations) {
+        StringBuilder evalSummary = new StringBuilder();
+        for (int i = 0; i < evaluations.size(); i++) {
+            EvaluationRecord eval = evaluations.get(i);
+            int qNum = i + 1;
+            evalSummary.append("\n### Question ").append(qNum).append("\n");
+            evalSummary.append("- Question type: ").append(eval.getQuestionType() != null ? eval.getQuestionType() : "unknown").append("\n");
+            evalSummary.append("- Difficulty: ").append(eval.getDifficulty() != null ? eval.getDifficulty() : "unknown").append("\n");
+            if (!CollectionUtils.isEmpty(eval.getExpectedKeywords())) {
+                evalSummary.append("- Expected keywords: ").append(String.join(", ", eval.getExpectedKeywords())).append("\n");
+            }
+            if (Boolean.TRUE.equals(eval.getModalityConcern())) {
+                evalSummary.append("- Modality concern: yes\n");
+            }
+            evalSummary.append("- Question text: ").append(nullToEmpty(eval.getQuestion())).append("\n");
+            evalSummary.append("- Answer: ").append(truncate(nullToEmpty(eval.getAnswer()), MAX_ANSWER_CHARS)).append("\n");
+            evalSummary.append("- Overall score: ").append(eval.getOverallScore()).append("\n");
+            evalSummary.append("  - Content: accuracy ").append(eval.getAccuracy());
+            evalSummary.append(" | logic ").append(eval.getLogic());
+            evalSummary.append(" | fluency ").append(eval.getFluency());
+            evalSummary.append(" | confidence ").append(eval.getConfidence()).append("\n");
+            evalSummary.append("  - Multimodal: emotion ").append(eval.getEmotionScore());
+            evalSummary.append(" | body language ").append(eval.getBodyLanguageScore());
+            evalSummary.append(" | voice tone ").append(eval.getVoiceToneScore()).append("\n");
+            evalSummary.append("- Detailed evaluation: ").append(nullToEmpty(eval.getDetailedEvaluation())).append("\n");
+            if (eval.getStrengths() != null && !eval.getStrengths().isEmpty()) {
+                evalSummary.append("  - Strengths: ").append(String.join(", ", eval.getStrengths())).append("\n");
+            }
+            if (eval.getWeaknesses() != null && !eval.getWeaknesses().isEmpty()) {
+                evalSummary.append("  - Weaknesses: ").append(String.join(", ", eval.getWeaknesses())).append("\n");
+            }
+        }
+        return evalSummary.toString();
     }
 
+    private static String nullToEmpty(String s) {
+        return s != null ? s : "";
+    }
+
+    private static String truncate(String text, int maxLength) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength) + "\n...[truncated]";
+    }
+
+    private static String formatScoresList(List<Integer> scores) {
+        if (scores == null || scores.isEmpty()) {
+            return "(none)";
+        }
+        return scores.stream().map(String::valueOf).collect(Collectors.joining(", "));
+    }
+
+    private static String formatLevelMatchSummary(InterviewState state) {
+        if (!state.hasLevelMatchResult()) {
+            return "Not available";
+        }
+        LevelMatchResult lm = state.levelMatchResult();
+        if (lm == null) {
+            return "Not available";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Position level: ")
+                .append(lm.positionLevel() != null ? lm.positionLevel().getDescription() : "unknown")
+                .append("\n");
+        sb.append("Candidate level: ")
+                .append(lm.candidateLevel() != null ? lm.candidateLevel().getDescription() : "unknown")
+                .append("\n");
+        sb.append("Level mismatch: ").append(lm.isLevelMismatch()).append("\n");
+        sb.append("Candidate lower than position: ").append(lm.isCandidateLower()).append("\n");
+        sb.append("Difficulty range: ").append(lm.getDifficultyRange()).append("\n");
+        if (lm.difficultyPreference() != null) {
+            sb.append("Difficulty preference: ").append(lm.difficultyPreference()).append("\n");
+        }
+        return sb.toString().trim();
+    }
+
+    private static String buildInterviewEndContext(InterviewState state) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Eligible for early end (consecutive high scores): ").append(state.canEndInterviewEarly()).append("\n");
+        sb.append("Consecutive high scores: ").append(state.consecutiveHighScores())
+                .append(" / required ").append(state.consecutiveHighForEarlyEnd()).append("\n");
+        sb.append("Technical round queue exhausted: ").append(state.isTechnicalRoundComplete()).append("\n");
+        sb.append("Business round queue exhausted: ").append(state.isBusinessRoundComplete()).append("\n");
+        sb.append("Technical questions answered (counter): ").append(state.technicalQuestionsDone()).append("\n");
+        sb.append("Business questions answered (counter): ").append(state.businessQuestionsDone()).append("\n");
+        return sb.toString().trim();
+    }
+
+    private static String truncateChain(String chain) {
+        if (chain == null || chain.isEmpty()) {
+            return "No follow-up history";
+        }
+        if (chain.length() <= MAX_FOLLOW_UP_CHAIN_CHARS) {
+            return chain;
+        }
+        return chain.substring(0, MAX_FOLLOW_UP_CHAIN_CHARS) + "\n...[truncated]";
+    }
 }

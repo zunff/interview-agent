@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS evaluation_record (
     strengths JSONB,
     weaknesses JSONB,
     detailed_evaluation TEXT,
+    question_type VARCHAR(128),
+    difficulty VARCHAR(32),
+    expected_keywords JSONB,
+    modality_concern BOOLEAN DEFAULT FALSE,
     create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

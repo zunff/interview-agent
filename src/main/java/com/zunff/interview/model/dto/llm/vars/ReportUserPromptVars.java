@@ -8,6 +8,7 @@ import java.util.Map;
  * report-generator-user 模板变量：键名与 {@code resources/prompts/report-generator-user.prompt} 一致。
  */
 public record ReportUserPromptVars(
+        String responseLanguage,
         String candidateProfile,
         String jobInfo,
         int technicalQuestionsDone,
@@ -23,10 +24,14 @@ public record ReportUserPromptVars(
         double avgBodyLanguage,
         double avgVoiceTone,
         int totalQuestions,
+        String technicalRoundScoresText,
+        String businessRoundScoresText,
+        String levelMatchSummary,
+        String followUpChainText,
+        String interviewEndContext,
         String evalSummary
 ) {
     public Map<String, Object> asMap() {
         return BeanUtil.beanToMap(this);
     }
-
 }

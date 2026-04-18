@@ -70,6 +70,19 @@ public class EvaluationRecord {
     /** 详细评估 */
     private String detailedEvaluation;
 
+    /** 题目类型展示名（与 GeneratedQuestion.questionType 一致） */
+    private String questionType;
+
+    /** 题目难度 easy/medium/hard */
+    private String difficulty;
+
+    /** 期望关键词（JSON 数组） */
+    @TableField(typeHandler = JsonbTypeHandler.class)
+    private List<String> expectedKeywords;
+
+    /** 是否存在多模态异常 */
+    private Boolean modalityConcern;
+
     /** 创建时间 */
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

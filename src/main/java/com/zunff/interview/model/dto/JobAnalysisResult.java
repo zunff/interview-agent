@@ -204,6 +204,14 @@ public class JobAnalysisResult implements Serializable {
         if (softSkillsRequired != null && !softSkillsRequired.isEmpty()) {
             summary.append("Soft Skills Required: ").append(softSkillsRequired).append("\n");
         }
+        summary.append("Planned Question Distribution:\n");
+        summary.append("  - Technical basic: ").append(technicalBasicCount).append("\n");
+        summary.append("  - Project experience: ").append(projectCount).append("\n");
+        summary.append("  - Business scenario: ").append(businessCount).append("\n");
+        summary.append("  - Soft skills: ").append(softSkillCount).append("\n");
+        summary.append("  - Technical round subtotal: ").append(getTechnicalRoundTotal()).append("\n");
+        summary.append("  - Business round subtotal: ").append(getBusinessRoundTotal()).append("\n");
+        summary.append("  - Total planned: ").append(totalQuestions).append("\n");
         return summary.toString();
     }
 }
