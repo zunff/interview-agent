@@ -1,7 +1,8 @@
 package com.zunff.interview.agent.nodes.round;
 
+import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.constant.RouteDecision;
-import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.websocket.QuestionMessage;
 import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.websocket.InterviewWebSocketHandler;
@@ -11,12 +12,13 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * 提问节点
- * 从题目队列中获取下一个问题，添加到问题列表，并推送给前端
+ * 从题目队列队头消费题目，根据 questionType 判断是否为追问
  */
 @Slf4j
 @Component
@@ -29,86 +31,50 @@ public class AskQuestionNode {
     }
 
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
-        // 检查是否为追问场景
-        String decision = state.decision();
-        if (decision != null && !RouteDecision.NEXT_QUESTION.getValue().equals(decision)) {
-            // 追问场景：CURRENT_QUESTION 已由追问节点设置，直接推送问题
-            String followUpQuestion = state.currentQuestion();
-            String questionType = state.questionType();
-            int questionIndex = state.questionIndex();
-
-            log.info("[{}] 追问场景，直接推送追问问题: {}", state.currentRoundEnum().getDisplayName(), followUpQuestion);
-
-            // 推送追问问题到前端
-            webSocketHandler.sendQuestion(state.sessionId(), QuestionMessage.builder()
-                    .content(followUpQuestion)
-                    .questionType(questionType)
-                    .questionIndex(questionIndex)
-                    .isFollowUp(true)
-                    .build());
-
-            log.info("已推送追问问题到前端: [{}] {}", questionType, followUpQuestion);
-
-            Map<String, Object> updates = new HashMap<>();
-            updates.put(InterviewState.QUESTIONS, followUpQuestion);
-            // 清空决策状态，准备接收回答
-            updates.put(InterviewState.DECISION, null);
-            return CompletableFuture.completedFuture(updates);
-        }
-
-        // 正常场景：从队列获取下一题
-        GeneratedQuestion nextQuestion;
-        int newIndex;
-
-        // 根据当前轮次从队列获取题目
+        // 根据当前轮次获取对应队列
+        String queueKey;
         if (state.isTechnicalRound()) {
-            if (!state.hasMoreTechnicalQuestions()) {
-                log.warn("技术轮题目队列为空");
-                // 队列为空，标记轮次结束
-                Map<String, Object> updates = new HashMap<>();
-                updates.put(InterviewState.DECISION, RouteDecision.NEXT_QUESTION.getValue());
-                return CompletableFuture.completedFuture(updates);
-            }
-            nextQuestion = state.peekNextTechnicalQuestion();
-            newIndex = state.currentTechnicalIndex() + 1;
+            queueKey = InterviewState.TECHNICAL_QUESTIONS_QUEUE;
         } else {
-            if (!state.hasMoreBusinessQuestions()) {
-                log.warn("业务轮题目队列为空");
-                // 队列为空，标记轮次结束
-                Map<String, Object> updates = new HashMap<>();
-                updates.put(InterviewState.DECISION, RouteDecision.NEXT_QUESTION.getValue());
-                return CompletableFuture.completedFuture(updates);
-            }
-            nextQuestion = state.peekNextBusinessQuestion();
-            newIndex = state.currentBusinessIndex() + 1;
+            queueKey = InterviewState.BUSINESS_QUESTIONS_QUEUE;
         }
 
-        if (nextQuestion == null) {
-            log.error("从队列获取题目失败");
+        List<GeneratedQuestion> queue = new ArrayList<>(state.isTechnicalRound()
+                ? state.technicalQuestionsQueue()
+                : state.businessQuestionsQueue());
+
+        if (queue.isEmpty()) {
+            log.warn("[{}] 题目队列为空，轮次结束", state.currentRoundEnum().getDisplayName());
             Map<String, Object> updates = new HashMap<>();
             updates.put(InterviewState.DECISION, RouteDecision.NEXT_QUESTION.getValue());
             return CompletableFuture.completedFuture(updates);
         }
 
-        log.info("[{}] 提问 [{}] {}", state.currentRoundEnum().getDisplayName(), nextQuestion.getQuestionIndex(), nextQuestion.getQuestion());
+        // 从队头弹出题目（消费）
+        GeneratedQuestion nextQuestion = queue.removeFirst();
+
+        // 根据 questionType 判断是否为追问
+        QuestionType type = QuestionType.fromDisplayName(nextQuestion.getQuestionType());
+        boolean isFollowUp = type.isFollowUpType();
+
+        log.info("[{}] {} [{}] {}", state.currentRoundEnum().getDisplayName(),
+                isFollowUp ? "追问" : "提问",
+                nextQuestion.getQuestionIndex(), nextQuestion.getQuestion());
 
         Map<String, Object> updates = new HashMap<>();
-        updates.put(InterviewState.QUESTIONS, nextQuestion.getQuestion());
-        updates.put(InterviewState.CURRENT_QUESTION, nextQuestion.getQuestion());
-        updates.put(InterviewState.QUESTION_TYPE, nextQuestion.getQuestionType());
-        updates.put(InterviewState.QUESTION_INDEX, nextQuestion.getQuestionIndex());
-        updates.put(InterviewState.CURRENT_GENERATED_QUESTION, nextQuestion); // 保存完整对象
+        updates.put(queueKey, queue);  // 更新队列（消费后的列表）
+        updates.put(InterviewState.CURRENT_GENERATED_QUESTION, nextQuestion);
 
-        // 清空追问次数，开始新问题
-        updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
-        updates.put(InterviewState.FOLLOW_UP_CHAIN, new ArrayList<>()); // 清空追问链路
-        log.info("新问题开始，清空追问次数: {} -> 0", state.followUpCount());
-
-        // 更新对应轮次的索引
-        if (state.isTechnicalRound()) {
-            updates.put(InterviewState.CURRENT_TECHNICAL_INDEX, newIndex);
+        if (!isFollowUp) {
+            // 主问题：更新主问题状态，清空追问次数和链路
+            updates.put(InterviewState.MAIN_GENERATED_QUESTION, nextQuestion);
+            updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
+            updates.put(InterviewState.FOLLOW_UP_CHAIN, new ArrayList<>());
+            log.info("新问题开始，清空追问次数: {} -> 0", state.followUpCount());
         } else {
-            updates.put(InterviewState.CURRENT_BUSINESS_INDEX, newIndex);
+            // 追问：累加追问次数
+            updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
+            log.info("追问次数累加: {} -> {}", state.followUpCount(), state.followUpCount() + 1);
         }
 
         // 推送问题到前端
@@ -116,9 +82,11 @@ public class AskQuestionNode {
                 .content(nextQuestion.getQuestion())
                 .questionType(nextQuestion.getQuestionType())
                 .questionIndex(nextQuestion.getQuestionIndex())
+                .isFollowUp(isFollowUp)
                 .build());
 
-        log.info("已推送问题到前端: [{}] {}", nextQuestion.getQuestionType(), nextQuestion.getQuestion());
+        log.info("已推送{}到前端: [{}] {}", isFollowUp ? "追问问题" : "问题",
+                nextQuestion.getQuestionType(), nextQuestion.getQuestion());
 
         return CompletableFuture.completedFuture(updates);
     }

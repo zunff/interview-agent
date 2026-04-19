@@ -1,8 +1,11 @@
 package com.zunff.interview.agent.state;
 
+import com.zunff.interview.constant.Difficulty;
+import com.zunff.interview.constant.DifficultyPreference;
 import com.zunff.interview.constant.QuestionType;
-import com.zunff.interview.model.dto.GeneratedQuestion;
-import com.zunff.interview.model.dto.LevelMatchResult;
+import com.zunff.interview.model.bo.GeneratedQuestion;
+import com.zunff.interview.model.bo.JobAnalysisResult;
+import com.zunff.interview.model.bo.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
@@ -77,7 +80,9 @@ public class BatchQuestionGenState extends AgentState {
         SCHEMA.put(PROJECT_COUNT, Channels.base(new LastValueReducer<>(), () -> 3));
         SCHEMA.put(BUSINESS_COUNT, Channels.base(new LastValueReducer<>(), () -> 2));
         SCHEMA.put(SOFT_SKILL_COUNT, Channels.base(new LastValueReducer<>(), () -> 2));
-        SCHEMA.put(LEVEL_MATCH_RESULT, Channels.base(new LastValueReducer<>(), () -> null));
+        SCHEMA.put(LEVEL_MATCH_RESULT, Channels.base(new LastValueReducer<>(),
+                () -> new LevelMatchResult(JobAnalysisResult.PositionLevel.MID_LEVEL, JobAnalysisResult.PositionLevel.MID_LEVEL,
+                        Difficulty.EASY, Difficulty.MEDIUM, DifficultyPreference.STANDARD)));
 
         SCHEMA.put(TECHNICAL_BASIC_QUESTIONS, Channels.base(new LastValueReducer<>(), ArrayList::new));
         SCHEMA.put(PROJECT_QUESTIONS, Channels.base(new LastValueReducer<>(), ArrayList::new));

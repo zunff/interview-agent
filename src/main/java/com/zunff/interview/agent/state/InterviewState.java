@@ -4,14 +4,15 @@ import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.FollowUpChainEntity;
-import com.zunff.interview.model.dto.GeneratedQuestion;
-import com.zunff.interview.model.dto.JobAnalysisResult;
-import com.zunff.interview.model.dto.LevelMatchResult;
+import com.zunff.interview.model.bo.InterviewQuestionBO;
+import com.zunff.interview.model.bo.FollowUpChainEntity;
+import com.zunff.interview.model.bo.GeneratedQuestion;
+import com.zunff.interview.model.bo.JobAnalysisResult;
+import com.zunff.interview.model.bo.LevelMatchResult;
 import com.zunff.interview.constant.Difficulty;
 import com.zunff.interview.constant.DifficultyPreference;
-import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
-import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.bo.analysis.FrameWithTimestamp;
+import com.zunff.interview.model.bo.analysis.TranscriptEntry;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
@@ -39,11 +40,8 @@ public class InterviewState extends AgentState {
     public static final String SELF_INTRO = "selfIntro";
 
     // ========== 问题管理 ==========
-    public static final String QUESTIONS = "questions";
-    public static final String CURRENT_QUESTION = "currentQuestion";
-    public static final String QUESTION_INDEX = "questionIndex";
-    public static final String QUESTION_TYPE = "questionType";
-    public static final String CURRENT_GENERATED_QUESTION = "currentGeneratedQuestion"; // 完整的 GeneratedQuestion 对象
+    public static final String MAIN_GENERATED_QUESTION = "mainGeneratedQuestion"; // 当前主问题（不包含追问）
+    public static final String CURRENT_GENERATED_QUESTION = "currentGeneratedQuestion"; // 当前问题（可能是主问题或追问）
 
     // ========== 回答与评估 ==========
     public static final String ANSWER_TEXT = "answerText";
@@ -61,15 +59,15 @@ public class InterviewState extends AgentState {
     public static final String DECISION = "decision";  // 路由决策: followUp/deepDive/challengeMode/nextQuestion
     public static final String FOLLOW_UP_CHAIN = "followUpChain"; // 追问链路：记录追问问题和详细评价
 
+    // ========== 已评估题目列表（按时间顺序：主1 追问1 主2 追问2） ==========
+    public static final String EVALUATED_TECHNICAL_QUESTIONS = "evaluatedTechnicalQuestions";
+    public static final String EVALUATED_BUSINESS_QUESTIONS = "evaluatedBusinessQuestions";
+
     // ========== 最终报告 ==========
     public static final String IS_FINISHED = "isFinished";
 
     // ========== 轮次管理 ==========
     public static final String CURRENT_ROUND = "currentRound";           // TECHNICAL / BUSINESS
-    public static final String TECHNICAL_QUESTIONS_DONE = "technicalQuestionsDone";
-    public static final String BUSINESS_QUESTIONS_DONE = "businessQuestionsDone";
-    public static final String TECHNICAL_ROUND_SCORES = "technicalRoundScores";  // List<Integer>
-    public static final String BUSINESS_ROUND_SCORES = "businessRoundScores";    // List<Integer>
 
     // ========== 提前结束检测 ==========
     public static final String CONSECUTIVE_HIGH_SCORES = "consecutiveHighScores";
@@ -95,8 +93,6 @@ public class InterviewState extends AgentState {
     // ========== 批量题目队列 ==========
     public static final String TECHNICAL_QUESTIONS_QUEUE = "technicalQuestionsQueue";  // List<GeneratedQuestion>
     public static final String BUSINESS_QUESTIONS_QUEUE = "businessQuestionsQueue";    // List<GeneratedQuestion>
-    public static final String CURRENT_TECHNICAL_INDEX = "currentTechnicalIndex";      // 当前技术题索引
-    public static final String CURRENT_BUSINESS_INDEX = "currentBusinessIndex";        // 当前业务题索引
 
     // ========== 熔断机制 ==========
     public static final String CONSECUTIVE_LLM_FAILURES = "consecutiveLLMFailures";
@@ -119,20 +115,15 @@ public class InterviewState extends AgentState {
 
     static {
         // 列表类型：使用 appender 累加
-        SCHEMA.put(QUESTIONS, Channels.appender(ArrayList::new));
         // ANSWER_FRAMES 使用 base（覆盖语义），因为每次回答的视频帧是独立的
         SCHEMA.put(ANSWER_FRAMES, Channels.base(new LastValueReducer<>(), ArrayList::new));
         SCHEMA.put(ANSWER_FRAMES_WITH_TIMESTAMPS, Channels.base(new LastValueReducer<>(), ArrayList::new));
-        SCHEMA.put(TECHNICAL_ROUND_SCORES, Channels.appender(ArrayList::new));
-        SCHEMA.put(BUSINESS_ROUND_SCORES, Channels.appender(ArrayList::new));
 
         // 实时ASR转录结果（每次回答替换，不累积）
         SCHEMA.put(TRANSCRIPT_ENTRIES, Channels.base(new LastValueReducer<>(), ArrayList::new));
 
         // 最后值类型：使用 base + LastValueReducer
-        SCHEMA.put(QUESTION_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
-        SCHEMA.put(CURRENT_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
-        SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC.getDisplayName()));
+        SCHEMA.put(MAIN_GENERATED_QUESTION, Channels.base(new LastValueReducer<>(), GeneratedQuestion::new));
         SCHEMA.put(CURRENT_GENERATED_QUESTION, Channels.base(new LastValueReducer<>(), GeneratedQuestion::new));
         SCHEMA.put(ANSWER_TEXT, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(ANSWER_AUDIO, Channels.base(new LastValueReducer<>(), () -> ""));
@@ -140,7 +131,9 @@ public class InterviewState extends AgentState {
         SCHEMA.put(FOLLOW_UP_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(FOLLOW_UP_QUESTION, Channels.base(new LastValueReducer<>(), () -> ""));
         SCHEMA.put(DECISION, Channels.base(new LastValueReducer<>(), () -> "nextQuestion"));
-        SCHEMA.put(FOLLOW_UP_CHAIN, Channels.appender(ArrayList::new)); // 追问链路累积
+        SCHEMA.put(FOLLOW_UP_CHAIN, Channels.base(new LastValueReducer<>(), ArrayList::new));
+        SCHEMA.put(EVALUATED_TECHNICAL_QUESTIONS, Channels.appender(ArrayList::new));
+        SCHEMA.put(EVALUATED_BUSINESS_QUESTIONS, Channels.appender(ArrayList::new));
         SCHEMA.put(IS_FINISHED, Channels.base(new LastValueReducer<>(), () -> false));
         SCHEMA.put(MAX_TECHNICAL_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 6));
         SCHEMA.put(MAX_BUSINESS_QUESTIONS, Channels.base(new LastValueReducer<>(), () -> 4));
@@ -152,8 +145,6 @@ public class InterviewState extends AgentState {
 
         // 轮次管理
         SCHEMA.put(CURRENT_ROUND, Channels.base(new LastValueReducer<>(), () -> InterviewRound.TECHNICAL.getCode()));
-        SCHEMA.put(TECHNICAL_QUESTIONS_DONE, Channels.base(new LastValueReducer<>(), () -> 0));
-        SCHEMA.put(BUSINESS_QUESTIONS_DONE, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(CONSECUTIVE_HIGH_SCORES, Channels.base(new LastValueReducer<>(), () -> 0));
 
         // 岗位分析
@@ -175,8 +166,6 @@ public class InterviewState extends AgentState {
         // 批量题目队列
         SCHEMA.put(TECHNICAL_QUESTIONS_QUEUE, Channels.base(new LastValueReducer<>(), ArrayList::new));
         SCHEMA.put(BUSINESS_QUESTIONS_QUEUE, Channels.base(new LastValueReducer<>(), ArrayList::new));
-        SCHEMA.put(CURRENT_TECHNICAL_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
-        SCHEMA.put(CURRENT_BUSINESS_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
 
         // 熔断机制
         SCHEMA.put(CONSECUTIVE_LLM_FAILURES, Channels.base(new LastValueReducer<>(), () -> 0));
@@ -283,17 +272,22 @@ public class InterviewState extends AgentState {
         return (String) data().getOrDefault(SELF_INTRO, "");
     }
 
-    public int questionIndex() {
-        Object value = data().get(QUESTION_INDEX);
-        return value instanceof Number ? ((Number) value).intValue() : 0;
-    }
-
     public String currentQuestion() {
-        return (String) data().get(CURRENT_QUESTION);
+        GeneratedQuestion q = getCurrentGeneratedQuestion();
+        return q != null ? q.getQuestion() : "";
     }
 
     public String questionType() {
-        return (String) data().getOrDefault(QUESTION_TYPE, QuestionType.TECHNICAL_BASIC.getDisplayName());
+        GeneratedQuestion q = getCurrentGeneratedQuestion();
+        return q != null && q.getQuestionType() != null ? q.getQuestionType() : QuestionType.TECHNICAL_BASIC.getDisplayName();
+    }
+
+    /**
+     * 获取当前问题索引
+     */
+    public int questionIndex() {
+        GeneratedQuestion q = getCurrentGeneratedQuestion();
+        return q != null ? q.getQuestionIndex() : 0;
     }
 
     /**
@@ -301,6 +295,13 @@ public class InterviewState extends AgentState {
      */
     public GeneratedQuestion getCurrentGeneratedQuestion() {
         return (GeneratedQuestion) data().get(CURRENT_GENERATED_QUESTION);
+    }
+
+    /**
+     * 获取当前主问题的完整 GeneratedQuestion 对象（不包含追问）
+     */
+    public GeneratedQuestion getMainGeneratedQuestion() {
+        return (GeneratedQuestion) data().get(MAIN_GENERATED_QUESTION);
     }
 
     public String answerText() {
@@ -340,11 +341,6 @@ public class InterviewState extends AgentState {
         return Boolean.TRUE.equals(value);
     }
 
-    @SuppressWarnings("unchecked")
-    public List<String> questions() {
-        return (List<String>) data().getOrDefault(QUESTIONS, new ArrayList<>());
-    }
-
     // ========== 轮次管理便捷方法 ==========
 
     /**
@@ -376,19 +372,21 @@ public class InterviewState extends AgentState {
     }
 
     /**
-     * 获取技术轮已问问题数
+     * 获取技术轮已问问题数（仅主问题）
      */
     public int technicalQuestionsDone() {
-        Object value = data().get(TECHNICAL_QUESTIONS_DONE);
-        return value instanceof Number ? ((Number) value).intValue() : 0;
+        return (int) evaluatedTechnicalQuestions().stream()
+                .filter(q -> !q.isFollowUp())
+                .count();
     }
 
     /**
-     * 获取业务轮已问问题数
+     * 获取业务轮已问问题数（仅主问题）
      */
     public int businessQuestionsDone() {
-        Object value = data().get(BUSINESS_QUESTIONS_DONE);
-        return value instanceof Number ? ((Number) value).intValue() : 0;
+        return (int) evaluatedBusinessQuestions().stream()
+                .filter(q -> !q.isFollowUp())
+                .count();
     }
 
     /**
@@ -408,38 +406,6 @@ public class InterviewState extends AgentState {
     }
 
     /**
-     * 获取轮次通过分数
-     */
-    public int roundPassScore() {
-        Object value = data().get(ROUND_PASS_SCORE);
-        return value instanceof Number ? ((Number) value).intValue() : 75;
-    }
-
-    /**
-     * 获取高分阈值
-     */
-    public int highScoreThreshold() {
-        Object value = data().get(HIGH_SCORE_THRESHOLD);
-        return value instanceof Number ? ((Number) value).intValue() : 85;
-    }
-
-    /**
-     * 获取连续高分次数要求
-     */
-    public int consecutiveHighForEarlyEnd() {
-        Object value = data().get(CONSECUTIVE_HIGH_FOR_EARLY_END);
-        return value instanceof Number ? ((Number) value).intValue() : 3;
-    }
-
-    /**
-     * 获取当前连续高分次数
-     */
-    public int consecutiveHighScores() {
-        Object value = data().get(CONSECUTIVE_HIGH_SCORES);
-        return value instanceof Number ? ((Number) value).intValue() : 0;
-    }
-
-    /**
      * 获取当前轮次的追问上限
      */
     public int maxFollowUpsForCurrentRound() {
@@ -449,60 +415,17 @@ public class InterviewState extends AgentState {
     }
 
     /**
-     * 获取技术轮分数列表
-     */
-    @SuppressWarnings("unchecked")
-    public List<Integer> technicalRoundScores() {
-        return (List<Integer>) data().getOrDefault(TECHNICAL_ROUND_SCORES, new ArrayList<>());
-    }
-
-    /**
-     * 获取业务轮分数列表
-     */
-    @SuppressWarnings("unchecked")
-    public List<Integer> businessRoundScores() {
-        return (List<Integer>) data().getOrDefault(BUSINESS_ROUND_SCORES, new ArrayList<>());
-    }
-
-    /**
-     * 计算技术轮平均分
-     */
-    public double technicalAverageScore() {
-        List<Integer> scores = technicalRoundScores();
-        if (scores.isEmpty()) return 0;
-        return scores.stream().mapToInt(Integer::intValue).average().orElse(0);
-    }
-
-    /**
-     * 计算业务轮平均分
-     */
-    public double businessAverageScore() {
-        List<Integer> scores = businessRoundScores();
-        if (scores.isEmpty()) return 0;
-        return scores.stream().mapToInt(Integer::intValue).average().orElse(0);
-    }
-
-    /**
-     * 是否可以提前结束面试（连续高分）
-     */
-    public boolean canEndInterviewEarly() {
-        return consecutiveHighScores() >= consecutiveHighForEarlyEnd();
-    }
-
-    /**
      * 技术轮是否完成
      */
     public boolean isTechnicalRoundComplete() {
-        // 基于队列索引判断，而不是计数器
-        return !hasMoreTechnicalQuestions();
+        return technicalQuestionsQueue().isEmpty();
     }
 
     /**
      * 业务轮是否完成
      */
     public boolean isBusinessRoundComplete() {
-        // 基于队列索引判断，而不是计数器
-        return !hasMoreBusinessQuestions();
+        return businessQuestionsQueue().isEmpty();
     }
 
     // ========== 岗位分析便捷方法 ==========
@@ -569,59 +492,19 @@ public class InterviewState extends AgentState {
     }
 
     /**
-     * 获取当前技术题索引
+     * 获取已评估的技术轮题目列表（按时间顺序）
      */
-    public int currentTechnicalIndex() {
-        Object value = data().get(CURRENT_TECHNICAL_INDEX);
-        return value instanceof Number ? ((Number) value).intValue() : 0;
+    @SuppressWarnings("unchecked")
+    public List<InterviewQuestionBO> evaluatedTechnicalQuestions() {
+        return (List<InterviewQuestionBO>) data().getOrDefault(EVALUATED_TECHNICAL_QUESTIONS, new ArrayList<>());
     }
 
     /**
-     * 获取当前业务题索引
+     * 获取已评估的业务轮题目列表（按时间顺序）
      */
-    public int currentBusinessIndex() {
-        Object value = data().get(CURRENT_BUSINESS_INDEX);
-        return value instanceof Number ? ((Number) value).intValue() : 0;
-    }
-
-    /**
-     * 是否还有技术题
-     */
-    public boolean hasMoreTechnicalQuestions() {
-        List<?> queue = technicalQuestionsQueue();
-        return currentTechnicalIndex() < queue.size();
-    }
-
-    /**
-     * 是否还有业务题
-     */
-    public boolean hasMoreBusinessQuestions() {
-        List<?> queue = businessQuestionsQueue();
-        return currentBusinessIndex() < queue.size();
-    }
-
-    /**
-     * 获取下一个技术题（不消费）
-     */
-    public GeneratedQuestion peekNextTechnicalQuestion() {
-        List<GeneratedQuestion> queue = technicalQuestionsQueue();
-        int index = currentTechnicalIndex();
-        if (index < queue.size()) {
-            return queue.get(index);
-        }
-        return null;
-    }
-
-    /**
-     * 获取下一个业务题（不消费）
-     */
-    public GeneratedQuestion peekNextBusinessQuestion() {
-        List<GeneratedQuestion> queue = businessQuestionsQueue();
-        int index = currentBusinessIndex();
-        if (index < queue.size()) {
-            return queue.get(index);
-        }
-        return null;
+    @SuppressWarnings("unchecked")
+    public List<InterviewQuestionBO> evaluatedBusinessQuestions() {
+        return (List<InterviewQuestionBO>) data().getOrDefault(EVALUATED_BUSINESS_QUESTIONS, new ArrayList<>());
     }
 
     // ========== 多模态分析中间结果便捷方法 ==========

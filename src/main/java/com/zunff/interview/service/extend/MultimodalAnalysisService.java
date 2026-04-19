@@ -4,14 +4,12 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.config.PromptConfig;
-import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.bo.FollowUpDecisionBO;
-import com.zunff.interview.model.dto.GeneratedQuestion;
-import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
-import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.bo.GeneratedQuestion;
+import com.zunff.interview.model.bo.analysis.FrameWithTimestamp;
+import com.zunff.interview.model.bo.analysis.TranscriptEntry;
+import com.zunff.interview.model.dto.llm.vars.FollowUpRoutePromptVars;
 import com.zunff.interview.model.dto.llm.resp.EvaluationResponseDto;
-import com.zunff.interview.model.dto.llm.resp.FollowUpDecisionResponseDto;
 import com.zunff.interview.model.dto.llm.resp.FollowUpRouteDecisionDto;
 import com.zunff.interview.utils.JsonExtractionUtils;
 import com.zunff.interview.utils.OmniOverallScoreUtils;
@@ -197,7 +195,8 @@ public class MultimodalAnalysisService {
 
         log.info("开始LLM路由决策，当前追问次数: {}/{}", followUpCount, maxFollowUps);
 
-        Map<String, Object> promptVars = buildFollowUpRoutePromptVars(evaluation, generatedQuestion, followUpCount, maxFollowUps);
+        FollowUpRoutePromptVars vars = buildFollowUpRoutePromptVars(evaluation, generatedQuestion, followUpCount, maxFollowUps);
+        Map<String, Object> promptVars = vars.asMap();
 
         try {
             String systemPrompt = promptTemplateService.getPrompt("followup-route-decision", promptVars);
@@ -219,54 +218,56 @@ public class MultimodalAnalysisService {
         }
     }
 
-    private Map<String, Object> buildFollowUpRoutePromptVars(
+    private FollowUpRoutePromptVars buildFollowUpRoutePromptVars(
             EvaluationBO evaluation,
             GeneratedQuestion generatedQuestion,
             int followUpCount,
             int maxFollowUps) {
-        Map<String, Object> promptVars = new HashMap<>();
-        int remainingFollowUps = maxFollowUps - followUpCount;
 
-        promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
-        promptVars.put("overallScore", evaluation.getOverallScore());
-        promptVars.put("accuracy", evaluation.getAccuracy());
-        promptVars.put("logic", evaluation.getLogic());
-        promptVars.put("fluency", evaluation.getFluency());
-        promptVars.put("confidence", evaluation.getConfidence());
-        promptVars.put("emotionScore", evaluation.getEmotionScore());
-        promptVars.put("bodyLanguageScore", evaluation.getBodyLanguageScore());
-        promptVars.put("voiceToneScore", evaluation.getVoiceToneScore());
-        promptVars.put("modalityConcern", evaluation.isModalityConcern());
+        int remainingFollowUps = maxFollowUps - followUpCount;
 
         String questionText = evaluation.getQuestion();
         if (questionText == null && generatedQuestion != null) {
             questionText = generatedQuestion.getQuestion();
         }
-        promptVars.put("question", questionText != null ? questionText : "");
 
         String answerText = evaluation.getAnswer();
-        promptVars.put("answer", answerText != null ? answerText : "");
+
+        String difficulty = "medium";
+        String expectedKeywords = "No specific keywords";
+        String questionIntent = "No specific intention stated";
 
         if (generatedQuestion != null) {
-            promptVars.put("difficulty", generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium");
-            promptVars.put("expectedKeywords", generatedQuestion.getExpectedKeywords() != null
+            difficulty = generatedQuestion.getDifficulty() != null ? generatedQuestion.getDifficulty() : "medium";
+            expectedKeywords = generatedQuestion.getExpectedKeywords() != null
                     ? String.join(", ", generatedQuestion.getExpectedKeywords())
-                    : "No specific keywords");
-            promptVars.put("questionIntent", generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated");
-        } else {
-            promptVars.put("difficulty", "medium");
-            promptVars.put("expectedKeywords", "No specific keywords");
-            promptVars.put("questionIntent", "No specific intention stated");
+                    : "No specific keywords";
+            questionIntent = generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated";
         }
 
-        promptVars.put("strengths", evaluation.getStrengths() != null ? String.join(", ", evaluation.getStrengths()) : "");
-        promptVars.put("weaknesses", evaluation.getWeaknesses() != null ? String.join(", ", evaluation.getWeaknesses()) : "");
-        promptVars.put("detailedEvaluation", evaluation.getDetailedEvaluation() != null ? evaluation.getDetailedEvaluation() : "");
-
-        promptVars.put("followUpCount", followUpCount);
-        promptVars.put("maxFollowUps", maxFollowUps);
-        promptVars.put("remainingFollowUps", remainingFollowUps);
-        return promptVars;
+        return FollowUpRoutePromptVars.builder()
+                .responseLanguage(promptConfig.getResponseLanguage())
+                .overallScore(evaluation.getOverallScore())
+                .accuracy(evaluation.getAccuracy())
+                .logic(evaluation.getLogic())
+                .fluency(evaluation.getFluency())
+                .confidence(evaluation.getConfidence())
+                .emotionScore(evaluation.getEmotionScore())
+                .bodyLanguageScore(evaluation.getBodyLanguageScore())
+                .voiceToneScore(evaluation.getVoiceToneScore())
+                .modalityConcern(evaluation.isModalityConcern())
+                .question(questionText != null ? questionText : "")
+                .answer(answerText != null ? answerText : "")
+                .difficulty(difficulty)
+                .expectedKeywords(expectedKeywords)
+                .questionIntent(questionIntent)
+                .strengths(evaluation.getStrengths() != null ? String.join(", ", evaluation.getStrengths()) : "")
+                .weaknesses(evaluation.getWeaknesses() != null ? String.join(", ", evaluation.getWeaknesses()) : "")
+                .detailedEvaluation(evaluation.getDetailedEvaluation() != null ? evaluation.getDetailedEvaluation() : "")
+                .followUpCount(followUpCount)
+                .maxFollowUps(maxFollowUps)
+                .remainingFollowUps(remainingFollowUps)
+                .build();
     }
 
     // ========== 解析方法 ==========
@@ -304,6 +305,8 @@ public class MultimodalAnalysisService {
                     .strengths(parseStringList(json, "strengths"))
                     .weaknesses(parseStringList(json, "weaknesses"))
                     .detailedEvaluation(json.getStr("detailedEvaluation", ""))
+                    .standardAnswer(json.getStr("standardAnswer", ""))
+                    .suggestions(json.getStr("suggestions", ""))
                     .modalityConcern(emotionScore < 60 || bodyLanguageScore < 60 || voiceToneScore < 60)
                     .build();
 
@@ -348,24 +351,12 @@ public class MultimodalAnalysisService {
                 .strengths(response.strengths() == null ? List.of() : response.strengths())
                 .weaknesses(response.weaknesses() == null ? List.of() : response.weaknesses())
                 .detailedEvaluation(response.detailedEvaluation() == null ? "" : response.detailedEvaluation())
+                .standardAnswer(response.standardAnswer() == null ? "" : response.standardAnswer())
+                .suggestions(response.suggestions() == null ? "" : response.suggestions())
                 .modalityConcern(emotionScore < 60 || bodyLanguageScore < 60 || voiceToneScore < 60)
                 .build();
     }
 
-    private FollowUpDecisionBO toFollowUpDecisionBO(FollowUpDecisionResponseDto response) {
-        if (response == null) {
-            return FollowUpDecisionBO.builder()
-                    .decision(RouteDecision.NEXT_QUESTION.getValue())
-                    .reason("Empty decision response")
-                    .build();
-        }
-        return FollowUpDecisionBO.builder()
-                .decision(resolveDecision(response))
-                .followUpQuestion(response.followUpQuestion() == null ? "" : response.followUpQuestion())
-                .reason(response.reason() == null ? "" : response.reason())
-                .followUpType(resolveFollowUpType(response))
-                .build();
-    }
 
     private List<String> parseStringList(JSONObject json, String key) {
         List<String> result = new ArrayList<>();
@@ -402,37 +393,4 @@ public class MultimodalAnalysisService {
         }
         return builder.toString().trim();
     }
-
-    private String resolveDecision(FollowUpDecisionResponseDto response) {
-        Integer decisionCode = response.decisionCode();
-        if (decisionCode != null) {
-            return switch (decisionCode) {
-                case 1 -> RouteDecision.DEEP_DIVE.getValue();
-                case 2 -> RouteDecision.CHALLENGE_MODE.getValue();
-                case 3 -> RouteDecision.FOLLOW_UP.getValue();
-                case 4 -> RouteDecision.NEXT_QUESTION.getValue();
-                default -> RouteDecision.NEXT_QUESTION.getValue();
-            };
-        }
-        String decision = response.decision();
-        if (decision == null || decision.isBlank()) {
-            return RouteDecision.NEXT_QUESTION.getValue();
-        }
-        return decision;
-    }
-
-    private String resolveFollowUpType(FollowUpDecisionResponseDto response) {
-        Integer followUpTypeCode = response.followUpTypeCode();
-        if (followUpTypeCode != null) {
-            return switch (followUpTypeCode) {
-                case 1 -> "deep_dive";
-                case 2 -> "validate_clarify";
-                case 3 -> "add_detail";
-                case 4 -> "explore_anomaly";
-                default -> "";
-            };
-        }
-        return response.followUpType();
-    }
-
 }

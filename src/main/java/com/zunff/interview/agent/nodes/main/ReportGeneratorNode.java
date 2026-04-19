@@ -2,10 +2,9 @@ package com.zunff.interview.agent.nodes.main;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.config.PromptConfig;
-import com.zunff.interview.model.dto.LevelMatchResult;
+import com.zunff.interview.model.bo.InterviewQuestionBO;
+import com.zunff.interview.model.bo.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.vars.ReportUserPromptVars;
-import com.zunff.interview.model.entity.EvaluationRecord;
-import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import com.zunff.interview.agent.state.InterviewState;
@@ -16,6 +15,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +36,6 @@ public class ReportGeneratorNode {
     private final ChatClient.Builder chatClientBuilder;
     private final PromptTemplateService promptTemplateService;
     private final PromptConfig promptConfig;
-    private final EvaluationRecordService evaluationRecordService;
     private final InterviewSessionService sessionService;
     private final InterviewWebSocketHandler webSocketHandler;
 
@@ -44,13 +43,11 @@ public class ReportGeneratorNode {
             ChatClient.Builder chatClientBuilder,
             PromptTemplateService promptTemplateService,
             PromptConfig promptConfig,
-            EvaluationRecordService evaluationRecordService,
             InterviewSessionService sessionService,
             @Lazy InterviewWebSocketHandler webSocketHandler) {
         this.chatClientBuilder = chatClientBuilder;
         this.promptTemplateService = promptTemplateService;
         this.promptConfig = promptConfig;
-        this.evaluationRecordService = evaluationRecordService;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
     }
@@ -68,31 +65,38 @@ public class ReportGeneratorNode {
                 ? state.jobAnalysisResult().generateJobSummary()
                 : state.jobInfo();
 
-        List<EvaluationRecord> evaluations = evaluationRecordService.getBySessionId(sessionId);
+        // 从新的列表获取已评估的题目
+        List<InterviewQuestionBO> technicalQuestions = state.evaluatedTechnicalQuestions();
+        List<InterviewQuestionBO> businessQuestions = state.evaluatedBusinessQuestions();
 
         int technicalQuestionsDone = state.technicalQuestionsDone();
         int businessQuestionsDone = state.businessQuestionsDone();
-        double technicalAvgScore = state.technicalAverageScore();
-        double businessAvgScore = state.businessAverageScore();
+        double technicalAvgScore = calculateAverageScore(technicalQuestions);
+        double businessAvgScore = calculateAverageScore(businessQuestions);
+
+        // 计算总体统计
+        List<InterviewQuestionBO> allQuestions = new ArrayList<>();
+        allQuestions.addAll(technicalQuestions);
+        allQuestions.addAll(businessQuestions);
 
         double avgScore = 0;
         double avgAccuracy = 0, avgLogic = 0, avgFluency = 0, avgConfidence = 0;
         double avgEmotion = 0, avgBodyLanguage = 0, avgVoiceTone = 0;
-        int totalQuestions = evaluations.size();
+        int totalQuestions = allQuestions.size();
 
         if (totalQuestions > 0) {
             int totalScore = 0, totalAccuracy = 0, totalLogic = 0, totalFluency = 0, totalConfidence = 0;
             int totalEmotion = 0, totalBodyLanguage = 0, totalVoiceTone = 0;
 
-            for (EvaluationRecord eval : evaluations) {
-                if (eval.getOverallScore() != null) totalScore += eval.getOverallScore();
-                if (eval.getAccuracy() != null) totalAccuracy += eval.getAccuracy();
-                if (eval.getLogic() != null) totalLogic += eval.getLogic();
-                if (eval.getFluency() != null) totalFluency += eval.getFluency();
-                if (eval.getConfidence() != null) totalConfidence += eval.getConfidence();
-                if (eval.getEmotionScore() != null) totalEmotion += eval.getEmotionScore();
-                if (eval.getBodyLanguageScore() != null) totalBodyLanguage += eval.getBodyLanguageScore();
-                if (eval.getVoiceToneScore() != null) totalVoiceTone += eval.getVoiceToneScore();
+            for (InterviewQuestionBO q : allQuestions) {
+                if (q.getOverallScore() != null) totalScore += q.getOverallScore();
+                if (q.getAccuracy() != null) totalAccuracy += q.getAccuracy();
+                if (q.getLogic() != null) totalLogic += q.getLogic();
+                if (q.getFluency() != null) totalFluency += q.getFluency();
+                if (q.getConfidence() != null) totalConfidence += q.getConfidence();
+                if (q.getEmotionScore() != null) totalEmotion += q.getEmotionScore();
+                if (q.getBodyLanguageScore() != null) totalBodyLanguage += q.getBodyLanguageScore();
+                if (q.getVoiceToneScore() != null) totalVoiceTone += q.getVoiceToneScore();
             }
 
             avgScore = (double) totalScore / totalQuestions;
@@ -105,12 +109,12 @@ public class ReportGeneratorNode {
             avgVoiceTone = (double) totalVoiceTone / totalQuestions;
         }
 
-        String evalSummaryText = evaluations.isEmpty()
+        String evalSummaryText = allQuestions.isEmpty()
                 ? "No evaluation records."
-                : buildEvalSummary(evaluations);
+                : buildEvalSummary(allQuestions);
 
-        String technicalRoundScoresText = formatScoresList(state.technicalRoundScores());
-        String businessRoundScoresText = formatScoresList(state.businessRoundScores());
+        String technicalRoundScoresText = formatScoresList(extractScores(technicalQuestions));
+        String businessRoundScoresText = formatScoresList(extractScores(businessQuestions));
         String levelMatchSummary = formatLevelMatchSummary(state);
         String followUpChainText = truncateChain(state.formatFollowUpChain());
         String interviewEndContext = buildInterviewEndContext(state);
@@ -120,30 +124,31 @@ public class ReportGeneratorNode {
         String systemPrompt = promptTemplateService.getPrompt("report-generator", systemVars);
 
         String userPrompt = promptTemplateService.getPrompt("report-generator-user",
-                new ReportUserPromptVars(
-                        promptConfig.getResponseLanguage(),
-                        candidateProfile,
-                        jobContext,
-                        technicalQuestionsDone,
-                        businessQuestionsDone,
-                        technicalAvgScore,
-                        businessAvgScore,
-                        avgScore,
-                        avgAccuracy,
-                        avgLogic,
-                        avgFluency,
-                        avgConfidence,
-                        avgEmotion,
-                        avgBodyLanguage,
-                        avgVoiceTone,
-                        totalQuestions,
-                        technicalRoundScoresText,
-                        businessRoundScoresText,
-                        levelMatchSummary,
-                        followUpChainText,
-                        interviewEndContext,
-                        evalSummaryText
-                ).asMap());
+                ReportUserPromptVars.builder()
+                        .responseLanguage(promptConfig.getResponseLanguage())
+                        .candidateProfile(candidateProfile)
+                        .jobInfo(jobContext)
+                        .technicalQuestionsDone(technicalQuestionsDone)
+                        .businessQuestionsDone(businessQuestionsDone)
+                        .technicalAvgScore(technicalAvgScore)
+                        .businessAvgScore(businessAvgScore)
+                        .avgScore(avgScore)
+                        .avgAccuracy(avgAccuracy)
+                        .avgLogic(avgLogic)
+                        .avgFluency(avgFluency)
+                        .avgConfidence(avgConfidence)
+                        .avgEmotion(avgEmotion)
+                        .avgBodyLanguage(avgBodyLanguage)
+                        .avgVoiceTone(avgVoiceTone)
+                        .totalQuestions(totalQuestions)
+                        .technicalRoundScoresText(technicalRoundScoresText)
+                        .businessRoundScoresText(businessRoundScoresText)
+                        .levelMatchSummary(levelMatchSummary)
+                        .followUpChainText(followUpChainText)
+                        .interviewEndContext(interviewEndContext)
+                        .evalSummary(evalSummaryText)
+                        .build()
+                        .asMap());
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
@@ -204,39 +209,76 @@ public class ReportGeneratorNode {
         }
     }
 
-    private String buildEvalSummary(List<EvaluationRecord> evaluations) {
+    private String buildEvalSummary(List<InterviewQuestionBO> questions) {
         StringBuilder evalSummary = new StringBuilder();
-        for (int i = 0; i < evaluations.size(); i++) {
-            EvaluationRecord eval = evaluations.get(i);
-            int qNum = i + 1;
-            evalSummary.append("\n### Question ").append(qNum).append("\n");
-            evalSummary.append("- Question type: ").append(eval.getQuestionType() != null ? eval.getQuestionType() : "unknown").append("\n");
-            evalSummary.append("- Difficulty: ").append(eval.getDifficulty() != null ? eval.getDifficulty() : "unknown").append("\n");
-            if (!CollectionUtils.isEmpty(eval.getExpectedKeywords())) {
-                evalSummary.append("- Expected keywords: ").append(String.join(", ", eval.getExpectedKeywords())).append("\n");
-            }
-            if (Boolean.TRUE.equals(eval.getModalityConcern())) {
-                evalSummary.append("- Modality concern: yes\n");
-            }
-            evalSummary.append("- Question text: ").append(nullToEmpty(eval.getQuestion())).append("\n");
-            evalSummary.append("- Answer: ").append(truncate(nullToEmpty(eval.getAnswer()), MAX_ANSWER_CHARS)).append("\n");
-            evalSummary.append("- Overall score: ").append(eval.getOverallScore()).append("\n");
-            evalSummary.append("  - Content: accuracy ").append(eval.getAccuracy());
-            evalSummary.append(" | logic ").append(eval.getLogic());
-            evalSummary.append(" | fluency ").append(eval.getFluency());
-            evalSummary.append(" | confidence ").append(eval.getConfidence()).append("\n");
-            evalSummary.append("  - Multimodal: emotion ").append(eval.getEmotionScore());
-            evalSummary.append(" | body language ").append(eval.getBodyLanguageScore());
-            evalSummary.append(" | voice tone ").append(eval.getVoiceToneScore()).append("\n");
-            evalSummary.append("- Detailed evaluation: ").append(nullToEmpty(eval.getDetailedEvaluation())).append("\n");
-            if (eval.getStrengths() != null && !eval.getStrengths().isEmpty()) {
-                evalSummary.append("  - Strengths: ").append(String.join(", ", eval.getStrengths())).append("\n");
-            }
-            if (eval.getWeaknesses() != null && !eval.getWeaknesses().isEmpty()) {
-                evalSummary.append("  - Weaknesses: ").append(String.join(", ", eval.getWeaknesses())).append("\n");
+
+        int mainQNum = 0;
+        for (InterviewQuestionBO q : questions) {
+            if (!q.isFollowUp()) {
+                mainQNum++;
+                // 主问题：展示标准答案、建议、评估结果
+                evalSummary.append("\n### Question ").append(mainQNum).append("\n");
+                evalSummary.append("- Question type: ").append(q.getQuestionType()).append("\n");
+                evalSummary.append("- Difficulty: ").append(q.getDifficulty()).append("\n");
+
+                if (q.getStandardAnswer() != null && !q.getStandardAnswer().isEmpty()) {
+                    evalSummary.append("- Standard Answer: ").append(q.getStandardAnswer()).append("\n");
+                }
+                if (q.getSuggestions() != null && !q.getSuggestions().isEmpty()) {
+                    evalSummary.append("- Suggestions: ").append(q.getSuggestions()).append("\n");
+                }
+                if (!CollectionUtils.isEmpty(q.getExpectedKeywords())) {
+                    evalSummary.append("- Expected keywords: ").append(String.join(", ", q.getExpectedKeywords())).append("\n");
+                }
+                if (Boolean.TRUE.equals(q.getModalityConcern())) {
+                    evalSummary.append("- Modality concern: yes\n");
+                }
+
+                evalSummary.append("- Question: ").append(nullToEmpty(q.getQuestion())).append("\n");
+                evalSummary.append("- Answer: ").append(truncate(nullToEmpty(q.getAnswer()), MAX_ANSWER_CHARS)).append("\n");
+                evalSummary.append("- Overall score: ").append(q.getOverallScore()).append("\n");
+                evalSummary.append("  - Content: accuracy ").append(q.getAccuracy());
+                evalSummary.append(" | logic ").append(q.getLogic());
+                evalSummary.append(" | fluency ").append(q.getFluency());
+                evalSummary.append(" | confidence ").append(q.getConfidence()).append("\n");
+                evalSummary.append("  - Multimodal: emotion ").append(q.getEmotionScore());
+                evalSummary.append(" | body language ").append(q.getBodyLanguageScore());
+                evalSummary.append(" | voice tone ").append(q.getVoiceToneScore()).append("\n");
+                evalSummary.append("- Detailed evaluation: ").append(nullToEmpty(q.getDetailedEvaluation())).append("\n");
+                if (!CollectionUtils.isEmpty(q.getStrengths())) {
+                    evalSummary.append("  - Strengths: ").append(String.join(", ", q.getStrengths())).append("\n");
+                }
+                if (!CollectionUtils.isEmpty(q.getWeaknesses())) {
+                    evalSummary.append("  - Weaknesses: ").append(String.join(", ", q.getWeaknesses())).append("\n");
+                }
+            } else {
+                // 追问：挂在当前主问题下
+                evalSummary.append("  - Follow-up: ").append(q.getQuestion()).append("\n");
+                evalSummary.append("    - Score: ").append(q.getOverallScore()).append("\n");
+                evalSummary.append("    - Answer: ").append(truncate(nullToEmpty(q.getAnswer()), MAX_ANSWER_CHARS / 2)).append("\n");
             }
         }
+
         return evalSummary.toString();
+    }
+
+    private double calculateAverageScore(List<InterviewQuestionBO> questions) {
+        if (questions.isEmpty()) return 0;
+        return questions.stream()
+                .filter(q -> q.getOverallScore() != null)
+                .mapToInt(InterviewQuestionBO::getOverallScore)
+                .average()
+                .orElse(0);
+    }
+
+    private List<Integer> extractScores(List<InterviewQuestionBO> questions) {
+        List<Integer> scores = new ArrayList<>();
+        for (InterviewQuestionBO q : questions) {
+            if (!q.isFollowUp() && q.getOverallScore() != null) {
+                scores.add(q.getOverallScore());
+            }
+        }
+        return scores;
     }
 
     private static String nullToEmpty(String s) {
@@ -286,9 +328,6 @@ public class ReportGeneratorNode {
 
     private static String buildInterviewEndContext(InterviewState state) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Eligible for early end (consecutive high scores): ").append(state.canEndInterviewEarly()).append("\n");
-        sb.append("Consecutive high scores: ").append(state.consecutiveHighScores())
-                .append(" / required ").append(state.consecutiveHighForEarlyEnd()).append("\n");
         sb.append("Technical round queue exhausted: ").append(state.isTechnicalRoundComplete()).append("\n");
         sb.append("Business round queue exhausted: ").append(state.isBusinessRoundComplete()).append("\n");
         sb.append("Technical questions answered (counter): ").append(state.technicalQuestionsDone()).append("\n");

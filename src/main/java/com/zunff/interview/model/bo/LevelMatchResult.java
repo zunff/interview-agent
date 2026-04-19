@@ -1,4 +1,4 @@
-package com.zunff.interview.model.dto;
+package com.zunff.interview.model.bo;
 
 import com.zunff.interview.constant.Difficulty;
 import com.zunff.interview.constant.DifficultyPreference;

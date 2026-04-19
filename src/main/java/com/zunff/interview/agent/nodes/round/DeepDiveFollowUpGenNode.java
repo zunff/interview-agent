@@ -6,7 +6,7 @@ import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.dto.llm.resp.FollowUpQuestionResponseDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -67,14 +69,23 @@ public class DeepDiveFollowUpGenNode {
                     .expectedKeywords(response.getExpectedKeywords() != null ? response.getExpectedKeywords() : java.util.List.of())
                     .difficulty(response.getDifficulty() != null ? response.getDifficulty() : "hard")
                     .reason(response.getReason() != null ? response.getReason() : "")
-                    .questionIndex(-1)
+                    .questionIndex(state.questionIndex())  // 继承主问题的 questionIndex
                     .build();
 
+            // 插入到对应轮次队列头部
+            String queueKey = state.isTechnicalRound()
+                    ? InterviewState.TECHNICAL_QUESTIONS_QUEUE
+                    : InterviewState.BUSINESS_QUESTIONS_QUEUE;
+            List<GeneratedQuestion> queue = new ArrayList<>(state.isTechnicalRound()
+                    ? state.technicalQuestionsQueue()
+                    : state.businessQuestionsQueue());
+            queue.addFirst(deepDiveMeta);  // 插入到队头
+
+            log.info("生成深入追问并插入队头: {}", deepDiveQuestion);
+
             Map<String, Object> updates = new HashMap<>();
-            updates.put(InterviewState.CURRENT_QUESTION, deepDiveQuestion);
-            updates.put(InterviewState.QUESTION_TYPE, deepDiveMeta.getQuestionType());
+            updates.put(queueKey, queue);  // 更新队列
             updates.put(InterviewState.CURRENT_GENERATED_QUESTION, deepDiveMeta);
-            updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
             CircuitBreakerHelper.recordSuccess(updates);
 
             log.info("生成深入追问: {}", deepDiveQuestion);

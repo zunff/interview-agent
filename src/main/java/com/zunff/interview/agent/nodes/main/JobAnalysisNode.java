@@ -1,7 +1,7 @@
 package com.zunff.interview.agent.nodes.main;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
-import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.bo.JobAnalysisResult;
 import com.zunff.interview.model.dto.llm.resp.JobAnalysisResponseDto;
 import com.zunff.interview.model.websocket.WebSocketMessage;
 import com.zunff.interview.service.extend.PromptTemplateService;

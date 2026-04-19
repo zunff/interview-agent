@@ -6,7 +6,7 @@ import com.alibaba.dashscope.audio.asr.recognition.RecognitionResult;
 import com.alibaba.dashscope.common.ResultCallback;
 import com.alibaba.dashscope.utils.Constants;
 import com.zunff.interview.config.AsrConfig;
-import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.bo.analysis.TranscriptEntry;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.ByteBuffer;

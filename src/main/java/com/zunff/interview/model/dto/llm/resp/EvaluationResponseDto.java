@@ -13,7 +13,9 @@ public record EvaluationResponseDto(
         Integer overallScore,
         List<String> strengths,
         List<String> weaknesses,
-        String detailedEvaluation
+        String detailedEvaluation,
+        String standardAnswer,
+        String suggestions
 ) {
 }
 

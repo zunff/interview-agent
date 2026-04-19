@@ -56,18 +56,19 @@ public class ReportGeneratorService {
         } catch (Exception e) {
             log.error("生成问题分析失败", e);
             return CompletableFuture.completedFuture(
-                    new QuestionAnalysisResultDto("分析失败", "标准答案生成失败")
+                    new QuestionAnalysisResultDto("分析失败", "标准答案生成失败", "")
             );
         }
     }
 
     private QuestionAnalysisResultDto normalizeAnalysisResult(QuestionAnalysisResultDto result) {
         if (result == null) {
-            return new QuestionAnalysisResultDto("分析失败", "");
+            return new QuestionAnalysisResultDto("分析失败", "", "");
         }
         return new QuestionAnalysisResultDto(
                 result.interviewIntent() == null ? "" : result.interviewIntent(),
-                result.standardAnswer() == null ? "" : result.standardAnswer()
+                result.standardAnswer() == null ? "" : result.standardAnswer(),
+                result.suggestions() == null ? "" : result.suggestions()
         );
     }
 

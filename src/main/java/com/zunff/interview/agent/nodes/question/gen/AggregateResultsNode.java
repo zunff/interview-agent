@@ -1,7 +1,7 @@
 package com.zunff.interview.agent.nodes.question.gen;
 
 import cn.hutool.json.JSONUtil;
-import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.agent.state.BatchQuestionGenState;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

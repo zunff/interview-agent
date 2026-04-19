@@ -5,7 +5,7 @@ import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.constant.Difficulty;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

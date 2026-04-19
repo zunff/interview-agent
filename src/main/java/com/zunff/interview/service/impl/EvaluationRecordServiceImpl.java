@@ -2,9 +2,10 @@ package com.zunff.interview.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.mapper.EvaluationRecordMapper;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.entity.EvaluationRecord;
 import com.zunff.interview.service.EvaluationRecordService;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,9 @@ public class EvaluationRecordServiceImpl extends ServiceImpl<EvaluationRecordMap
                 .weaknesses(evaluation.getWeaknesses())
                 .detailedEvaluation(evaluation.getDetailedEvaluation())
                 .modalityConcern(evaluation.isModalityConcern())
+                .standardAnswer(evaluation.getStandardAnswer())
+                .suggestions(evaluation.getSuggestions())
+                .isFollowUp(gq != null && QuestionType.fromDisplayName(gq.getQuestionType()).isFollowUpType())
                 .questionType(gq != null ? gq.getQuestionType() : null)
                 .difficulty(gq != null ? gq.getDifficulty() : null)
                 .expectedKeywords(gq != null ? gq.getExpectedKeywords() : null)

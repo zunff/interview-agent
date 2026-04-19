@@ -3,9 +3,9 @@ package com.zunff.interview.service.interview;
 import com.zunff.interview.config.KnowledgeConfig;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
-import com.zunff.interview.model.dto.GeneratedQuestion;
-import com.zunff.interview.model.dto.JobAnalysisResult;
-import com.zunff.interview.model.dto.LevelMatchResult;
+import com.zunff.interview.model.bo.GeneratedQuestion;
+import com.zunff.interview.model.bo.JobAnalysisResult;
+import com.zunff.interview.model.bo.LevelMatchResult;
 import com.zunff.interview.constant.Difficulty;
 import com.zunff.interview.constant.DifficultyPreference;
 import com.zunff.interview.model.dto.llm.vars.QuestionGeneratorUserPromptVars;
@@ -93,19 +93,19 @@ public class QuestionGenerationService {
             String systemPrompt = promptTemplateService.getPrompt(promptTemplateName, systemVars);
 
             // 构建 user prompt
-            QuestionGeneratorUserPromptVars vars = new QuestionGeneratorUserPromptVars(
-                    candidateProfile == null ? "" : candidateProfile,
-                    jobContext == null ? "" : jobContext,
-                    questionType.getDisplayName(),
-                    count,
-                    referenceContext.isBlank() ? "None" : referenceContext,
-                    promptConfig.getResponseLanguage(),
-                    positionLevel,
-                    candidateLevel,
-                    difficultyRangeMin,
-                    difficultyRangeMax,
-                    difficultyPreference
-            );
+            QuestionGeneratorUserPromptVars vars = QuestionGeneratorUserPromptVars.builder()
+                    .candidateProfile(candidateProfile == null ? "" : candidateProfile)
+                    .jobInfo(jobContext == null ? "" : jobContext)
+                    .roundDisplayName(questionType.getDisplayName())
+                    .count(count)
+                    .referenceContext(referenceContext.isBlank() ? "None" : referenceContext)
+                    .responseLanguage(promptConfig.getResponseLanguage())
+                    .positionLevel(positionLevel)
+                    .candidateLevel(candidateLevel)
+                    .difficultyRangeMin(difficultyRangeMin)
+                    .difficultyRangeMax(difficultyRangeMax)
+                    .difficultyPreference(difficultyPreference)
+                    .build();
             String userPrompt = promptTemplateService.getPrompt("question-generator-user", vars.asMap());
 
             ChatClient chatClient = chatClientBuilder.build();

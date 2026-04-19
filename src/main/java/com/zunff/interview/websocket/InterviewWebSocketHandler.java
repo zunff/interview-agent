@@ -3,7 +3,8 @@ package com.zunff.interview.websocket;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.agent.state.InterviewState;
-import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.bo.analysis.FrameWithTimestamp;
+import com.zunff.interview.model.bo.analysis.TranscriptEntry;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.websocket.QuestionMessage;
@@ -240,8 +241,8 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
         // 获取带时间戳的视频帧（用于Omni多模态综合分析）
         var framesWithTs = videoStreamService.getFramesWithTimestamps(sessionId);
-        List<com.zunff.interview.model.dto.analysis.FrameWithTimestamp> dtoFrames = framesWithTs.stream()
-                .map(f -> com.zunff.interview.model.dto.analysis.FrameWithTimestamp.builder()
+        List<FrameWithTimestamp> dtoFrames = framesWithTs.stream()
+                .map(f -> FrameWithTimestamp.builder()
                         .frame(f.frame())
                         .timestampMs(f.timestampMs())
                         .build())
@@ -250,7 +251,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
         // 兼容旧字段：同时提取纯帧数据
         List<String> frames = dtoFrames.stream()
-                .map(com.zunff.interview.model.dto.analysis.FrameWithTimestamp::getFrame)
+                .map(FrameWithTimestamp::getFrame)
                 .toList();
 
         // 获取原始PCM音频并转换为WAV格式（用于Omni多模态综合分析）

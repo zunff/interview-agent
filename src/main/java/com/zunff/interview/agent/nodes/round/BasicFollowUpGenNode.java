@@ -6,7 +6,7 @@ import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.constant.RouteDecision;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.GeneratedQuestion;
+import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.dto.llm.resp.FollowUpQuestionResponseDto;
 import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,7 +43,7 @@ public class BasicFollowUpGenNode {
 
         try {
             ChatClient chatClient = chatClientBuilder.build();
-            FollowUpQuestionResponseDto response = generateFollowUpQuestion(evaluation, generatedQuestion, state.formatFollowUpChain(), chatClient);
+            FollowUpQuestionResponseDto response = generateFollowUpQuestion(evaluation, generatedQuestion, state.formatFollowUpChain(), chatClient, state);
             String followUpQuestion = response.getFollowUpQuestion();
             log.info("生成追问: {}", followUpQuestion);
 
@@ -52,14 +54,23 @@ public class BasicFollowUpGenNode {
                     .expectedKeywords(response.getExpectedKeywords() != null ? response.getExpectedKeywords() : java.util.List.of())
                     .difficulty(response.getDifficulty() != null ? response.getDifficulty() : "medium")
                     .reason(response.getReason() != null ? response.getReason() : "")
-                    .questionIndex(-1)
+                    .questionIndex(state.questionIndex())  // 继承主问题的 questionIndex
                     .build();
 
+            // 插入到对应轮次队列头部
+            String queueKey = state.isTechnicalRound()
+                    ? InterviewState.TECHNICAL_QUESTIONS_QUEUE
+                    : InterviewState.BUSINESS_QUESTIONS_QUEUE;
+            List<GeneratedQuestion> queue = new ArrayList<>(state.isTechnicalRound()
+                    ? state.technicalQuestionsQueue()
+                    : state.businessQuestionsQueue());
+            queue.addFirst(followUpMeta);  // 插入到队头
+
+            log.info("生成追问并插入队头: {}", followUpQuestion);
+
             Map<String, Object> updates = new HashMap<>();
-            updates.put(InterviewState.CURRENT_QUESTION, followUpQuestion);
-            updates.put(InterviewState.QUESTION_TYPE, followUpMeta.getQuestionType());
+            updates.put(queueKey, queue);  // 更新队列
             updates.put(InterviewState.CURRENT_GENERATED_QUESTION, followUpMeta);
-            updates.put(InterviewState.FOLLOW_UP_COUNT, state.followUpCount() + 1);
             CircuitBreakerHelper.recordSuccess(updates);
 
             log.info("追问次数累加: {} -> {}", state.followUpCount(), state.followUpCount() + 1);
@@ -79,8 +90,8 @@ public class BasicFollowUpGenNode {
     /**
      * 生成针对性追问（包含追问链路上下文）
      */
-    private FollowUpQuestionResponseDto generateFollowUpQuestion(EvaluationBO evaluation, GeneratedQuestion question, String followUpChain, ChatClient chatClient) {
-        Map<String, Object> promptVars = buildFollowUpGenerationPromptVars(evaluation, question, followUpChain);
+    private FollowUpQuestionResponseDto generateFollowUpQuestion(EvaluationBO evaluation, GeneratedQuestion question, String followUpChain, ChatClient chatClient, InterviewState state) {
+        Map<String, Object> promptVars = buildFollowUpGenerationPromptVars(evaluation, question, followUpChain, state);
 
         String systemPrompt = promptTemplateService.getPrompt("followup-question-generation", promptVars);
         String userPrompt = promptTemplateService.getPrompt("followup-question-generation-user", promptVars);
@@ -95,11 +106,18 @@ public class BasicFollowUpGenNode {
     private Map<String, Object> buildFollowUpGenerationPromptVars(
             EvaluationBO evaluation,
             GeneratedQuestion question,
-            String followUpChain) {
+            String followUpChain,
+            InterviewState state) {
 
         Map<String, Object> promptVars = new HashMap<>();
         promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
         promptVars.put("followUpChain", followUpChain != null ? followUpChain : "");
+
+        // 添加主问题上下文（与 ChallengeFollowUpGenNode 和 DeepDiveFollowUpGenNode 保持一致）
+        String originalQuestion = state.getMainGeneratedQuestion() != null
+                ? state.getMainGeneratedQuestion().getQuestion()
+                : state.currentQuestion();
+        promptVars.put("originalQuestion", originalQuestion != null ? originalQuestion : "");
 
         if (question != null) {
             promptVars.put("question", question.getQuestion() != null ? question.getQuestion() : "");

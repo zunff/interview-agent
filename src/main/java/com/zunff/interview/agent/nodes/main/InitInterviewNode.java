@@ -25,14 +25,11 @@ public class InitInterviewNode {
         log.info("初始化面试，会话ID: {}", state.sessionId());
 
         Map<String, Object> updates = new HashMap<>();
-        updates.put(InterviewState.QUESTION_INDEX, 0);
         updates.put(InterviewState.FOLLOW_UP_COUNT, 0);
         updates.put(InterviewState.IS_FINISHED, false);
 
         // 初始化轮次状态
         updates.put(InterviewState.CURRENT_ROUND, InterviewRound.TECHNICAL.getCode());
-        updates.put(InterviewState.TECHNICAL_QUESTIONS_DONE, 0);
-        updates.put(InterviewState.BUSINESS_QUESTIONS_DONE, 0);
         updates.put(InterviewState.CONSECUTIVE_HIGH_SCORES, 0);
 
         return CompletableFuture.completedFuture(updates);

@@ -83,6 +83,15 @@ public class EvaluationRecord {
     /** 是否存在多模态异常 */
     private Boolean modalityConcern;
 
+    /** 标准答案（仅主问题有） */
+    private String standardAnswer;
+
+    /** 给面试者的建议（仅主问题有） */
+    private String suggestions;
+
+    /** 是否为追问 */
+    private Boolean isFollowUp;
+
     /** 创建时间 */
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

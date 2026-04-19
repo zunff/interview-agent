@@ -1,4 +1,4 @@
-package com.zunff.interview.model.dto.analysis;
+package com.zunff.interview.model.bo.analysis;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

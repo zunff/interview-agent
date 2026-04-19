@@ -1,36 +1,40 @@
 package com.zunff.interview.model.dto.llm.vars;
 
 import cn.hutool.core.bean.BeanUtil;
+import lombok.Builder;
+import lombok.Data;
 
 import java.util.Map;
 
 /**
  * report-generator-user 模板变量：键名与 {@code resources/prompts/report-generator-user.prompt} 一致。
  */
-public record ReportUserPromptVars(
-        String responseLanguage,
-        String candidateProfile,
-        String jobInfo,
-        int technicalQuestionsDone,
-        int businessQuestionsDone,
-        double technicalAvgScore,
-        double businessAvgScore,
-        double avgScore,
-        double avgAccuracy,
-        double avgLogic,
-        double avgFluency,
-        double avgConfidence,
-        double avgEmotion,
-        double avgBodyLanguage,
-        double avgVoiceTone,
-        int totalQuestions,
-        String technicalRoundScoresText,
-        String businessRoundScoresText,
-        String levelMatchSummary,
-        String followUpChainText,
-        String interviewEndContext,
-        String evalSummary
-) {
+@Data
+@Builder
+public class ReportUserPromptVars {
+    private String responseLanguage;
+    private String candidateProfile;
+    private String jobInfo;
+    private int technicalQuestionsDone;
+    private int businessQuestionsDone;
+    private double technicalAvgScore;
+    private double businessAvgScore;
+    private double avgScore;
+    private double avgAccuracy;
+    private double avgLogic;
+    private double avgFluency;
+    private double avgConfidence;
+    private double avgEmotion;
+    private double avgBodyLanguage;
+    private double avgVoiceTone;
+    private int totalQuestions;
+    private String technicalRoundScoresText;
+    private String businessRoundScoresText;
+    private String levelMatchSummary;
+    private String followUpChainText;
+    private String interviewEndContext;
+    private String evalSummary;
+
     public Map<String, Object> asMap() {
         return BeanUtil.beanToMap(this);
     }

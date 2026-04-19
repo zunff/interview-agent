@@ -7,8 +7,8 @@ import com.zunff.interview.agent.state.BatchQuestionGenState;
 import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.config.GraphConfigProperties;
 import com.zunff.interview.constant.InterviewRound;
-import com.zunff.interview.model.dto.GeneratedQuestion;
-import com.zunff.interview.model.dto.JobAnalysisResult;
+import com.zunff.interview.model.bo.GeneratedQuestion;
+import com.zunff.interview.model.bo.JobAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.*;
 import org.bsc.langgraph4j.checkpoint.MemorySaver;
@@ -186,8 +186,6 @@ public class InterviewAgentGraph {
                     Map<String, Object> updates = new HashMap<>();
                     updates.put(InterviewState.TECHNICAL_QUESTIONS_QUEUE, subState.getTechnicalQuestionsQueue());
                     updates.put(InterviewState.BUSINESS_QUESTIONS_QUEUE, subState.getBusinessQuestionsQueue());
-                    updates.put(InterviewState.CURRENT_TECHNICAL_INDEX, subState.getCurrentTechnicalIndex());
-                    updates.put(InterviewState.CURRENT_BUSINESS_INDEX, subState.getCurrentBusinessIndex());
 
                     // 熔断逻辑：根据 fallback 标志决定是否记录失败
                     if (subState.getFallback()) {
@@ -217,9 +215,7 @@ public class InterviewAgentGraph {
     private Map<String, Object> generateFallbackUpdates() {
         return Map.of(
                 InterviewState.TECHNICAL_QUESTIONS_QUEUE, generateDefaultTechnicalQuestions(),
-                InterviewState.BUSINESS_QUESTIONS_QUEUE, generateDefaultBusinessQuestions(),
-                InterviewState.CURRENT_TECHNICAL_INDEX, 0,
-                InterviewState.CURRENT_BUSINESS_INDEX, 0
+                InterviewState.BUSINESS_QUESTIONS_QUEUE, generateDefaultBusinessQuestions()
         );
     }
 

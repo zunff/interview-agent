@@ -1,7 +1,7 @@
 package com.zunff.interview.model.request;
 
-import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
-import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.bo.analysis.FrameWithTimestamp;
+import com.zunff.interview.model.bo.analysis.TranscriptEntry;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;

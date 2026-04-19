@@ -3,10 +3,11 @@ package com.zunff.interview.agent.nodes.round;
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.EvaluationBO;
-import com.zunff.interview.model.dto.FollowUpChainEntity;
-import com.zunff.interview.model.dto.GeneratedQuestion;
-import com.zunff.interview.model.dto.analysis.FrameWithTimestamp;
-import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.bo.InterviewQuestionBO;
+import com.zunff.interview.model.bo.FollowUpChainEntity;
+import com.zunff.interview.model.bo.GeneratedQuestion;
+import com.zunff.interview.model.bo.analysis.FrameWithTimestamp;
+import com.zunff.interview.model.bo.analysis.TranscriptEntry;
 import com.zunff.interview.service.extend.MultimodalAnalysisService;
 import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.utils.OmniOverallScoreUtils;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,15 +73,50 @@ public class ComprehensiveEvaluationNode {
 
             Map<String, Object> updates = new HashMap<>();
 
+            // 构建 InterviewQuestionBO（标准答案和建议已在评估时生成）
+            InterviewQuestionBO questionBO = InterviewQuestionBO.builder()
+                    .question(question)
+                    .questionType(questionType)
+                    .expectedKeywords(generatedQuestion.getExpectedKeywords())
+                    .difficulty(generatedQuestion.getDifficulty())
+                    .reason(generatedQuestion.getReason())
+                    .questionIndex(state.questionIndex())
+                    .isFollowUp(type.isFollowUpType())
+                    .standardAnswer(evaluation.getStandardAnswer())
+                    .suggestions(evaluation.getSuggestions())
+                    .answer(answerText)
+                    .overallScore(evaluation.getOverallScore())
+                    .accuracy(evaluation.getAccuracy())
+                    .logic(evaluation.getLogic())
+                    .fluency(evaluation.getFluency())
+                    .confidence(evaluation.getConfidence())
+                    .emotionScore(evaluation.getEmotionScore())
+                    .bodyLanguageScore(evaluation.getBodyLanguageScore())
+                    .voiceToneScore(evaluation.getVoiceToneScore())
+                    .strengths(evaluation.getStrengths())
+                    .weaknesses(evaluation.getWeaknesses())
+                    .detailedEvaluation(evaluation.getDetailedEvaluation())
+                    .modalityConcern(evaluation.isModalityConcern())
+                    .build();
+
+            // 追加到已评估列表
+            String listKey = state.isTechnicalRound()
+                    ? InterviewState.EVALUATED_TECHNICAL_QUESTIONS
+                    : InterviewState.EVALUATED_BUSINESS_QUESTIONS;
+            updates.put(listKey, questionBO);
+
             if (type.isFollowUpType()) {
                 FollowUpChainEntity entry = FollowUpChainEntity.builder()
                         .followUpQuestion(question)
                         .detailedEvaluation(evaluation.getDetailedEvaluation())
                         .overallScore(evaluation.getOverallScore())
                         .build();
-                updates.put(InterviewState.FOLLOW_UP_CHAIN, List.of(entry));
+                List<FollowUpChainEntity> updatedChain = new ArrayList<>(state.followUpChain());
+                updatedChain.add(entry);
+                updates.put(InterviewState.FOLLOW_UP_CHAIN, updatedChain);
                 log.info("记录追问链路: 问题={}, 得分={}", question, evaluation.getOverallScore());
             }
+
             updates.put(InterviewState.CURRENT_EVALUATION, evaluation);
             CircuitBreakerHelper.recordSuccess(updates);
 

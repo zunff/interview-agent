@@ -5,6 +5,7 @@ package com.zunff.interview.model.dto.llm.resp;
  */
 public record QuestionAnalysisResultDto(
         String interviewIntent,
-        String standardAnswer
+        String standardAnswer,
+        String suggestions
 ) {
 }

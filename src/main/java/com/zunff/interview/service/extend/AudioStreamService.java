@@ -1,6 +1,6 @@
 package com.zunff.interview.service.extend;
 
-import com.zunff.interview.model.dto.analysis.TranscriptEntry;
+import com.zunff.interview.model.bo.analysis.TranscriptEntry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
