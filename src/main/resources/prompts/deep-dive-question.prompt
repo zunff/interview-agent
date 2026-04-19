@@ -3,6 +3,9 @@
 ## Task
 When answer quality is low, generate **one** diagnostic follow-up question to distinguish a real knowledge gap from expression or delivery issues. Any scaffolding or hints belong **inside** `followUpQuestion` text only.
 
+## Note on ASR Transcription
+The `answer` variable is transcribed from speech via ASR and may contain homophone errors (e.g., "their" vs "there", "技术" vs "计数"). Consider semantic equivalence when interpreting the answer—do not treat homophone errors as candidate mistakes unless they clearly indicate a substantive misunderstanding.
+
 ## Language Requirement
 `followUpQuestion` and `reason` must be in `$responseLanguage$`.
 

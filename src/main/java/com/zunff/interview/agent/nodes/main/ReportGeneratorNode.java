@@ -167,7 +167,7 @@ public class ReportGeneratorNode {
             // 构建详细评估结果（包含标准答案和建议）
             String questionsDetail = allQuestions.isEmpty()
                     ? "No evaluation records."
-                    : buildQuestionsDetail(allQuestions);
+                    : buildQuestionsDetail(technicalQuestions, businessQuestions);
 
             // 轮次追问数
             int technicalFollowUps = (int) technicalQuestions.stream().filter(q -> q.isFollowUp()).count();
@@ -218,26 +218,48 @@ public class ReportGeneratorNode {
         }
     }
 
-    private String buildQuestionsDetail(List<InterviewQuestionBO> questions) {
-        StringBuilder sb = new StringBuilder();
+    private String buildQuestionsDetail(
+            List<InterviewQuestionBO> technicalQuestions,
+            List<InterviewQuestionBO> businessQuestions) {
 
-        // 分离主问题和追问
+        StringBuilder sb = new StringBuilder();
+        int mainQNum = 0;
+
+        // 技术轮
+        if (!technicalQuestions.isEmpty()) {
+            sb.append("### 技术轮\n\n");
+            Map<Integer, List<InterviewQuestionBO>> techFollowUpsMap = buildFollowUpsMap(technicalQuestions);
+            for (InterviewQuestionBO q : technicalQuestions) {
+                if (!q.isFollowUp()) {
+                    mainQNum++;
+                    sb.append(buildQuestionFromTemplate(mainQNum, q, techFollowUpsMap.get(q.getQuestionIndex())));
+                }
+            }
+        }
+
+        // 业务轮
+        if (!businessQuestions.isEmpty()) {
+            sb.append("### 业务轮\n\n");
+            Map<Integer, List<InterviewQuestionBO>> bizFollowUpsMap = buildFollowUpsMap(businessQuestions);
+            for (InterviewQuestionBO q : businessQuestions) {
+                if (!q.isFollowUp()) {
+                    mainQNum++;
+                    sb.append(buildQuestionFromTemplate(mainQNum, q, bizFollowUpsMap.get(q.getQuestionIndex())));
+                }
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private Map<Integer, List<InterviewQuestionBO>> buildFollowUpsMap(List<InterviewQuestionBO> questions) {
         Map<Integer, List<InterviewQuestionBO>> followUpsMap = new HashMap<>();
         for (InterviewQuestionBO q : questions) {
             if (q.isFollowUp()) {
                 followUpsMap.computeIfAbsent(q.getQuestionIndex(), k -> new ArrayList<>()).add(q);
             }
         }
-
-        int mainQNum = 0;
-        for (InterviewQuestionBO q : questions) {
-            if (!q.isFollowUp()) {
-                mainQNum++;
-                sb.append(buildQuestionFromTemplate(mainQNum, q, followUpsMap.get(q.getQuestionIndex())));
-            }
-        }
-
-        return sb.toString();
+        return followUpsMap;
     }
 
     private String buildQuestionFromTemplate(int qNum, InterviewQuestionBO mainQ, List<InterviewQuestionBO> followUps) {
@@ -245,7 +267,7 @@ public class ReportGeneratorNode {
 
         // 基本信息
         vars.put("questionNum", String.valueOf(qNum));
-        vars.put("questionTitle", truncate(nullToEmpty(mainQ.getQuestion()), 80));
+        vars.put("questionTitle", nullToEmpty(mainQ.getQuestion()));
         vars.put("questionType", nullToEmpty(mainQ.getQuestionType()));
         vars.put("difficulty", nullToEmpty(mainQ.getDifficulty()));
 
@@ -267,14 +289,11 @@ public class ReportGeneratorNode {
                         ? "**期望关键词：** " + String.join(", ", mainQ.getExpectedKeywords()) + "\n\n"
                         : "");
 
-        // 多模态异常（条件渲染）
-        vars.put("modalityConcern",
-                Boolean.TRUE.equals(mainQ.getModalityConcern())
-                        ? "**⚠️ 多模态异常：** 检测到表情、肢体或语音异常\n\n"
-                        : "");
+        // 多模态异常（条件渲染，带分数区间描述）
+        vars.put("modalityConcern", buildDetailedModalityWarning(mainQ));
 
         // 回答和得分
-        vars.put("answer", truncate(nullToEmpty(mainQ.getAnswer()), MAX_ANSWER_CHARS));
+        vars.put("answer", nullToEmpty(mainQ.getAnswer()));
         vars.put("overallScore", String.valueOf(mainQ.getOverallScore()));
 
         // 评分表格
@@ -299,13 +318,13 @@ public class ReportGeneratorNode {
         StringBuilder sb = new StringBuilder("**追问：**\n");
         for (InterviewQuestionBO f : followUps) {
             sb.append("- ").append(f.getQuestion()).append("\n");
-            sb.append("  - 得分: ").append(f.getOverallScore()).append("/100\n");
-            sb.append("  - 回答: ").append(truncate(nullToEmpty(f.getAnswer()), 200)).append("\n");
+            sb.append("  - **得分:** ").append(f.getOverallScore()).append("/100\n");
+            sb.append("  - **回答:** ").append(nullToEmpty(f.getAnswer())).append("\n");
             if (hasContent(f.getStandardAnswer())) {
-                sb.append("  - 标准答案: ").append(f.getStandardAnswer()).append("\n");
+                sb.append("  - **标准答案:** ").append(f.getStandardAnswer()).append("\n");
             }
             if (hasContent(f.getSuggestions())) {
-                sb.append("  - 改进建议: ").append(f.getSuggestions()).append("\n");
+                sb.append("  - **改进建议:** ").append(f.getSuggestions()).append("\n");
             }
         }
         return sb.toString();
@@ -454,5 +473,61 @@ public class ReportGeneratorNode {
             return chain;
         }
         return chain.substring(0, MAX_FOLLOW_UP_CHAIN_CHARS) + "\n...[truncated]";
+    }
+
+    /**
+     * 构建详细的多模态异常警告（带分数区间描述）
+     */
+    private String buildDetailedModalityWarning(InterviewQuestionBO mainQ) {
+        if (!Boolean.TRUE.equals(mainQ.getModalityConcern())) {
+            return "";
+        }
+
+        List<String> warnings = new ArrayList<>();
+
+        // 表情异常
+        if (mainQ.getEmotionScore() != null && mainQ.getEmotionScore() < 60) {
+            String desc = getEmotionScoreDesc(mainQ.getEmotionScore());
+            warnings.add(String.format("表情（%d分，%s）", mainQ.getEmotionScore(), desc));
+        }
+
+        // 肢体语言异常
+        if (mainQ.getBodyLanguageScore() != null && mainQ.getBodyLanguageScore() < 60) {
+            String desc = getBodyLanguageScoreDesc(mainQ.getBodyLanguageScore());
+            warnings.add(String.format("肢体语言（%d分，%s）", mainQ.getBodyLanguageScore(), desc));
+        }
+
+        // 语音语调异常
+        if (mainQ.getVoiceToneScore() != null && mainQ.getVoiceToneScore() < 60) {
+            String desc = getVoiceToneScoreDesc(mainQ.getVoiceToneScore());
+            warnings.add(String.format("语音语调（%d分，%s）", mainQ.getVoiceToneScore(), desc));
+        }
+
+        if (warnings.isEmpty()) {
+            return "";
+        }
+
+        return "**⚠️ 多模态异常：** 检测到 " + String.join("、", warnings) + "\n\n";
+    }
+
+    private String getEmotionScoreDesc(int score) {
+        if (score >= 70) return "正常表情";
+        if (score >= 50) return "轻微异常（如紧张）";
+        if (score >= 30) return "明显异常（如焦虑）";
+        return "严重异常";
+    }
+
+    private String getBodyLanguageScoreDesc(int score) {
+        if (score >= 70) return "自然肢体";
+        if (score >= 50) return "轻微僵硬";
+        if (score >= 30) return "明显不自然";
+        return "严重异常（如颤抖）";
+    }
+
+    private String getVoiceToneScoreDesc(int score) {
+        if (score >= 70) return "稳定语调";
+        if (score >= 50) return "轻微波动";
+        if (score >= 30) return "明显紧张";
+        return "严重异常（如结巴）";
     }
 }

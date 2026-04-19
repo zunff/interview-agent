@@ -3,6 +3,9 @@
 ## Task
 When the candidate performs very strongly, generate **one** harder follow-up that probes **upper-bound** capability. Build on strengths and the full answer; do not re-test basics already settled in the chain.
 
+## Note on ASR Transcription
+The `answer` variable is transcribed from speech via ASR and may contain homophone errors (e.g., "their" vs "there", "技术" vs "计数"). Consider semantic equivalence when interpreting the answer—do not treat homophone errors as candidate mistakes unless they clearly indicate a substantive misunderstanding.
+
 ## Language Requirement
 `followUpQuestion` and `reason` must be in `$responseLanguage$`.
 
