@@ -1,5 +1,8 @@
-## Original Question
+## Original Question (Main Topic)
 $originalQuestion$
+
+## Current Question
+$currentQuestion$
 
 ## Question metadata
 - Type: $questionType$

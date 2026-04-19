@@ -40,14 +40,19 @@ public class DeepDiveFollowUpGenNode {
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
         log.info("开始生成深入追问，候选人需要进一步考察");
 
-        String originalQuestion = state.currentQuestion();
+        // 获取主问题（非追问），确保多轮追问时仍保持对原始问题的上下文
+        String originalQuestion = state.getMainGeneratedQuestion() != null
+                ? state.getMainGeneratedQuestion().getQuestion()
+                : state.currentQuestion();
         String answer = state.answerText();
         EvaluationBO evaluation = state.getCurrentEvaluation();
         GeneratedQuestion meta = resolveGeneratedQuestionMeta(evaluation, state);
 
         try {
+            // 当前问题（可能是主问题或追问）
+            String currentQuestion = state.currentQuestion();
             Map<String, Object> promptVars = buildDeepDivePromptVars(
-                    originalQuestion, answer, evaluation, meta, state.formatFollowUpChain());
+                    originalQuestion, currentQuestion, answer, evaluation, meta, state.formatFollowUpChain());
 
             String systemPrompt = promptTemplateService.getPrompt("deep-dive-question", promptVars);
             String userPrompt = promptTemplateService.getPrompt("deep-dive-question-user", promptVars);
@@ -111,6 +116,7 @@ public class DeepDiveFollowUpGenNode {
 
     private Map<String, Object> buildDeepDivePromptVars(
             String originalQuestion,
+            String currentQuestion,
             String answer,
             EvaluationBO evaluation,
             GeneratedQuestion meta,
@@ -119,6 +125,7 @@ public class DeepDiveFollowUpGenNode {
         Map<String, Object> promptVars = new HashMap<>();
         promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
         promptVars.put("originalQuestion", originalQuestion != null ? originalQuestion : "");
+        promptVars.put("currentQuestion", currentQuestion != null ? currentQuestion : "");
         promptVars.put("answer", answer != null ? answer : "");
         promptVars.put("followUpChain", followUpChain != null ? followUpChain : "");
 

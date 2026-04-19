@@ -4,6 +4,7 @@ import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.model.bo.InterviewQuestionBO;
 import com.zunff.interview.model.bo.LevelMatchResult;
+import com.zunff.interview.model.dto.llm.resp.ReportResponseDto;
 import com.zunff.interview.model.dto.llm.vars.ReportUserPromptVars;
 import com.zunff.interview.service.InterviewSessionService;
 import com.zunff.interview.service.extend.PromptTemplateService;
@@ -79,10 +80,14 @@ public class ReportGeneratorNode {
         allQuestions.addAll(technicalQuestions);
         allQuestions.addAll(businessQuestions);
 
+        // 分离主问题和追问计数
+        int totalMainQuestions = technicalQuestionsDone + businessQuestionsDone;  // 主问题总数
+        int totalFollowUps = (int) allQuestions.stream().filter(q -> q.isFollowUp()).count();  // 追问总数
+        int totalQuestions = allQuestions.size();  // 所有题目总数（用于计算平均分）
+
         double avgScore = 0;
         double avgAccuracy = 0, avgLogic = 0, avgFluency = 0, avgConfidence = 0;
         double avgEmotion = 0, avgBodyLanguage = 0, avgVoiceTone = 0;
-        int totalQuestions = allQuestions.size();
 
         if (totalQuestions > 0) {
             int totalScore = 0, totalAccuracy = 0, totalLogic = 0, totalFluency = 0, totalConfidence = 0;
@@ -111,7 +116,7 @@ public class ReportGeneratorNode {
 
         String evalSummaryText = allQuestions.isEmpty()
                 ? "No evaluation records."
-                : buildEvalSummary(allQuestions);
+                : buildEvalSummaryForLlm(allQuestions);
 
         String technicalRoundScoresText = formatScoresList(extractScores(technicalQuestions));
         String businessRoundScoresText = formatScoresList(extractScores(businessQuestions));
@@ -153,40 +158,44 @@ public class ReportGeneratorNode {
         try {
             ChatClient chatClient = chatClientBuilder.build();
 
-            String report = chatClient.prompt()
+            ReportResponseDto reportResponse = chatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
-                    .content();
+                    .entity(ReportResponseDto.class);
 
-            StringBuilder reportHeader = new StringBuilder();
-            reportHeader.append("# 面试评估报告\n\n");
-            reportHeader.append("> **综合得分**：").append(String.format("%.1f", avgScore)).append(" / 100\n");
-            reportHeader.append("> **面试问题数**：").append(totalQuestions).append("\n\n");
+            // 构建详细评估结果（包含标准答案和建议）
+            String questionsDetail = allQuestions.isEmpty()
+                    ? "No evaluation records."
+                    : buildQuestionsDetail(allQuestions);
 
-            reportHeader.append("## 综合评估概览\n\n");
-            reportHeader.append("### 内容维度\n");
-            reportHeader.append("| 准确度 | 逻辑性 | 流畅度 | 自信度 |\n");
-            reportHeader.append("|--------|--------|--------|--------|\n");
-            reportHeader.append(String.format("| %.1f | %.1f | %.1f | %.1f |\n\n",
-                    avgAccuracy, avgLogic, avgFluency, avgConfidence));
+            // 轮次追问数
+            int technicalFollowUps = (int) technicalQuestions.stream().filter(q -> q.isFollowUp()).count();
+            int businessFollowUps = (int) businessQuestions.stream().filter(q -> q.isFollowUp()).count();
 
-            reportHeader.append("### 多模态维度\n");
-            reportHeader.append("| 表情表现 | 肢体语言 | 语音语调 |\n");
-            reportHeader.append("|----------|----------|----------|\n");
-            reportHeader.append(String.format("| %.1f | %.1f | %.1f |\n\n",
-                    avgEmotion, avgBodyLanguage, avgVoiceTone));
+            // 使用模板生成报告
+            Map<String, Object> headerVars = new HashMap<>();
+            headerVars.put("avgScore", String.format("%.1f", avgScore));
+            headerVars.put("totalMainQuestions", String.valueOf(totalMainQuestions));
+            headerVars.put("technicalQuestionsDone", String.valueOf(technicalQuestionsDone));
+            headerVars.put("businessQuestionsDone", String.valueOf(businessQuestionsDone));
+            headerVars.put("totalFollowUps", String.valueOf(totalFollowUps));
+            headerVars.put("avgAccuracy", String.format("%.1f", avgAccuracy));
+            headerVars.put("avgLogic", String.format("%.1f", avgLogic));
+            headerVars.put("avgFluency", String.format("%.1f", avgFluency));
+            headerVars.put("avgConfidence", String.format("%.1f", avgConfidence));
+            headerVars.put("avgEmotion", String.format("%.1f", avgEmotion));
+            headerVars.put("avgBodyLanguage", String.format("%.1f", avgBodyLanguage));
+            headerVars.put("avgVoiceTone", String.format("%.1f", avgVoiceTone));
+            headerVars.put("technicalFollowUps", String.valueOf(technicalFollowUps));
+            headerVars.put("businessFollowUps", String.valueOf(businessFollowUps));
+            headerVars.put("technicalAvgScore", String.format("%.1f", technicalAvgScore));
+            headerVars.put("businessAvgScore", String.format("%.1f", businessAvgScore));
+            headerVars.put("llmGeneratedContent", reportResponse.toMarkdown());
+            headerVars.put("questionsDetail", questionsDetail);
+            headerVars.put("hiringRecommendation", reportResponse.formatRecommendation());
 
-            reportHeader.append("## 轮次表现\n\n");
-            reportHeader.append("| 轮次 | 问题数 | 平均分 |\n");
-            reportHeader.append("|------|--------|--------|\n");
-            reportHeader.append(String.format("| 技术轮 | %d | %.1f |\n", technicalQuestionsDone, technicalAvgScore));
-            reportHeader.append(String.format("| 业务轮 | %d | %.1f |\n", businessQuestionsDone, businessAvgScore));
-            reportHeader.append(String.format("| **总计** | %d | %.1f |\n\n", totalQuestions, avgScore));
-
-            reportHeader.append("---\n\n");
-
-            String fullReport = reportHeader + report;
+            String fullReport = promptTemplateService.getTemplate("templates/report-header.md", headerVars);
 
             sessionService.saveReport(sessionId, fullReport);
 
@@ -209,14 +218,106 @@ public class ReportGeneratorNode {
         }
     }
 
-    private String buildEvalSummary(List<InterviewQuestionBO> questions) {
+    private String buildQuestionsDetail(List<InterviewQuestionBO> questions) {
+        StringBuilder sb = new StringBuilder();
+
+        // 分离主问题和追问
+        Map<Integer, List<InterviewQuestionBO>> followUpsMap = new HashMap<>();
+        for (InterviewQuestionBO q : questions) {
+            if (q.isFollowUp()) {
+                followUpsMap.computeIfAbsent(q.getQuestionIndex(), k -> new ArrayList<>()).add(q);
+            }
+        }
+
+        int mainQNum = 0;
+        for (InterviewQuestionBO q : questions) {
+            if (!q.isFollowUp()) {
+                mainQNum++;
+                sb.append(buildQuestionFromTemplate(mainQNum, q, followUpsMap.get(q.getQuestionIndex())));
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private String buildQuestionFromTemplate(int qNum, InterviewQuestionBO mainQ, List<InterviewQuestionBO> followUps) {
+        Map<String, Object> vars = new HashMap<>();
+
+        // 基本信息
+        vars.put("questionNum", String.valueOf(qNum));
+        vars.put("questionTitle", truncate(nullToEmpty(mainQ.getQuestion()), 80));
+        vars.put("questionType", nullToEmpty(mainQ.getQuestionType()));
+        vars.put("difficulty", nullToEmpty(mainQ.getDifficulty()));
+
+        // 标准答案（条件渲染，包含标题和内容）
+        vars.put("standardAnswer",
+                hasContent(mainQ.getStandardAnswer())
+                        ? "**标准答案：**\n" + mainQ.getStandardAnswer() + "\n\n"
+                        : "");
+
+        // 改进建议（条件渲染）
+        vars.put("suggestions",
+                hasContent(mainQ.getSuggestions())
+                        ? "**改进建议：**\n" + mainQ.getSuggestions() + "\n\n"
+                        : "");
+
+        // 期望关键词（条件渲染）
+        vars.put("expectedKeywords",
+                !CollectionUtils.isEmpty(mainQ.getExpectedKeywords())
+                        ? "**期望关键词：** " + String.join(", ", mainQ.getExpectedKeywords()) + "\n\n"
+                        : "");
+
+        // 多模态异常（条件渲染）
+        vars.put("modalityConcern",
+                Boolean.TRUE.equals(mainQ.getModalityConcern())
+                        ? "**⚠️ 多模态异常：** 检测到表情、肢体或语音异常\n\n"
+                        : "");
+
+        // 回答和得分
+        vars.put("answer", truncate(nullToEmpty(mainQ.getAnswer()), MAX_ANSWER_CHARS));
+        vars.put("overallScore", String.valueOf(mainQ.getOverallScore()));
+
+        // 评分表格
+        vars.put("accuracy", String.valueOf(mainQ.getAccuracy()));
+        vars.put("logic", String.valueOf(mainQ.getLogic()));
+        vars.put("fluency", String.valueOf(mainQ.getFluency()));
+        vars.put("confidence", String.valueOf(mainQ.getConfidence()));
+        vars.put("emotionScore", String.valueOf(mainQ.getEmotionScore()));
+        vars.put("bodyLanguageScore", String.valueOf(mainQ.getBodyLanguageScore()));
+        vars.put("voiceTone", String.valueOf(mainQ.getVoiceToneScore()));
+
+        // 追问（条件渲染）
+        vars.put("followUps", formatFollowUps(followUps));
+
+        return promptTemplateService.getTemplate("templates/report-question.md", vars);
+    }
+
+    private String formatFollowUps(List<InterviewQuestionBO> followUps) {
+        if (CollectionUtils.isEmpty(followUps)) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("**追问：**\n");
+        for (InterviewQuestionBO f : followUps) {
+            sb.append("- ").append(f.getQuestion()).append("\n");
+            sb.append("  - 得分: ").append(f.getOverallScore()).append("/100\n");
+            sb.append("  - 回答: ").append(truncate(nullToEmpty(f.getAnswer()), 200)).append("\n");
+            if (hasContent(f.getStandardAnswer())) {
+                sb.append("  - 标准答案: ").append(f.getStandardAnswer()).append("\n");
+            }
+            if (hasContent(f.getSuggestions())) {
+                sb.append("  - 改进建议: ").append(f.getSuggestions()).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    private String buildEvalSummaryForLlm(List<InterviewQuestionBO> questions) {
         StringBuilder evalSummary = new StringBuilder();
 
         int mainQNum = 0;
         for (InterviewQuestionBO q : questions) {
             if (!q.isFollowUp()) {
                 mainQNum++;
-                // 主问题：展示标准答案、建议、评估结果
                 evalSummary.append("\n### Question ").append(mainQNum).append("\n");
                 evalSummary.append("- Question type: ").append(q.getQuestionType()).append("\n");
                 evalSummary.append("- Difficulty: ").append(q.getDifficulty()).append("\n");
@@ -252,16 +353,22 @@ public class ReportGeneratorNode {
                     evalSummary.append("  - Weaknesses: ").append(String.join(", ", q.getWeaknesses())).append("\n");
                 }
             } else {
-                // 追问：挂在当前主问题下
                 evalSummary.append("  - Follow-up: ").append(q.getQuestion()).append("\n");
                 evalSummary.append("    - Score: ").append(q.getOverallScore()).append("\n");
                 evalSummary.append("    - Answer: ").append(truncate(nullToEmpty(q.getAnswer()), MAX_ANSWER_CHARS / 2)).append("\n");
+                if (q.getStandardAnswer() != null && !q.getStandardAnswer().isEmpty()) {
+                    evalSummary.append("    - Standard Answer: ").append(q.getStandardAnswer()).append("\n");
+                }
+                if (q.getSuggestions() != null && !q.getSuggestions().isEmpty()) {
+                    evalSummary.append("    - Suggestions: ").append(q.getSuggestions()).append("\n");
+                }
             }
         }
 
         return evalSummary.toString();
     }
 
+    
     private double calculateAverageScore(List<InterviewQuestionBO> questions) {
         if (questions.isEmpty()) return 0;
         return questions.stream()
@@ -283,6 +390,10 @@ public class ReportGeneratorNode {
 
     private static String nullToEmpty(String s) {
         return s != null ? s : "";
+    }
+
+    private static boolean hasContent(String s) {
+        return s != null && !s.isEmpty();
     }
 
     private static String truncate(String text, int maxLength) {

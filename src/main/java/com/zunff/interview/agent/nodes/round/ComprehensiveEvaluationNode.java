@@ -38,7 +38,7 @@ public class ComprehensiveEvaluationNode {
      */
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
         log.info("开始综合评估");
-
+        int questionIndex = state.questionIndex();
         String question = state.currentQuestion();
         String questionType = state.questionType();
         String answerText = state.answerText();
@@ -62,6 +62,7 @@ public class ComprehensiveEvaluationNode {
 
         try {
             EvaluationBO evaluation = multimodalAnalysisService.comprehensiveOmniEvaluation(
+                    questionIndex,
                     question,
                     answerText,
                     transcriptEntries,
@@ -80,7 +81,7 @@ public class ComprehensiveEvaluationNode {
                     .expectedKeywords(generatedQuestion.getExpectedKeywords())
                     .difficulty(generatedQuestion.getDifficulty())
                     .reason(generatedQuestion.getReason())
-                    .questionIndex(state.questionIndex())
+                    .questionIndex(questionIndex)
                     .isFollowUp(type.isFollowUpType())
                     .standardAnswer(evaluation.getStandardAnswer())
                     .suggestions(evaluation.getSuggestions())

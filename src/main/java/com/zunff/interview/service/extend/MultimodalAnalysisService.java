@@ -58,6 +58,7 @@ public class MultimodalAnalysisService {
      * 将转录文本+时间戳、视频帧+时间戳、原始音频WAV一起发给 Qwen-Omni 进行综合评估
      * 当 multimodalEnabled=false 时，降级为纯文本评估（qwen-plus）
      *
+     * @param questionIndex         问题索引
      * @param question              当前问题
      * @param transcribedText       转录文本
      * @param transcriptEntries     转录条目（带时间戳）
@@ -68,6 +69,7 @@ public class MultimodalAnalysisService {
      * @return 综合评估结果
      */
     public EvaluationBO comprehensiveOmniEvaluation(
+            int questionIndex,
             String question,
             String transcribedText,
             List<TranscriptEntry> transcriptEntries,
@@ -100,6 +102,7 @@ public class MultimodalAnalysisService {
             promptVars.put("question", question == null ? "" : question);
             promptVars.put("candidateAnswer", formatTranscriptEntries(transcriptEntries, transcribedText));
             promptVars.put("frameTimestamps", hasFrames ? formatFrameTimestamps(framesWithTimestamps) : "无关键帧时间戳");
+            promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
 
             // 添加题目元信息
             fillEvaluationPromptVars(generatedQuestion, promptVars);
@@ -116,6 +119,9 @@ public class MultimodalAnalysisService {
 
             // 5. 解析返回的 JSON
             EvaluationBO evaluation = parseOmniEvaluationResponse(response);
+            evaluation.setQuestionIndex(questionIndex);
+            evaluation.setQuestion(question);
+            evaluation.setAnswer(transcribedText);
 
             // 6. 关联 GeneratedQuestion
             evaluation.setGeneratedQuestion(generatedQuestion);
@@ -141,6 +147,7 @@ public class MultimodalAnalysisService {
             Map<String, Object> promptVars = new HashMap<>();
             promptVars.put("question", question == null ? "" : question);
             promptVars.put("candidateAnswer", transcribedText == null ? "" : transcribedText);
+            promptVars.put("responseLanguage", promptConfig.getResponseLanguage());
 
             // 添加题目元信息
             fillEvaluationPromptVars(generatedQuestion, promptVars);

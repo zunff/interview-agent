@@ -24,3 +24,5 @@ Fields:
 - `difficulty` (string): one of `easy`, `medium`, `hard`. Usually **equal to or one step lower** than the original question difficulty; avoid defaulting to `hard` unless the original was already hard and the gap is clearly conceptual.
 - `expectedKeywords` (array of 3–5 strings): concepts or phrases the **next** answer should cover so evaluators can score coverage. Short noun phrases; no full sentences.
 - `reason` (string, 2–3 sentences, in $responseLanguage$): why this diagnostic question is needed.
+
+**Important**: All string values must be valid JSON. Escape any newlines as `\n`, quotes as `\"`, and backslashes as `\\`. Do NOT include literal line breaks inside string values.

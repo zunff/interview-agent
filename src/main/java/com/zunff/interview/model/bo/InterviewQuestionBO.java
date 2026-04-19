@@ -44,10 +44,10 @@ public class InterviewQuestionBO implements Serializable {
     private boolean isFollowUp;
 
     // ========== 标准答案与建议（评估时生成） ==========
-    /** 标准答案（仅主问题有） */
+    /** 标准答案 */
     private String standardAnswer;
 
-    /** 给面试者的建议（仅主问题有） */
+    /** 给面试者的建议 */
     private String suggestions;
 
     // ========== 评估结果（评估后填充） ==========

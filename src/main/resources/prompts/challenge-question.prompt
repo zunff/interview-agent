@@ -21,3 +21,5 @@ Fields:
 - `difficulty`: usually `hard`; may be `medium` only if the original was already extreme and a single precise extension is more appropriate
 - `expectedKeywords`: array of 3–5 strings (next evaluation pass)
 - `reason` (string, 2–3 sentences, in $responseLanguage$): why this challenge matches their demonstrated level
+
+**Important**: All string values must be valid JSON. Escape any newlines as `\n`, quotes as `\"`, and backslashes as `\\`. Do NOT include literal line breaks inside string values.

@@ -68,6 +68,37 @@ public class PromptTemplateService {
     }
 
     /**
+     * 获取模板文件（支持 .md 扩展名，用于非 prompt 模板）
+     *
+     * @param path 模板路径（相对于 prompts/ 目录，含扩展名）
+     * @return 模板内容
+     */
+    public String getTemplate(String path) {
+        return promptCache.computeIfAbsent(path, this::loadTemplate);
+    }
+
+    /**
+     * 获取模板文件并进行变量替换
+     *
+     * @param path     模板路径（相对于 prompts/ 目录，含扩展名）
+     * @param variables 变量映射
+     * @return 替换后的模板内容
+     */
+    public String getTemplate(String path, Map<String, Object> variables) {
+        String template = getTemplate(path);
+        if (variables == null || variables.isEmpty()) {
+            return template;
+        }
+        PromptTemplate promptTemplate = compiledTemplateCache.computeIfAbsent(path, key ->
+                PromptTemplate.builder()
+                        .renderer(renderer)
+                        .template(template)
+                        .build()
+        );
+        return promptTemplate.render(variables);
+    }
+
+    /**
      * 清除缓存
      */
     public void clearCache() {
@@ -98,6 +129,21 @@ public class PromptTemplateService {
         } catch (IOException e) {
             log.error("Failed to load prompt: {}", name, e);
             throw new RuntimeException("Failed to load prompt: " + name, e);
+        }
+    }
+
+    private String loadTemplate(String path) {
+        try {
+            ClassPathResource resource = new ClassPathResource(PROMPTS_DIR + path);
+            if (!resource.exists()) {
+                throw new RuntimeException("Template not found: " + path);
+            }
+            String content = resource.getContentAsString(StandardCharsets.UTF_8);
+            log.debug("Loaded template: {}", path);
+            return content;
+        } catch (IOException e) {
+            log.error("Failed to load template: {}", path, e);
+            throw new RuntimeException("Failed to load template: " + path, e);
         }
     }
 }

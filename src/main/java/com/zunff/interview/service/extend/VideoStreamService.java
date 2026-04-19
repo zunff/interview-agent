@@ -79,6 +79,18 @@ public class VideoStreamService {
     }
 
     /**
+     * 清空指定会话的帧数据（保留会话结构）
+     * 用于回答完成后清空当前问题的帧，防止跨问题累积
+     */
+    public void clearFrames(String sessionId) {
+        FrameBuffer buffer = sessionBuffers.get(sessionId);
+        if (buffer != null) {
+            buffer.clearFrames();
+            log.info("已清空会话 {} 的视频帧数据", sessionId);
+        }
+    }
+
+    /**
      * 获取会话当前缓冲的帧数量
      */
     public int getBufferSize(String sessionId) {
@@ -130,6 +142,10 @@ public class VideoStreamService {
         public synchronized List<FrameWithTimestamp> getFramesWithTimestamps() {
             lastAnalysisTime = System.currentTimeMillis();
             return new ArrayList<>(frames);
+        }
+
+        public synchronized void clearFrames() {
+            frames.clear();
         }
     }
 

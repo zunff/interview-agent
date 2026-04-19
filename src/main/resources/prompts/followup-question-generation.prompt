@@ -29,3 +29,5 @@ Fields:
 - `difficulty`: `easy` | `medium` | `hard` — similar to or slightly **lower** than the original unless a single harder check is clearly required
 - `expectedKeywords`: array of 3–5 strings (next-round evaluation anchors)
 - `reason` (string, 2–3 sentences, in $responseLanguage$)
+
+**Important**: All string values must be valid JSON. Escape any newlines as `\n`, quotes as `\"`, and backslashes as `\\`. Do NOT include literal line breaks inside string values.

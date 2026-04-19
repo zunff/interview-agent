@@ -249,6 +249,9 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
                 .toList();
         log.info("从缓存取到 {} 帧视频数据（带时间戳）", dtoFrames.size());
 
+        // 回答完成后清空视频帧缓冲，防止下一题混入当前题的帧
+        videoStreamService.clearFrames(sessionId);
+
         // 兼容旧字段：同时提取纯帧数据
         List<String> frames = dtoFrames.stream()
                 .map(FrameWithTimestamp::getFrame)
