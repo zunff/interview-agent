@@ -2,6 +2,8 @@
 
 基于 Spring AI + LangGraph4j 构建的多模态 AI 面试系统，支持实时视频分析、语音评估和智能追问。
 
+> 前端仓库：[https://github.com/zunff/interview-agent-frontend](https://github.com/zunff/interview-agent-frontend)
+
 ## 技术栈
 
 | 组件 | 版本 | 说明 |
