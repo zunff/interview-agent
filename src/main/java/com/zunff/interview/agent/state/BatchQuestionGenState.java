@@ -7,6 +7,7 @@ import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.bo.JobAnalysisResult;
 import com.zunff.interview.model.bo.LevelMatchResult;
 import com.zunff.interview.model.dto.llm.resp.CandidateProfileResponseDto;
+import com.zunff.interview.model.dto.llm.resp.QuestionPlanResponseDto;
 import lombok.Getter;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
@@ -36,6 +37,9 @@ public class BatchQuestionGenState extends AgentState {
     public static final String BUSINESS_COUNT = "businessCount";
     public static final String SOFT_SKILL_COUNT = "softSkillCount";
     public static final String LEVEL_MATCH_RESULT = "levelMatchResult";
+
+    // ========== 题目规划常量 ==========
+    public static final String QUESTION_PLAN = "questionPlan";
 
     // ========== 中间结果常量 ==========
     public static final String TECHNICAL_BASIC_QUESTIONS = "technicalBasicQuestions";
@@ -94,6 +98,8 @@ public class BatchQuestionGenState extends AgentState {
         SCHEMA.put(CURRENT_TECHNICAL_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(CURRENT_BUSINESS_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(FALLBACK, Channels.base(new LastValueReducer<>(), () -> false));
+
+        SCHEMA.put(QUESTION_PLAN, Channels.base(new LastValueReducer<>(), () -> null));
 
         SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC));
         SCHEMA.put(QUESTION_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));
@@ -218,6 +224,13 @@ public class BatchQuestionGenState extends AgentState {
      */
     public LevelMatchResult levelMatchResult() {
         return (LevelMatchResult) data().get(LEVEL_MATCH_RESULT);
+    }
+
+    /**
+     * 获取题目规划（可能为 null，表示降级无规划）
+     */
+    public QuestionPlanResponseDto getQuestionPlan() {
+        return (QuestionPlanResponseDto) data().get(QUESTION_PLAN);
     }
 
     // ========== Getter 方法 ==========

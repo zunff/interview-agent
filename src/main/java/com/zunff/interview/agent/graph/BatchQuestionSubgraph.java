@@ -15,16 +15,19 @@ import static org.bsc.langgraph4j.StateGraph.START;
 
 /**
  * 批量题目生成子图
- * 使用独立的 Node 类实现，清晰易维护
  *
  * 架构：
- * START → [4个生成节点并行] → aggregateResults → handleSideEffects → END
+ * START → questionPlanning → [TechBasicGen/ProjectGen/BusinessGen/SoftSkillGen 并行]
+ *                           → aggregateResults → END
+ *
+ * 规划节点在 4 个生成节点之前运行，确保各类题目覆盖不同维度，避免重叠。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class BatchQuestionSubgraph {
 
+    private final QuestionPlanningNode questionPlanningNode;
     private final TechBasicGenNode techBasicGenNode;
     private final ProjectGenNode projectGenNode;
     private final BusinessGenNode businessGenNode;
@@ -35,9 +38,12 @@ public class BatchQuestionSubgraph {
      * 创建并编译子图
      */
     public CompiledGraph<BatchQuestionGenState> createCompiledGraph() throws GraphStateException {
-        log.info("创建批量题目生成子图（CompiledGraph 模式 + 独立 Node 类）");
+        log.info("创建批量题目生成子图（含规划节点）");
 
         return new StateGraph<>(BatchQuestionGenState.SCHEMA, BatchQuestionGenState::new)
+                // ========== 规划节点（先运行，协调话题分配） ==========
+                .addNode(QuestionGenNodeNames.GEN_PLANNING, questionPlanningNode::execute)
+
                 // ========== 4个生成节点 ==========
                 .addNode(QuestionGenNodeNames.GEN_TECH_BASIC, techBasicGenNode::execute)
                 .addNode(QuestionGenNodeNames.GEN_PROJECT, projectGenNode::execute)
@@ -48,11 +54,14 @@ public class BatchQuestionSubgraph {
                 .addNode(QuestionGenNodeNames.AGGREGATE_RESULTS, aggregateResultsNode::execute)
 
                 // ========== 边定义 ==========
-                // 4个生成节点并行执行（从 START 到各节点）
-                .addEdge(START, QuestionGenNodeNames.GEN_TECH_BASIC)
-                .addEdge(START, QuestionGenNodeNames.GEN_PROJECT)
-                .addEdge(START, QuestionGenNodeNames.GEN_BUSINESS)
-                .addEdge(START, QuestionGenNodeNames.GEN_SOFT_SKILL)
+                // START → 规划节点（串行，规划完成后才开启并行生成）
+                .addEdge(START, QuestionGenNodeNames.GEN_PLANNING)
+
+                // 规划节点 → 4个生成节点并行
+                .addEdge(QuestionGenNodeNames.GEN_PLANNING, QuestionGenNodeNames.GEN_TECH_BASIC)
+                .addEdge(QuestionGenNodeNames.GEN_PLANNING, QuestionGenNodeNames.GEN_PROJECT)
+                .addEdge(QuestionGenNodeNames.GEN_PLANNING, QuestionGenNodeNames.GEN_BUSINESS)
+                .addEdge(QuestionGenNodeNames.GEN_PLANNING, QuestionGenNodeNames.GEN_SOFT_SKILL)
 
                 // 汇聚到聚合节点
                 .addEdge(QuestionGenNodeNames.GEN_TECH_BASIC, QuestionGenNodeNames.AGGREGATE_RESULTS)

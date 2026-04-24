@@ -23,6 +23,7 @@ public class QuestionGeneratorUserPromptVars {
     private String difficultyRangeMin;
     private String difficultyRangeMax;
     private String difficultyPreference;
+    private String planContext;
 
     public Map<String, Object> asMap() {
         return BeanUtil.beanToMap(this);

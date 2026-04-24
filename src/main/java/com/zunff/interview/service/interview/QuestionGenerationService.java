@@ -1,18 +1,19 @@
 package com.zunff.interview.service.interview;
 
+import com.zunff.interview.agent.state.BatchQuestionGenState;
 import com.zunff.interview.config.KnowledgeConfig;
 import com.zunff.interview.config.PromptConfig;
+import com.zunff.interview.constant.Difficulty;
+import com.zunff.interview.constant.DifficultyPreference;
 import com.zunff.interview.constant.QuestionType;
 import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.bo.JobAnalysisResult;
 import com.zunff.interview.model.bo.LevelMatchResult;
-import com.zunff.interview.constant.Difficulty;
-import com.zunff.interview.constant.DifficultyPreference;
-import com.zunff.interview.model.dto.llm.vars.QuestionGeneratorUserPromptVars;
 import com.zunff.interview.model.dto.llm.resp.LlmQuestionListResultDto;
+import com.zunff.interview.model.dto.llm.resp.QuestionPlanResponseDto;
+import com.zunff.interview.model.dto.llm.vars.QuestionGeneratorUserPromptVars;
 import com.zunff.interview.model.dto.rag.KnowledgeSearchResult;
 import com.zunff.interview.service.extend.PromptTemplateService;
-import com.zunff.interview.agent.state.BatchQuestionGenState;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -92,6 +93,9 @@ public class QuestionGenerationService {
             systemVars.put("difficultyPreference", difficultyPreference);
             String systemPrompt = promptTemplateService.getPrompt(promptTemplateName, systemVars);
 
+            // 从规划节点获取话题分配（如有）
+            String planContext = buildPlanContext(state, promptTemplateName);
+
             // 构建 user prompt
             QuestionGeneratorUserPromptVars vars = QuestionGeneratorUserPromptVars.builder()
                     .candidateProfile(candidateProfile == null ? "" : candidateProfile)
@@ -105,6 +109,7 @@ public class QuestionGenerationService {
                     .difficultyRangeMin(difficultyRangeMin)
                     .difficultyRangeMax(difficultyRangeMax)
                     .difficultyPreference(difficultyPreference)
+                    .planContext(planContext)
                     .build();
             String userPrompt = promptTemplateService.getPrompt("question-generator-user", vars.asMap());
 
@@ -212,6 +217,24 @@ public class QuestionGenerationService {
             questions.add(createFallbackQuestion(i + 1, questionType));
         }
         return questions;
+    }
+
+    /**
+     * 从规划节点结果中构建指定题型的计划上下文
+     */
+    private String buildPlanContext(BatchQuestionGenState state, String promptTemplateName) {
+        QuestionPlanResponseDto plan = state.getQuestionPlan();
+        if (plan == null) {
+            return "None (no plan provided)";
+        }
+
+        // promptTemplateName 格式: "question-generator-technical" → 提取 "technical"
+        String typeKey = promptTemplateName.replace("question-generator-", "");
+        String context = plan.getPlanContextForType(typeKey);
+        if (context == null || context.isEmpty()) {
+            return "None (no plan for this type)";
+        }
+        return context;
     }
 
     private String buildFallbackQuestionText() {

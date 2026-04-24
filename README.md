@@ -18,8 +18,8 @@
 
 | 用途 | 说明 |
 |------|------|
-| 大语言模型 (qwen3.5-flash) | 面试问题生成、追问决策 |
-| Omni 多模态模型 (qwen3.5-omni-plus) | 综合评估：视频帧+音频+文本一次调用 |
+| 大语言模型 (qwen3.5-plus/flash) | 面试问题规划、问题生成、追问决策 |
+| Omni 多模态模型 (qwen3.5-omni-plus) | 综合评估：视频帧+音频+文本一次调用，以原始音频为主要评分依据 |
 | 语音模型 (Fun-ASR-Realtime) | 实时 ASR 语音转文字，支持句级时间戳 |
 | TTS 语音合成 (Qwen-TTS-Realtime) | WebSocket 流式合成，Opus 格式输出 |
 
@@ -27,12 +27,12 @@
 
 - **智能面试流程**: 根据简历和岗位自动生成针对性问题，支持技术基础、项目经验、业务理解、软技能等多维度考察
 - **多分支追问策略**: 根据回答质量动态选择追问策略（普通追问/低分深入/高分挑战）
-- **Omni 多模态综合评估**: 一次调用 Qwen-Omni 模型综合分析转录文本+时间戳、关键帧+时间戳、原始音频，按权重评分（语义75% / 语音副语言15% / 视觉10%）
+- **Omni 多模态综合评估**: 一次调用 Qwen-Omni 模型综合分析原始音频(WAV)、视频帧+时间戳、ASR转录文本，按权重评分（语义75% / 语音副语言15% / 视觉10%）。以原始音频为语义评估的主要依据，ASR文本仅作参考，消除同音词错误影响
 - **实时交互**: WebSocket 实时推送问题，TTS 语音合成通过 BinaryMessage 流式推送 Opus 音频，实时ASR转录（带时间戳缓存）
 
 ## 整体架构
 
-系统采用 **LangGraph4j 主图 + 批量题目生成子图 + 轮次子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析 ‖ 自我介绍 → 人物画像 → 批量题目生成 → 技术轮 → 轮次切换 → 业务轮 → 报告），批量题目子图并行生成所有题目，每个轮次通过可复用的子图实例执行。
+系统采用 **LangGraph4j 主图 + 批量题目生成子图（含规划节点） + 轮次子图** 架构，将面试流程建模为有向状态图。主图管理整体面试流程（岗位分析 ‖ 自我介绍 → 人物画像 → 题目规划 → 批量题目生成 → 技术轮 → 轮次切换 → 业务轮 → 报告），批量题目子图先由规划节点协调4类题目的话题分配，再并行生成，轮次子图通过可复用的子图实例执行。
 
 ```mermaid
 graph TD
@@ -45,7 +45,7 @@ graph TD
         JOB --> PROFILE[ProfileAnalysisNode<br/>人物画像分析]
         SELF --> PROFILE
 
-        PROFILE --> BATCH[BatchQuestionSubgraph<br/>批量题目生成子图<br/>并行生成所有题目]
+        PROFILE --> BATCH[BatchQuestionSubgraph<br/>批量题目生成子图<br/>规划→并行生成所有题目]
 
         BATCH --> TECH[InterviewRoundGraph<br/>技术轮子图<br/>从队列获取题目]
 
@@ -68,10 +68,11 @@ graph TD
     BATCH_START((START))
 
     subgraph BatchQuestionSubgraph[批量题目生成子图]
-        BATCH_START --> TECH_BASIC[TechBasicGenNode<br/>技术基础题]
-        BATCH_START --> PROJECT[ProjectGenNode<br/>项目经验题]
-        BATCH_START --> BUSINESS[BusinessGenNode<br/>业务理解题]
-        BATCH_START --> SOFT_SKILL[SoftSkillGenNode<br/>软技能题]
+        BATCH_START --> PLAN[QuestionPlanningNode<br/>题目规划<br/>协调话题分配+难度分配]
+        PLAN --> TECH_BASIC[TechBasicGenNode<br/>技术基础题<br/>按规划出题]
+        PLAN --> PROJECT[ProjectGenNode<br/>项目经验题<br/>按规划出题]
+        PLAN --> BUSINESS[BusinessGenNode<br/>业务理解题<br/>按规划出题]
+        PLAN --> SOFT_SKILL[SoftSkillGenNode<br/>软技能题<br/>按规划出题]
 
         TECH_BASIC --> AGG[AggregateResultsNode<br/>聚合+重新编号]
         PROJECT --> AGG
@@ -83,8 +84,9 @@ graph TD
 ```
 
 **批量生成流程**：
-- 人物画像分析完成后，立即调用批量题目生成子图
-- 4类题目并行生成（技术基础、项目经验、业务理解、软技能）
+- 人物画像分析完成后，先进入 **QuestionPlanningNode**（题目规划节点）
+- 规划节点分析候选人画像和岗位要求，为4类题目分配不同的话题和难度分布，避免话题重叠
+- 4类题目按规划并行生成（技术基础、项目经验、业务理解、软技能）
 - 聚合节点负责合并题目并重新编号
 - 生成完成后题目存入状态队列，轮次执行时直接获取（追问除外）
 
@@ -132,25 +134,28 @@ graph TD
 
 ### 评估权重
 
-| 维度 | 权重 | 数据来源 |
-|------|------|----------|
-| 技术语义内容（准确性/深度/逻辑/表达） | 75% | ASR 转录文本 |
-| 语音副语言（语气/语速/停顿/自信度） | 15% | 原始 PCM 音频（转 WAV） |
-| 关键帧（表情/肢体语言） | 10% | 视频帧截图 |
+| 维度 | 权重 | 数据来源 | 评分依据 |
+|------|------|----------|----------|
+| 语义内容（准确性/深度/逻辑/表达） | 75% | 原始音频(WAV) + ASR文本参考 | **以音频为准**评估回答内容；ASR文本仅作参考，存在同音词错误 |
+| 语音副语言（语气/语速/停顿/自信度） | 15% | 原始 PCM 音频（转 WAV） | 模型从音频直接判断 |
+| 关键帧（表情/肢体语言） | 10% | 视频帧截图 | 模型从视频帧判断 |
 
 ### 路由决策逻辑
 
-**子图 Router**：
+**子图 Router（两阶段决策）**：
 
-负责子图内部的路由决策：追问策略 + 轮次完成检查。
+采用 **代码预判 + LLM 精细决策** 两阶段策略。代码规则处理常规情况，LLM 处理边界模糊场景。
 
-| 决策 | 说明 |
-|------|------|
-| FOLLOW_UP | 普通追问，深入挖掘 |
-| DEEP_DIVE | 低分深入追问（得分 < 50） |
-| CHALLENGE_MODE | 高分挑战模式（得分 > 90） |
-| NEXT_QUESTION | 进入下一题（子图内循环） |
-| ROUND_COMPLETE | 轮次结束（子图退出） |
+| 规则 | 条件 | 决策 |
+|------|------|------|
+| 已达追问上限 | used ≥ max | NEXT_QUESTION |
+| 低分+弱点 | adjustedScore < 50 + 有弱点 + 余量≥2 | DEEP_DIVE |
+| 极高分+无弱点 | adjustedScore > 90 + 首轮 + 余量≥2 | CHALLENGE_MODE |
+| 表现好 | adjustedScore ≥ 75 + 无弱点 | NEXT_QUESTION |
+| 最后一次额度 | remaining ≤ 1 | concern→FOLLOW_UP，否则看质量 |
+| 有余量+有弱点/模态异常 | hasWeakness/concern | FOLLOW_UP |
+
+**难度校准**：adjustedScore 根据题目难度自动调整——hard 题 +15（50 分≈优秀），medium 题不变，easy 题 -10。短回答由 LLM 自然评估，低分自动触发 DEEP_DIVE。
 
 **主图轮次切换**：
 
@@ -296,11 +301,12 @@ src/main/java/com/zunff/interview/
 │   │   │   ├── AskQuestionNode.java     # 从队列获取问题
 │   │   │   ├── ComprehensiveEvaluationNode.java  # Omni多模态综合评估
 │   │   │   ├── FollowUpDecisionNode.java
-│   │   │   ├── ChallengeQuestionNode.java
-│   │   │   ├── DeepDiveNode.java
-│   │   │   └── GenerateFollowUpNode.java
+│   │   │   ├── BasicFollowUpGenNode.java        # 普通追问生成
+│   │   │   ├── ChallengeFollowUpGenNode.java    # 挑战题生成
+│   │   │   └── DeepDiveFollowUpGenNode.java     # 深入追问生成
 │   │   └── question/                    # 批量题目生成节点
 │   │       └── gen/
+│   │           ├── QuestionPlanningNode.java    # 题目规划（协调话题+难度分配，避免重叠）
 │   │           ├── TechBasicGenNode.java      # 技术基础题生成
 │   │           ├── ProjectGenNode.java        # 项目经验题生成
 │   │           ├── BusinessGenNode.java       # 业务理解题生成

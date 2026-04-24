@@ -83,7 +83,7 @@ public class FollowUpDecisionNode {
      * @return 返回决策结果，如果返回 null 表示需要 LLM 精细决策
      */
     private RouteDecision tryQuickDecision(EvaluationBO eval, GeneratedQuestion question, InterviewState state) {
-        int score = eval.getOverallScore();
+        int rawScore = eval.getOverallScore();
         int used = state.followUpCount();
         int max = state.maxFollowUpsForCurrentRound();
         int remaining = max - used;
@@ -94,44 +94,52 @@ public class FollowUpDecisionNode {
         boolean hasWeakness = !CollectionUtils.isEmpty(eval.getWeaknesses());
         boolean concern = eval.isModalityConcern();
 
+        // 难度校准：hard 题降低门槛，easy 题提高要求
+        int difficultyOffset = switch (difficulty) {
+            case HARD -> 15;
+            case MEDIUM -> 0;
+            case EASY -> -10;
+        };
+        int score = Math.max(0, Math.min(100, rawScore + difficultyOffset));
+
         // 1. 已达追问上限
         if (used >= max) {
             return RouteDecision.NEXT_QUESTION;
         }
 
-        // 2. Hard 题极低分：深度挖掘（需至少还剩 2 次追问额度，避免用掉最后一次）
-        if (difficulty == Difficulty.HARD && score < 50 && remaining >= 2) {
+        // 2. 低分且有弱点 → 深度挖掘
+        if (score < 50 && hasWeakness && remaining >= 2) {
             return RouteDecision.DEEP_DIVE;
         }
 
-        // 3. 极高分、无弱点、无多模态异常、首轮、且预算足够一次有意义的挑战
-        if (score > 90 && !hasWeakness && !concern && used == 0 && remaining >= 2) {
+        // 3. 极高分、无弱点、有预算 → 挑战模式
+        int challengeThreshold = difficulty == Difficulty.EASY ? 85 : 90;
+        if (score > challengeThreshold && !hasWeakness && used == 0 && remaining >= 2) {
             return RouteDecision.CHALLENGE_MODE;
         }
 
-        // 4. Easy 题表现尚可且无多模态异常：换题
-        if (difficulty == Difficulty.EASY && score >= 70 && !concern) {
+        // 4. 表现好的标准题 → 下一题
+        if (score >= 75 && !hasWeakness) {
             return RouteDecision.NEXT_QUESTION;
         }
 
-        // 5. 高分、稳定、已追问过：收尾换题
-        if (score >= 85 && !hasWeakness && !concern && used >= 1) {
-            return RouteDecision.NEXT_QUESTION;
-        }
-
-        // 6. 仅剩最后一次追问额度：能收尾则换题，否则普通追问
+        // 5. 仅剩最后一次追问额度
         if (remaining <= 1) {
-            return (score >= 70 && !concern && !hasWeakness)
+            // 多模态异常 → 追问（给机会调整状态），否则看内容质量
+            if (concern) {
+                return RouteDecision.FOLLOW_UP;
+            }
+            return (score >= 70 && !hasWeakness)
                     ? RouteDecision.NEXT_QUESTION
                     : RouteDecision.FOLLOW_UP;
         }
 
-        // 7. 明显低分且有不足：直接普通追问，不消耗 LLM
-        if (score < 50 && hasWeakness) {
+        // 6. 有余量且有弱点或模态异常 → 追问
+        if (hasWeakness || concern) {
             return RouteDecision.FOLLOW_UP;
         }
 
-        // 8. 其余交给 LLM 精细决策
+        // 7. 其余交给 LLM 精细决策
         return null;
     }
 }
