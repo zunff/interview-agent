@@ -1,8 +1,10 @@
 package com.zunff.interview.controller;
 
 import com.zunff.interview.common.response.ApiResponse;
+import com.zunff.interview.common.response.PageResult;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.response.InterviewAnswerResponse;
+import com.zunff.interview.model.response.InterviewHistoryResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;
 import com.zunff.interview.service.interview.InterviewBusinessService;
@@ -28,6 +30,17 @@ import org.springframework.web.bind.annotation.*;
 public class InterviewController {
 
     private final InterviewBusinessService interviewBusinessService;
+
+    @Operation(summary = "获取面试历史列表", description = "分页获取面试历史记录，支持岗位信息搜索，按创建时间倒序排列")
+    @GetMapping("/history")
+    public ApiResponse<PageResult<InterviewHistoryResponse>> listHistory(
+            @Parameter(description = "页码，从1开始") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "搜索关键词（岗位信息模糊匹配）") @RequestParam(required = false) String keyword) {
+        PageResult<InterviewHistoryResponse> result = interviewBusinessService.listSessions(page, size, keyword);
+        return ApiResponse.success(result);
+    }
+
     @Operation(summary = "获取面试报告", description = "获取已完成面试的评估报告")
     @GetMapping("/report/{sessionId}")
     public ApiResponse<ReportResponse> getReport(

@@ -1,26 +1,29 @@
 package com.zunff.interview.service.interview;
 
-import com.zunff.interview.common.exception.BusinessException;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zunff.interview.agent.names.NodeNames;
+import com.zunff.interview.agent.state.InterviewState;
+import com.zunff.interview.common.exception.BusinessException;
+import com.zunff.interview.common.response.PageResult;
 import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.response.InterviewAnswerResponse;
+import com.zunff.interview.model.response.InterviewHistoryResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;
 import com.zunff.interview.service.AnswerRecordService;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
-import com.zunff.interview.agent.state.InterviewState;
-import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphInput;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -35,7 +38,6 @@ public class InterviewBusinessService {
 
     private final CompiledGraph<InterviewState> interviewAgent;
     private final InterviewSessionService sessionService;
-    private final InterviewWebSocketHandler webSocketHandler;
     private final AnswerRecordService answerRecordService;
     private final EvaluationRecordService evaluationRecordService;
     private final ExecutorService virtualThreadExecutor;
@@ -43,16 +45,48 @@ public class InterviewBusinessService {
     public InterviewBusinessService(
             CompiledGraph<InterviewState> interviewAgent,
             InterviewSessionService sessionService,
-            @Lazy InterviewWebSocketHandler webSocketHandler,
             AnswerRecordService answerRecordService,
             EvaluationRecordService evaluationRecordService,
             @Qualifier("virtualThreadExecutor") ExecutorService virtualThreadExecutor) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
-        this.webSocketHandler = webSocketHandler;
         this.answerRecordService = answerRecordService;
         this.evaluationRecordService = evaluationRecordService;
         this.virtualThreadExecutor = virtualThreadExecutor;
+    }
+
+    /**
+     * 分页获取面试历史列表
+     *
+     * @param page    页码
+     * @param size    每页条数
+     * @param keyword 搜索关键词（岗位信息模糊匹配）
+     */
+    public PageResult<InterviewHistoryResponse> listSessions(int page, int size, String keyword) {
+        LambdaQueryWrapper<InterviewSession> wrapper = new LambdaQueryWrapper<InterviewSession>()
+                .orderByDesc(InterviewSession::getCreateTime);
+
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(InterviewSession::getJobInfo, keyword);
+        }
+
+        Page<InterviewSession> pageResult = sessionService.page(new Page<>(page, size), wrapper);
+
+        List<InterviewHistoryResponse> records = new ArrayList<>(pageResult.getRecords().size());
+        for (InterviewSession s : pageResult.getRecords()) {
+            records.add(InterviewHistoryResponse.builder()
+                    .sessionId(s.getSessionId())
+                    .jobInfo(s.getJobInfo())
+                    .status(s.getStatus())
+                    .currentQuestionIndex(s.getCurrentQuestionIndex())
+                    .maxTechnicalQuestions(s.getMaxTechnicalQuestions())
+                    .maxBusinessQuestions(s.getMaxBusinessQuestions())
+                    .createTime(s.getCreateTime())
+                    .endTime(s.getEndTime())
+                    .build());
+        }
+
+        return PageResult.of(pageResult, records);
     }
 
     /**

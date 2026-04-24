@@ -225,15 +225,16 @@ graph LR
 
 ### REST API
 
+> 注：面试启动、答案提交等核心流程已迁移至 WebSocket 协议。REST API 主要用于查询和管理。
+
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/interview/start` | POST | 开始面试 |
-| `/api/interview/answer` | POST | 提交答案 |
-| `/api/interview/session/{sessionId}` | GET | 获取会话状态 |
-| `/api/interview/end/{sessionId}` | POST | 结束面试 |
-| `/api/interview/report/{sessionId}` | GET | 获取面试报告 |
+| `/api/interview/history` | GET | 获取面试历史列表（按创建时间倒序） |
+| `/api/interview/report/{sessionId}` | GET | 获取面试评估报告 |
 | `/api/health` | GET | 健康检查 |
 | `/api/info` | GET | 服务信息 |
+| `/api/test/chat-model` | GET | 测试 LLM 连接（ChatModel） |
+| `/api/test/chat-client` | GET | 测试 LLM 连接（ChatClient） |
 
 ### WebSocket
 
