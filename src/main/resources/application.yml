@@ -7,11 +7,11 @@ spring:
   # Spring AI 通用配置（不含模型，模型在 profile 中指定）
   ai:
     retry:
-      max-attempts: 3
+      max-attempts: 10
       backoff:
-        initial-interval: 2s
+        initial-interval: 3s
         multiplier: 2
-        max-interval: 30s
+        max-interval: 120s
       on-http-codes: 429, 500, 502, 503
 
   # 静态资源处理
