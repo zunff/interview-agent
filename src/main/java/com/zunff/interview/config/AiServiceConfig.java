@@ -1,6 +1,7 @@
 package com.zunff.interview.config;
 
 import com.zunff.interview.service.extend.*;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
@@ -18,8 +19,9 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class AiServiceConfig {
 
-    @Value("${spring.ai.openai.api-key}")
-    private String dashscopeApiKey;
+
+    @Resource
+    private MultimodalConfig multimodalConfig;
 
     /**
      * 自定义 RestTemplate 以记录请求详情
@@ -95,7 +97,7 @@ public class AiServiceConfig {
         log.info("初始化 QwenOmniService，模型: {}, baseUrl: {}",
                 visionConfig.getModel(), visionConfig.getBaseUrl());
         return new OmniModalService(
-                dashscopeApiKey,
+                multimodalConfig.getApiKey(),
                 visionConfig.getModel(),
                 visionConfig.getBaseUrl());
     }
@@ -108,7 +110,7 @@ public class AiServiceConfig {
     public AsrRealtimeService asrRealtimeService(AsrConfig asrConfig) {
         log.info("初始化 AsrRealtimeService，模型: {}, url: {}",
                 asrConfig.getModel(), asrConfig.getUrl());
-        return new AsrRealtimeService(dashscopeApiKey, asrConfig);
+        return new AsrRealtimeService(multimodalConfig.getApiKey(), asrConfig);
     }
 
     /**
@@ -119,7 +121,7 @@ public class AiServiceConfig {
     public TtsRealtimeService ttsRealtimeService(TtsConfig ttsConfig) {
         log.info("初始化 TtsRealtimeService，模型: {}, voice: {}, enabled: {}",
                 ttsConfig.getModel(), ttsConfig.getVoice(), ttsConfig.isEnabled());
-        return new TtsRealtimeService(dashscopeApiKey, ttsConfig);
+        return new TtsRealtimeService(multimodalConfig.getApiKey(), ttsConfig);
     }
 
     /**

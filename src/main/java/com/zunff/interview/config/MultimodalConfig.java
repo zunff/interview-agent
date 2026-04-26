@@ -13,4 +13,6 @@ import org.springframework.context.annotation.Configuration;
 public class MultimodalConfig {
 
     private boolean enabled;
+
+    private String apiKey;
 }

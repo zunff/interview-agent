@@ -214,7 +214,7 @@ sequenceDiagram
   2. 获取缓存的视频帧（带时间戳）
   3. 获取缓存的 PCM 音频，转换为 WAV 格式
   4. 调用 Qwen-Omni 模型进行综合评估（转录文本 + 关键帧 + 音频，一次调用）
-- 分析完成后会推送 `evaluation_result` 和 `new_question`（或 `final_report`）
+- 分析完成后会推送 `new_question`（下一题或追问）或 `final_report`（面试结束）
 
 ## 服务端 → 客户端
 
@@ -321,56 +321,6 @@ sequenceDiagram
   - 普通题目：从批量预生成的队列中获取（`questionIndex` 为预编号）
   - 追问题目：实时生成（`isFollowUp` 为 true）
 - 批量预生成机制保证了题目推送的低延迟，追问题目为实时生成以适应动态评估结果
-
-### evaluation_result - 答案评估结果
-
-**响应格式**：
-```json
-{
-  "type": "evaluation_result",
-  "payload": {
-    "questionIndex": 1,
-    "question": "请介绍一下你在简历中提到的电商系统架构设计",
-    "answer": "我之前的项目主要使用Spring Boot...",
-    "accuracy": 85,
-    "logic": 80,
-    "fluency": 75,
-    "confidence": 70,
-    "emotionScore": 65,
-    "bodyLanguageScore": 60,
-    "voiceToneScore": 72,
-    "overallScore": 73,
-    "strengths": ["回答内容准确", "技术细节丰富"],
-    "weaknesses": ["肢体语言略显紧张"],
-    "detailedEvaluation": "候选人展示了扎实的...",
-    "needFollowUp": false,
-    "followUpSuggestion": null,
-    "modalityFollowUpSuggestion": "肢体语言紧张，建议追问自信度",
-    "modalityConcern": true
-  },
-  "timestamp": 1699999999999
-}
-```
-
-**字段说明**：
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `questionIndex` | int | 问题序号 |
-| `question` | string | 问题内容 |
-| `answer` | string | 回答内容（ASR 转录结果） |
-| `accuracy` | int | 内容准确性得分 (0-100) |
-| `logic` | int | 逻辑清晰度得分 (0-100) |
-| `fluency` | int | 表达流畅度得分 (0-100) |
-| `confidence` | int | 自信程度得分 (0-100) |
-| `emotionScore` | int | 视频情感得分 (0-100)，由 Omni 从关键帧分析 |
-| `bodyLanguageScore` | int | 肢体语言得分 (0-100)，由 Omni 从关键帧分析 |
-| `voiceToneScore` | int | 语音语调得分 (0-100)，由 Omni 从原始音频分析 |
-| `overallScore` | int | 综合得分 (0-100)，按权重计算：语义75% + 语音15% + 视觉10% |
-| `strengths` | string[] | 优点列表 |
-| `weaknesses` | string[] | 不足列表 |
-| `detailedEvaluation` | string | 详细评价 |
-| `needFollowUp` | boolean | 是否需要追问（内部决策，不影响前端） |
-| `modalityConcern` | boolean | 是否存在多模态异常（任一维度得分 < 60） |
 
 ### final_report - 最终面试报告
 

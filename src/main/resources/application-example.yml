@@ -16,10 +16,11 @@ spring:
   # Spring AI 模型配置（使用 OpenAI 兼容 API）
   ai:
     openai:
-      # DashScope OpenAI 兼容 API
-      api-key: ${DASHSCOPE_API_KEY}
-      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      # OpenAI 兼容 API
+      api-key: ${OPENAI_API_KEY}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
+        completions-path: /chat/completions
         options:
           model: qwen3.5-flash
           temperature: 0.7
@@ -38,6 +39,7 @@ interview:
   graph:
     main-recursion-limit: 500
   multimodal:
+    api-key: ${DASHSCOPE_API_KEY}
     enabled: true                # 是否启用多模态分析
     omni:
       model: qwen3.5-omni-plus-2026-03-15

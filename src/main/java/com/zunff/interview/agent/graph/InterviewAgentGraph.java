@@ -2,6 +2,7 @@ package com.zunff.interview.agent.graph;
 
 import com.zunff.interview.agent.CircuitBreakerHelper;
 import com.zunff.interview.agent.names.NodeNames;
+import com.zunff.interview.agent.names.QuestionGenNodeNames;
 import com.zunff.interview.agent.nodes.main.*;
 import com.zunff.interview.agent.state.BatchQuestionGenState;
 import com.zunff.interview.agent.state.InterviewState;
@@ -161,7 +162,7 @@ public class InterviewAgentGraph {
         // 2. 异步调用子图
         RunnableConfig config = RunnableConfig.builder()
                 .threadId(mainState.sessionId())
-                .addParallelNodeExecutor(StateGraph.START, virtualThreadExecutor)
+                .addParallelNodeExecutor(QuestionGenNodeNames.GEN_PLANNING, virtualThreadExecutor)
                 .build();
 
         // 3. 用 AtomicReference 捕获最后一个状态

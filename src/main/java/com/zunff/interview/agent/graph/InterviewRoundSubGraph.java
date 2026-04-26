@@ -6,6 +6,7 @@ import com.zunff.interview.agent.nodes.round.ComprehensiveEvaluationNode;
 import com.zunff.interview.agent.nodes.round.DeepDiveFollowUpGenNode;
 import com.zunff.interview.agent.nodes.round.FollowUpDecisionNode;
 import com.zunff.interview.agent.nodes.round.BasicFollowUpGenNode;
+import com.zunff.interview.agent.nodes.round.PersistenceNode;
 import com.zunff.interview.agent.router.RoundRouter;
 import com.zunff.interview.constant.InterviewRound;
 import com.zunff.interview.agent.names.NodeNames;
@@ -42,6 +43,9 @@ public class InterviewRoundSubGraph {
     // Omni多模态综合评估节点（替代并行三分支）
     private final ComprehensiveEvaluationNode comprehensiveEvaluationNode;
 
+    // 持久化节点
+    private final PersistenceNode persistenceNode;
+
     // 条件分支节点
     private final FollowUpDecisionNode followUpDecisionNode;
     private final ChallengeFollowUpGenNode challengeFollowUpGenNode;
@@ -52,6 +56,7 @@ public class InterviewRoundSubGraph {
             BasicFollowUpGenNode basicFollowUpGenNode,
             RoundRouter roundRouter,
             ComprehensiveEvaluationNode comprehensiveEvaluationNode,
+            PersistenceNode persistenceNode,
             FollowUpDecisionNode followUpDecisionNode,
             ChallengeFollowUpGenNode challengeFollowUpGenNode,
             DeepDiveFollowUpGenNode deepDiveFollowUpGenNode) {
@@ -59,6 +64,7 @@ public class InterviewRoundSubGraph {
         this.basicFollowUpGenNode = basicFollowUpGenNode;
         this.roundRouter = roundRouter;
         this.comprehensiveEvaluationNode = comprehensiveEvaluationNode;
+        this.persistenceNode = persistenceNode;
         this.followUpDecisionNode = followUpDecisionNode;
         this.challengeFollowUpGenNode = challengeFollowUpGenNode;
         this.deepDiveFollowUpGenNode = deepDiveFollowUpGenNode;
@@ -82,6 +88,9 @@ public class InterviewRoundSubGraph {
         // Omni多模态综合评估节点
         String comprehensiveEval = prefix + NodeNames.COMPREHENSIVE_EVALUATION;
 
+        // 持久化节点
+        String persistence = prefix + NodeNames.PERSISTENCE;
+
         // 条件分支节点
         String generateChallenge = prefix + NodeNames.GENERATE_CHALLENGE;
         String generateDeepDive = prefix + NodeNames.GENERATE_DEEP_DIVE;
@@ -93,6 +102,9 @@ public class InterviewRoundSubGraph {
 
                 // Omni多模态综合评估（单节点替代并行三分支）
                 .addNode(comprehensiveEval, comprehensiveEvaluationNode::execute)
+
+                // 持久化（评估结果写入数据库）
+                .addNode(persistence, persistenceNode::execute)
 
                 // 条件分支节点
                 .addNode(followUpDecision, followUpDecisionNode::execute)
@@ -107,8 +119,9 @@ public class InterviewRoundSubGraph {
                 // 恢复执行后直接进入综合评估
                 .addEdge(askQuestion, comprehensiveEval)
 
-                // 综合评估后进入追问决策
-                .addEdge(comprehensiveEval, followUpDecision)
+                // 综合评估后持久化，再进入追问决策
+                .addEdge(comprehensiveEval, persistence)
+                .addEdge(persistence, followUpDecision)
 
                 // ========== 条件路由：追问决策 + 轮次完成 ==========
                 .addConditionalEdges(

@@ -99,7 +99,7 @@ public class BatchQuestionGenState extends AgentState {
         SCHEMA.put(CURRENT_BUSINESS_INDEX, Channels.base(new LastValueReducer<>(), () -> 0));
         SCHEMA.put(FALLBACK, Channels.base(new LastValueReducer<>(), () -> false));
 
-        SCHEMA.put(QUESTION_PLAN, Channels.base(new LastValueReducer<>(), () -> null));
+        SCHEMA.put(QUESTION_PLAN, Channels.base(new LastValueReducer<>(), QuestionPlanResponseDto::nullObj));
 
         SCHEMA.put(QUESTION_TYPE, Channels.base(new LastValueReducer<>(), () -> QuestionType.TECHNICAL_BASIC));
         SCHEMA.put(QUESTION_COUNT, Channels.base(new LastValueReducer<>(), () -> 0));

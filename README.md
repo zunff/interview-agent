@@ -99,6 +99,7 @@ graph TD
     subgraph InterviewRoundGraph[轮次子图]
         ASK[AskQuestionNode<br/>从队列获取问题]
         EVAL[ComprehensiveEvaluationNode<br/>Omni多模态综合评估]
+        PERSIST[PersistenceNode<br/>持久化评估结果]
         DECISION{FollowUpDecisionNode<br/>追问决策}
         DEEP[DeepDiveNode<br/>深入追问]
         CHALLENGE[ChallengeQuestionNode<br/>挑战问题]
@@ -108,7 +109,8 @@ graph TD
 
     START --> ASK
     ASK --> EVAL
-    EVAL --> DECISION
+    EVAL --> PERSIST
+    PERSIST --> DECISION
 
     DECISION -->|得分 &lt; 50<br/>低分深入| DEEP
     DECISION -->|得分 &gt; 90<br/>高分挑战| CHALLENGE
@@ -272,8 +274,7 @@ sequenceDiagram
         C->>S: audio_start + video_frame + audio_chunk
         C->>S: answer_complete
         S->>C: answer_received
-        S->>S: Omni综合评估（转录文本+关键帧+音频）
-        S->>C: evaluation_result
+        S->>S: Omni综合评估 + 持久化
         S->>C: new_question (下一题/追问) + TTS 音频
     end
 
@@ -300,6 +301,7 @@ src/main/java/com/zunff/interview/
 │   │   ├── round/                       # 轮次子图节点
 │   │   │   ├── AskQuestionNode.java     # 从队列获取问题
 │   │   │   ├── ComprehensiveEvaluationNode.java  # Omni多模态综合评估
+│   │   │   ├── PersistenceNode.java     # 持久化评估结果
 │   │   │   ├── FollowUpDecisionNode.java
 │   │   │   ├── BasicFollowUpGenNode.java        # 普通追问生成
 │   │   │   ├── ChallengeFollowUpGenNode.java    # 挑战题生成

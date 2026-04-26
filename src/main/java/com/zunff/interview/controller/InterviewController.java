@@ -2,8 +2,6 @@ package com.zunff.interview.controller;
 
 import com.zunff.interview.common.response.ApiResponse;
 import com.zunff.interview.common.response.PageResult;
-import com.zunff.interview.model.request.SubmitAnswerRequest;
-import com.zunff.interview.model.response.InterviewAnswerResponse;
 import com.zunff.interview.model.response.InterviewHistoryResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;

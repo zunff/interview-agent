@@ -118,14 +118,19 @@ public class FollowUpDecisionNode {
             return RouteDecision.CHALLENGE_MODE;
         }
 
-        // 4. 表现好的标准题 → 下一题
+        // 4. 表现好的标准题（无弱点）→ 下一题
         if (score >= 75 && !hasWeakness) {
             return RouteDecision.NEXT_QUESTION;
         }
 
-        // 5. 仅剩最后一次追问额度
+        // 5. 中等偏上分数（70-84）且只有内容弱点、无模态异常 → 交给 LLM 精细决策
+        //    避免所有 70-80 分的评估都走 FOLLOW_UP 导致追问类型单一
+        if (score >= 70 && hasWeakness && !concern) {
+            return null;
+        }
+
+        // 6. 仅剩最后一次追问额度
         if (remaining <= 1) {
-            // 多模态异常 → 追问（给机会调整状态），否则看内容质量
             if (concern) {
                 return RouteDecision.FOLLOW_UP;
             }
@@ -134,12 +139,12 @@ public class FollowUpDecisionNode {
                     : RouteDecision.FOLLOW_UP;
         }
 
-        // 6. 有余量且有弱点或模态异常 → 追问
+        // 7. 有余量且有弱点或模态异常 → 追问
         if (hasWeakness || concern) {
             return RouteDecision.FOLLOW_UP;
         }
 
-        // 7. 其余交给 LLM 精细决策
+        // 8. 其余交给 LLM 精细决策
         return null;
     }
 }

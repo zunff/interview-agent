@@ -6,21 +6,17 @@ import com.zunff.interview.agent.names.NodeNames;
 import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.common.exception.BusinessException;
 import com.zunff.interview.common.response.PageResult;
-import com.zunff.interview.model.bo.EvaluationBO;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
-import com.zunff.interview.model.response.InterviewAnswerResponse;
 import com.zunff.interview.model.response.InterviewHistoryResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;
-import com.zunff.interview.service.AnswerRecordService;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphInput;
 import org.bsc.langgraph4j.RunnableConfig;
-import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -38,19 +34,16 @@ public class InterviewBusinessService {
 
     private final CompiledGraph<InterviewState> interviewAgent;
     private final InterviewSessionService sessionService;
-    private final AnswerRecordService answerRecordService;
     private final EvaluationRecordService evaluationRecordService;
     private final ExecutorService virtualThreadExecutor;
 
     public InterviewBusinessService(
             CompiledGraph<InterviewState> interviewAgent,
             InterviewSessionService sessionService,
-            AnswerRecordService answerRecordService,
             EvaluationRecordService evaluationRecordService,
             @Qualifier("virtualThreadExecutor") ExecutorService virtualThreadExecutor) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
-        this.answerRecordService = answerRecordService;
         this.evaluationRecordService = evaluationRecordService;
         this.virtualThreadExecutor = virtualThreadExecutor;
     }
@@ -128,9 +121,9 @@ public class InterviewBusinessService {
 
     /**
      * 提交答案
-     * 使用 GraphInput.resume() 恢复图执行，由图节点完成分析和问题生成
+     * 更新图状态后恢复图执行，后续由图节点完成评估、持久化和问题推送
      */
-    public InterviewAnswerResponse submitAnswer(SubmitAnswerRequest request) {
+    public void submitAnswer(SubmitAnswerRequest request) {
         String sessionId = request.getSessionId();
 
         var session = sessionService.getBySessionId(sessionId);
@@ -143,101 +136,32 @@ public class InterviewBusinessService {
                 .build();
 
         try {
-            // 获取当前状态
-            StateSnapshot<InterviewState> snapshot = interviewAgent.getState(config);
-            if (snapshot == null || snapshot.state() == null) {
-                throw new BusinessException(1002, "面试状态不存在");
-            }
-
-            InterviewState currentState = snapshot.state();
-            String question = currentState.currentQuestion();
-            int questionIndex = currentState.questionIndex();
-
-            log.info("提交答案，问题索引: {}, 问题: {}", questionIndex, question);
-
-            // 准备多模态数据
-            List<String> frames = null;
-            if (request.getVideoFrames() != null && !request.getVideoFrames().isEmpty()) {
-                frames = Arrays.asList(request.getVideoFrames().split(","));
-                log.info("解析视频帧: {} 帧", frames.size());
-            }
-
             // 更新状态：注入答案和多模态数据
             Map<String, Object> stateUpdate = new HashMap<>();
             stateUpdate.put(InterviewState.ANSWER_TEXT, request.getAnswerText());
-            if (frames != null) {
+
+            List<String> frames = null;
+            if (request.getVideoFrames() != null && !request.getVideoFrames().isEmpty()) {
+                frames = Arrays.asList(request.getVideoFrames().split(","));
                 stateUpdate.put(InterviewState.ANSWER_FRAMES, frames);
-                log.info("更新状态：ANSWER_FRAMES 包含 {} 帧", frames.size());
             }
-            // 带时间戳的视频帧（用于Omni多模态时间对齐分析）
             if (request.getFramesWithTimestamps() != null && !request.getFramesWithTimestamps().isEmpty()) {
                 stateUpdate.put(InterviewState.ANSWER_FRAMES_WITH_TIMESTAMPS, request.getFramesWithTimestamps());
-                log.info("更新状态：ANSWER_FRAMES_WITH_TIMESTAMPS 包含 {} 帧", request.getFramesWithTimestamps().size());
             }
-            // WAV音频数据（Base64编码）用于Omni多模态综合分析
             if (request.getAnswerAudio() != null && !request.getAnswerAudio().isEmpty()) {
                 stateUpdate.put(InterviewState.ANSWER_AUDIO, request.getAnswerAudio());
-                log.info("更新状态：ANSWER_AUDIO 长度: {} chars", request.getAnswerAudio().length());
             }
-            // 转录条目（带时间戳）用于Omni多模态综合分析
             if (request.getTranscriptEntries() != null && !request.getTranscriptEntries().isEmpty()) {
                 stateUpdate.put(InterviewState.TRANSCRIPT_ENTRIES, request.getTranscriptEntries());
-                log.info("更新状态：TRANSCRIPT_ENTRIES 包含 {} 条", request.getTranscriptEntries().size());
             }
+
             interviewAgent.updateState(config, stateUpdate);
+            log.info("状态已更新，恢复图执行: sessionId={}", sessionId);
 
-            // 验证状态更新
-            log.info("状态更新完成，验证状态...");
-            StateSnapshot<InterviewState> verifySnapshot = interviewAgent.getState(config);
-            log.info("验证：ANSWER_FRAMES 大小 = {}, ANSWER_TEXT 长度 = {}",
-                    verifySnapshot.state().answerFrames().size(),
-                    verifySnapshot.state().answerText().length());
-
-            log.info("状态已更新，开始恢复图执行...");
-
-            // 使用 GraphInput.resume() 恢复图执行
-            // 图会从 askQuestion 之后继续，直接执行分析节点和追问决策
-            Optional<InterviewState> result = interviewAgent.invoke(GraphInput.resume(), config);
-
-            if (result.isEmpty()) {
-                throw new BusinessException(1004, "图执行未返回结果");
-            }
-
-            InterviewState finalState = result.get();
-            log.info("图执行完成，当前问题索引: {}", finalState.questionIndex());
-
-            // 获取评估结果并记录
-            EvaluationBO evaluation = finalState.getCurrentEvaluation();
-            if (evaluation != null) {
-                log.info("评估完成，综合得分: {}", evaluation.getOverallScore());
-
-                // 记录回答
-                answerRecordService.recordAnswer(
-                        sessionId,
-                        questionIndex,
-                        question,
-                        finalState.answerText()
-                );
-
-                // 保存评估结果
-                evaluationRecordService.saveEvaluation(sessionId, evaluation);
-            }
-
-            // 检查是否结束
-            if (finalState.isFinished()) {
-                log.info("面试已结束，sessionId: {}", sessionId);
-                return InterviewAnswerResponse.finished();
-            }
-
-            // 新问题由 AskQuestionNode 统一推送，此处只返回响应
-            String newQuestion = finalState.currentQuestion();
-            String newQuestionType = finalState.questionType();
-            int newQuestionIndex = finalState.questionIndex();
-
-            return InterviewAnswerResponse.continueWith(newQuestion, newQuestionType, newQuestionIndex);
+            interviewAgent.invoke(GraphInput.resume(), config);
 
         } catch (Exception e) {
-            log.error("提交答案失败", e);
+            log.error("提交答案失败: sessionId={}", sessionId, e);
             throw new BusinessException(1004, "答案提交失败: " + e.getMessage());
         }
     }

@@ -20,6 +20,10 @@ public record QuestionPlanResponseDto(
     @Serial
     private static final long serialVersionUID = 1L;
 
+    public static QuestionPlanResponseDto nullObj() {
+        return new QuestionPlanResponseDto(null, null, null, null, null);
+    }
+
     public record PlanItem(
             List<String> assignedTopics,
             List<String> forbiddenTopics,

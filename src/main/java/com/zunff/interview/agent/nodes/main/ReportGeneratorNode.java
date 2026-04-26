@@ -198,6 +198,7 @@ public class ReportGeneratorNode {
             String fullReport = promptTemplateService.getTemplate("templates/report-header.md", headerVars);
 
             sessionService.saveReport(sessionId, fullReport);
+            sessionService.endSession(sessionId);
 
             webSocketHandler.sendFinalReport(sessionId, fullReport);
 
@@ -211,6 +212,7 @@ public class ReportGeneratorNode {
 
         } catch (Exception e) {
             log.error("生成报告失败", e);
+            sessionService.endSession(sessionId);
             Map<String, Object> updates = new HashMap<>();
             CircuitBreakerHelper.handleFailure(state, updates, e);
             updates.put(InterviewState.IS_FINISHED, true);

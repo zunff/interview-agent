@@ -26,6 +26,7 @@ public interface NodeNames {
     // ========== 子图内部节点 ==========
     String ASK_QUESTION = "askQuestion";
     String COMPREHENSIVE_EVALUATION = "comprehensiveEvaluation";
+    String PERSISTENCE = "persistence";
     String FOLLOW_UP_DECISION = "followUpDecision";
     String GENERATE_FOLLOW_UP = "generateFollowUp";
     String GENERATE_CHALLENGE = "generateChallenge";
