@@ -12,13 +12,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import com.zunff.interview.common.sse.SseHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
-import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import reactor.core.publisher.Flux;
 
 @Slf4j
 @RestController
@@ -37,14 +36,13 @@ public class ReActChatController {
 
     @Operation(summary = "发送聊天消息（SSE 流式响应）")
     @PostMapping(value = "/sessions/{sessionId}/message", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<String>> sendMessage(
+    public SseEmitter sendMessage(
             @PathVariable String sessionId,
             @RequestBody SendMessageRequest request) {
         if (request.getMessage() == null || request.getMessage().isEmpty()) {
-            return Flux.just(ServerSentEvent.<String>builder()
-                    .event("error")
-                    .data("{\"error\":\"消息不能为空\"}")
-                    .build());
+            SseEmitter emitter = new SseEmitter(300_000L);
+            SseHelper.sendError(emitter, "消息不能为空");
+            return emitter;
         }
         return chatService.sendMessage(sessionId, request.getMessage());
     }

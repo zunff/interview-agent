@@ -25,8 +25,10 @@ data:<JSON 字符串>
 | `progress` | 一 | 节点执行进度 |
 | `dimension_score` | 一 | 单维度评分完成 |
 | `radar_chart` | 一 | 雷达图配置（ECharts JSON） |
-| `message` | 二 | 对话增量文本 |
+| `thinking_start` | 二 | 思考阶段开始 |
 | `tool_status` | 二 | 工具调用状态 |
+| `thinking_end` | 二 | 思考阶段结束（附带总结） |
+| `message` | 二 | 对话增量文本（逐 token） |
 | `done` | 一/二 | 流结束标记 |
 | `error` | 一/二 | 错误信息 |
 
@@ -151,23 +153,45 @@ Accept: text/event-stream
 
 ### 事件流时序
 
+#### 普通对话（无需工具）
+
 ```
-message(增量文本片段)     ← 多次，拼接到一起形成完整回复
+thinking_start({message: "开始思考"})
+thinking_end({summary: "你好！欢迎向我咨询..."})
+message(增量文本片段)     ← 多次，逐 token 拼接
 message(增量文本片段)
 message(增量文本片段)
   ...
 done
 ```
 
-#### 对话中调用工具
+#### 对话中调用工具（如联网搜索）
 
 ```
-tool_status({state: "running", tools: [{name: "...", arguments: "..."}]})
+thinking_start({message: "开始思考"})
+tool_status({state: "running", tool: "search"})
+tool_status({state: "running", tool: "search"})   ← 可能有多次搜索
+thinking_end({summary: "根据搜索结果，Spring AI 最新版本..."})
+message(增量文本片段)     ← 多次，逐 token 拼接
 message(增量文本片段)
 message(增量文本片段)
   ...
 done
 ```
+
+#### 两阶段架构说明
+
+阶段二采用 **思考 + 流式输出** 两阶段分离：
+
+1. **思考阶段**（ReAct 循环）
+   - 推送 `thinking_start` 事件
+   - 调用 `search` 等工具时推送 `tool_status` 事件
+   - 完成后调用 `finishChat` 工具，推送 `thinking_end`（附带 `summary`）
+
+2. **流式输出阶段**
+   - 基于 `summary` 生成详细回答
+   - 推送 `message` 事件（逐 token，真正的流式）
+   - 推送 `done` 结束
 
 ### 前端接入示例
 
@@ -183,6 +207,7 @@ async function sendMessage(sessionId, message) {
   const decoder = new TextDecoder();
   let buffer = '';
   let fullText = '';
+  let isThinking = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -198,17 +223,31 @@ async function sendMessage(sessionId, message) {
         currentEvent = line.slice(6).trim();
       } else if (line.startsWith('data:') && currentEvent) {
         const raw = line.slice(5).trim();
+        const data = JSON.parse(raw);
 
-        if (currentEvent === 'message') {
-          fullText += raw;
-          updateChatBubble(fullText);
-        } else if (currentEvent === 'tool_status') {
-          showToolRunning();
-        } else if (currentEvent === 'done') {
-          finalizeChatBubble(fullText);
-        } else if (currentEvent === 'error') {
-          const data = JSON.parse(raw);
-          showError(data.error);
+        switch (currentEvent) {
+          case 'thinking_start':
+            isThinking = true;
+            showThinkingIndicator();
+            break;
+          case 'tool_status':
+            showToolRunning(data.tool);
+            break;
+          case 'thinking_end':
+            isThinking = false;
+            hideThinkingIndicator();
+            // data.summary 可用于预览
+            break;
+          case 'message':
+            fullText += raw;
+            updateChatBubble(fullText);
+            break;
+          case 'done':
+            finalizeChatBubble(fullText);
+            break;
+          case 'error':
+            showError(data.error);
+            break;
         }
       }
     }
@@ -289,12 +328,34 @@ function buildEChartsOption(radarData) {
 
 **阶段二（流式对话）格式：**
 ```json
-{ "state": "running", "tools": [{"name": "webSearch", "arguments": "{}"}] }
+{ "state": "running", "tool": "search" }
 ```
 
-`tools` 数组包含本次调用的所有工具信息，前端可据此显示具体正在执行的工具名称。
+`tool` 表示当前正在执行的工具名称（如 `search`）。前端可据此显示具体正在执行的工具名称。
 
-前端应显示加载动画，等待后续 `message` 事件。
+前端应显示加载动画，等待后续 `thinking_end` 事件。
+
+### thinking_start
+
+```json
+{ "message": "开始思考" }
+```
+
+思考阶段开始标记，前端可采用此事件显示加载状态或思考指示器。
+
+### thinking_end
+
+```json
+{
+  "summary": "根据搜索结果，Spring AI 最新版本是 2.0.0-M5..."
+}
+```
+
+思考阶段结束标记，包含思考总结。`summary` 字段包含高质量的总结文本，前端可：
+- 显示为预览
+- 或者等待后续 `message` 事件拼接完整回答
+
+注意：`thinking_end` 之后会紧接着推送 `message` 事件（逐 token 流式输出），前端应准备好拼接显示。
 
 ### done
 
@@ -343,6 +404,9 @@ function buildEChartsOption(radarData) {
 ## 注意事项
 
 - SSE 连接超时为 300 秒，前端应设置对应的超时时间
-- `message` 事件是增量文本，前端需拼接后显示
+- `message` 事件是**逐 token 增量文本**，前端需拼接后显示（真正的流式输出）
+- `thinking_start` / `thinking_end` 包裹思考阶段，前端可据此显示思考状态
+- `thinking_end` 的 `summary` 字段包含高质量总结，但实际回答通过后续 `message` 事件流式推送
 - 并行维度节点（skill/exp/bg/potential）的完成顺序不固定，前端应按 `key` 字段匹配而非顺序
 - 阶段二对话中 Agent 会自动获取阶段一的分析报告作为上下文，前端无需额外传递
+- 两阶段架构确保：(1) 思考过程可观测 (2) 最终回答真正流式（逐 token，而非预生成后模拟）

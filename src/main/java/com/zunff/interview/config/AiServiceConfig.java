@@ -4,8 +4,6 @@ import com.zunff.interview.service.extend.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,18 +26,6 @@ public class AiServiceConfig {
     public ChatClient textChatClient(ChatModel chatModel) {
         log.info("初始化文本 ChatClient，模型: {}", chatModel.getDefaultOptions().getModel());
         return ChatClient.create(chatModel);
-    }
-
-    /**
-     * 简历分析 ChatClient（带 Memory Advisor）
-     * 用于 Phase 2 流式对话
-     */
-    @Bean
-    public ChatClient resumeChatClient(ChatModel chatModel, ChatMemory chatMemory) {
-        log.info("初始化简历分析 ChatClient（带 JDBC Memory Advisor）");
-        return ChatClient.builder(chatModel)
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
-                .build();
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.zunff.interview.config;
 
-import com.zunff.interview.tool.*;
+import com.zunff.interview.tool.FinishChatTool;
+import com.zunff.interview.tool.WebSearchTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
@@ -24,10 +25,10 @@ public class ChatAgentConfig {
     }
 
     @Bean
-    public ToolCallbackProvider resumeAnalysisTools(WebSearchTool webSearchTool) {
-        log.info("注册简历分析工具: webSearch");
+    public ToolCallbackProvider resumeAnalysisTools(WebSearchTool webSearchTool, FinishChatTool finishChatTool) {
+        log.info("注册聊天工具: webSearch, finishChat");
         return MethodToolCallbackProvider.builder()
-                .toolObjects(webSearchTool)
+                .toolObjects(webSearchTool, finishChatTool)
                 .build();
     }
 }

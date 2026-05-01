@@ -1,10 +1,14 @@
 package com.zunff.interview.service.impl;
 
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zunff.interview.agent.state.ResumeState;
 import com.zunff.interview.common.sse.SseEmitterRegistry;
+import com.zunff.interview.common.sse.SseEventType;
+import com.zunff.interview.common.sse.SseHelper;
 import com.zunff.interview.common.exception.BusinessException;
 import com.zunff.interview.common.response.PageResult;
 import com.zunff.interview.mapper.ChatMemoryMapper;
@@ -19,16 +23,20 @@ import com.zunff.interview.service.extend.PromptTemplateService;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.RunnableConfig;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.*;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.model.tool.ToolExecutionResult;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.resolution.StaticToolCallbackResolver;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import reactor.core.publisher.Flux;
-import org.springframework.http.codec.ServerSentEvent;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -42,9 +50,9 @@ import java.util.concurrent.ExecutorService;
 public class ChatServiceImpl implements ChatService {
 
     private static final String UPLOAD_DIR = System.getProperty("java.io.tmpdir") + "/resume-uploads";
+    private static final int MAX_TOOL_ROUNDS = 5;
 
-    private final ChatClient resumeChatClient;
-    private final ToolCallbackProvider toolCallbackProvider;
+    private final ChatModel chatModel;
     private final ChatSessionMapper chatSessionMapper;
     private final ResumeAnalysisMapper resumeAnalysisMapper;
     private final ChatMemoryMapper chatMemoryMapper;
@@ -52,8 +60,11 @@ public class ChatServiceImpl implements ChatService {
     private final CompiledGraph<ResumeState> resumeAnalysisGraph;
     private final SseEmitterRegistry emitterRegistry;
     private final ExecutorService virtualThreadExecutor;
+    private final ChatMemory chatMemory;
+    private final ToolCallingManager toolCallingManager;
+    private final ToolCallingChatOptions chatOptions;
 
-    public ChatServiceImpl(ChatClient resumeChatClient,
+    public ChatServiceImpl(ChatModel chatModel,
                            ToolCallbackProvider resumeAnalysisTools,
                            ChatSessionMapper chatSessionMapper,
                            ResumeAnalysisMapper resumeAnalysisMapper,
@@ -61,16 +72,27 @@ public class ChatServiceImpl implements ChatService {
                            PromptTemplateService promptTemplateService,
                            CompiledGraph<ResumeState> resumeAnalysisGraph,
                            SseEmitterRegistry emitterRegistry,
+                           ChatMemory chatMemory,
                            @org.springframework.beans.factory.annotation.Qualifier("virtualThreadExecutor") ExecutorService virtualThreadExecutor) {
-        this.resumeChatClient = resumeChatClient;
-        this.toolCallbackProvider = resumeAnalysisTools;
+        this.chatModel = chatModel;
         this.chatSessionMapper = chatSessionMapper;
         this.resumeAnalysisMapper = resumeAnalysisMapper;
         this.chatMemoryMapper = chatMemoryMapper;
         this.promptTemplateService = promptTemplateService;
         this.resumeAnalysisGraph = resumeAnalysisGraph;
         this.emitterRegistry = emitterRegistry;
+        this.chatMemory = chatMemory;
         this.virtualThreadExecutor = virtualThreadExecutor;
+
+        // 初始化一次，全局复用
+        ToolCallback[] toolCallbacks = resumeAnalysisTools.getToolCallbacks();
+        this.toolCallingManager = ToolCallingManager.builder()
+                .toolCallbackResolver(new StaticToolCallbackResolver(Arrays.asList(toolCallbacks)))
+                .build();
+        this.chatOptions = ToolCallingChatOptions.builder()
+                .toolCallbacks(toolCallbacks)
+                .internalToolExecutionEnabled(false)
+                .build();
     }
 
     @Override
@@ -141,8 +163,6 @@ public class ChatServiceImpl implements ChatService {
                 var result = resumeAnalysisGraph.invoke(initialState, config);
                 log.info("Phase 1 图执行完成, sessionId: {}, result present: {}", sessionId, result.isPresent());
 
-                // 报告上下文由 sendMessage 的 appendAnalysisContext 从数据库读取，
-                // 不再注入 ChatMemory，避免与 system prompt 中的报告内容重复
             } catch (Exception e) {
                 String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
                 log.error("Phase 1 图执行失败, sessionId: {}, error: {}", sessionId, errorMsg, e);
@@ -159,66 +179,123 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public Flux<ServerSentEvent<String>> sendMessage(String sessionId, String message) {
+    public SseEmitter sendMessage(String sessionId, String message) {
         validateSession(sessionId);
 
-        String systemPrompt = promptTemplateService.getPrompt("resume-chat-system");
+        SseEmitter emitter = new SseEmitter(300_000L);
+        emitterRegistry.register(sessionId, emitter);
 
-        StringBuilder promptBuilder = new StringBuilder(systemPrompt);
-        appendAnalysisContext(sessionId, promptBuilder);
+        virtualThreadExecutor.submit(() -> {
+            try {
+                String systemPrompt = promptTemplateService.getPrompt("resume-chat-system");
+                StringBuilder promptBuilder = new StringBuilder(systemPrompt);
+                appendAnalysisContext(sessionId, promptBuilder);
 
-        Flux<ChatResponse> chatFlux = resumeChatClient.prompt()
-                .system(promptBuilder.toString())
-                .user(message)
-                .toolCallbacks(toolCallbackProvider.getToolCallbacks())
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, sessionId))
-                .stream()
-                .chatResponse();
+                List<Message> messages = new ArrayList<>();
+                messages.add(new SystemMessage(promptBuilder.toString()));
+                messages.addAll(chatMemory.get(sessionId));
+                messages.add(new UserMessage(message));
+                chatMemory.add(sessionId, new UserMessage(message));
 
-        return chatFlux.flatMap(response -> {
-            if (response.hasToolCalls()) {
-                // 检查是否有 ToolCalls 详情
-                response.getResult();
-                response.getResult();
-                response.getResult();
-                List<AssistantMessage.ToolCall> toolCalls =
-                    response.getResult().getOutput().getToolCalls();
+                Prompt prompt = new Prompt(messages, chatOptions);
 
-                // 提取工具信息
-                List<Map<String, Object>> toolInfo = toolCalls.stream()
-                    .map(tc -> Map.<String, Object>of(
-                        "name", tc.name(),
-                        "arguments", tc.arguments()
-                    ))
-                    .toList();
+                // === 阶段 1：思考（ReAct 循环）===
+                SseHelper.sendThinkingStart(emitter);
+                String summary = null;
 
-                // 发送详细的工具状态
-                return Flux.just(ServerSentEvent.<String>builder()
-                    .event("tool_status")
-                    .data(cn.hutool.json.JSONUtil.toJsonStr(Map.of(
-                        "state", "running",
-                        "tools", toolInfo
-                    )))
-                    .build());
+                for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
+                    log.info("ReAct round {}: sessionId={}", round + 1, sessionId);
+
+                    ChatResponse response = chatModel.call(prompt);
+                    AssistantMessage assistant = response.getResult().getOutput();
+                    List<AssistantMessage.ToolCall> toolCalls = assistant.getToolCalls();
+
+                    if (toolCalls.isEmpty()) {
+                        // 无工具调用
+                        summary = assistant.getText();
+                        chatMemory.add(sessionId, assistant);
+                        break;
+                    }
+
+                    // 检查是否调用了 finishChat
+                    boolean finished = false;
+                    for (AssistantMessage.ToolCall tc : toolCalls) {
+                        if ("finishChat".equals(tc.name())) {
+                            // 从 arguments JSON 中提取 summary
+                            JSONObject args = JSONUtil.parseObj(tc.arguments());
+                            summary = args.getStr("summary");
+                            finished = true;
+                            break;
+                        }
+                        // 非结束工具 → 推送 tool_status
+                        emitter.send(SseEmitter.event()
+                                .name(SseEventType.TOOL_STATUS.name().toLowerCase())
+                                .data(JSONUtil.toJsonStr(Map.of(
+                                        "tool", tc.name(),
+                                        "state", "running"
+                                ))));
+                    }
+
+                    // 执行工具
+                    chatMemory.add(sessionId, assistant);
+                    ToolExecutionResult result = toolCallingManager.executeToolCalls(prompt, response);
+                    List<Message> history = result.conversationHistory();
+                    if (!history.isEmpty()) {
+                        chatMemory.add(sessionId, history.getLast());
+                    }
+
+                    if (finished) break;
+                    prompt = new Prompt(history, chatOptions);
+                }
+
+                SseHelper.sendThinkingEnd(emitter, summary != null ? summary : "");
+
+                // === 阶段 2：流式输出 ===
+                if (summary != null && !summary.isEmpty()) {
+                    streamFinalResponse(emitter, sessionId, summary);
+                }
+                SseHelper.sendDone(emitter);
+
+            } catch (Exception e) {
+                log.error("处理失败, sessionId: {}", sessionId, e);
+                SseHelper.sendError(emitter, e.getMessage() != null ? e.getMessage() : "处理失败");
             }
+        });
 
-            response.getResult();
-            response.getResult();
-            String content = response.getResult().getOutput().getText();
+        return emitter;
+    }
 
-            if (content != null && !content.isEmpty()) {
-                return Flux.just(ServerSentEvent.<String>builder()
-                        .event("message")
-                        .data(content)
-                        .build());
+    private void streamFinalResponse(SseEmitter emitter, String sessionId, String summary) {
+        try {
+            // 构造提示：基于 summary 生成详细回答
+            List<Message> messages = new ArrayList<>();
+            messages.add(new UserMessage(
+                    "请基于以下思考总结，给用户一个详细、格式化的回答：\n\n" + summary
+            ));
+            Prompt streamPrompt = new Prompt(messages);  // 不带工具
+
+            StringBuilder fullResponse = new StringBuilder();
+            chatModel.stream(streamPrompt)
+                    .doOnNext(chunk -> {
+                        String text = chunk.getResult().getOutput().getText();
+                        if (text != null && !text.isEmpty()) {
+                            fullResponse.append(text);
+                            try {
+                                emitter.send(SseEmitter.event().name("message").data(text));
+                            } catch (IOException e) {
+                                log.warn("SSE 发送文本失败: {}", e.getMessage());
+                            }
+                        }
+                    })
+                    .blockLast();
+
+            // 记录最终回答
+            if (!fullResponse.isEmpty()) {
+                chatMemory.add(sessionId, new AssistantMessage(fullResponse.toString()));
             }
-            return Flux.empty();
-        }).concatWith(Flux.just(
-                ServerSentEvent.<String>builder()
-                        .event("done")
-                        .data("[DONE]")
-                        .build()
-        ));
+        } catch (Exception e) {
+            log.error("流式输出失败, sessionId: {}", sessionId, e);
+        }
     }
 
     private void appendAnalysisContext(String sessionId, StringBuilder promptBuilder) {

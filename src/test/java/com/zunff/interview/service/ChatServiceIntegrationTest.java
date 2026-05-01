@@ -11,17 +11,16 @@ import com.zunff.interview.model.entity.ResumeAnalysis;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import reactor.test.StepVerifier;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
@@ -127,14 +126,14 @@ class ChatServiceIntegrationTest {
 
         // 发送消息
         String message = "请总结我的核心技能";
-        reactor.core.publisher.Flux<ServerSentEvent<String>> flux =
-            chatService.sendMessage(testSessionId, message);
+        SseEmitter emitter = chatService.sendMessage(testSessionId, message);
 
-        // 验证 SSE 流能正常产生响应
-        StepVerifier.create(flux.take(10))
-                .expectNextMatches(event -> "message".equals(event.event()) || "tool_status".equals(event.event()) || "done".equals(event.event()))
-                .thenConsumeWhile(event -> true)
-                .verifyComplete();
+        // 等待 SSE 完成
+        AtomicBoolean completed = new AtomicBoolean(false);
+        emitter.onCompletion(() -> completed.set(true));
+        emitter.onError(e -> completed.set(true));
+
+        await().atMost(60, TimeUnit.SECONDS).untilTrue(completed);
 
         // 验证 ChatMemory 中消息数量增加
         List<Map<String, Object>> memoryRecordsAfter = jdbcTemplate.queryForList(

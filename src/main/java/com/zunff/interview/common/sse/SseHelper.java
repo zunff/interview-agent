@@ -28,6 +28,14 @@ public class SseHelper {
         send(emitter, SseEventType.TOOL_STATUS, Map.of("tool", toolName, "state", state));
     }
 
+    public static void sendThinkingStart(SseEmitter emitter) {
+        send(emitter, SseEventType.THINKING_START, Map.of("message", "开始思考"));
+    }
+
+    public static void sendThinkingEnd(SseEmitter emitter, String summary) {
+        send(emitter, SseEventType.THINKING_END, Map.of("summary", summary));
+    }
+
     public static void sendMessage(SseEmitter emitter, String content) {
         send(emitter, SseEventType.MESSAGE, Map.of("content", content));
     }
