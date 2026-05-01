@@ -30,7 +30,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class DeepDiveFollowUpGenNode {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
     private final PromptConfig promptConfig;
 
@@ -57,9 +57,7 @@ public class DeepDiveFollowUpGenNode {
             String systemPrompt = promptTemplateService.getPrompt("deep-dive-question", promptVars);
             String userPrompt = promptTemplateService.getPrompt("deep-dive-question-user", promptVars);
 
-            ChatClient chatClient = chatClientBuilder.build();
-
-            FollowUpQuestionResponseDto response = chatClient.prompt()
+            FollowUpQuestionResponseDto response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()

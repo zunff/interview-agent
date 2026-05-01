@@ -34,19 +34,19 @@ public class ReportGeneratorNode {
     private static final int MAX_ANSWER_CHARS = 8000;
     private static final int MAX_FOLLOW_UP_CHAIN_CHARS = 12000;
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
     private final PromptConfig promptConfig;
     private final InterviewSessionService sessionService;
     private final InterviewWebSocketHandler webSocketHandler;
 
     public ReportGeneratorNode(
-            ChatClient.Builder chatClientBuilder,
+            ChatClient textChatClient,
             PromptTemplateService promptTemplateService,
             PromptConfig promptConfig,
             InterviewSessionService sessionService,
             @Lazy InterviewWebSocketHandler webSocketHandler) {
-        this.chatClientBuilder = chatClientBuilder;
+        this.textChatClient = textChatClient;
         this.promptTemplateService = promptTemplateService;
         this.promptConfig = promptConfig;
         this.sessionService = sessionService;
@@ -156,9 +156,7 @@ public class ReportGeneratorNode {
                         .asMap());
 
         try {
-            ChatClient chatClient = chatClientBuilder.build();
-
-            ReportResponseDto reportResponse = chatClient.prompt()
+            ReportResponseDto reportResponse = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()

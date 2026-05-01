@@ -93,6 +93,5 @@ public class EvaluationRecord {
     private Boolean isFollowUp;
 
     /** 创建时间 */
-    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 }

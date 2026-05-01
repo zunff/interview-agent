@@ -4,12 +4,11 @@ import com.zunff.interview.service.extend.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestClient;
 
 /**
  * AI 服务配置类
@@ -19,59 +18,11 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class AiServiceConfig {
 
-
     @Resource
     private MultimodalConfig multimodalConfig;
 
     /**
-     * 自定义 RestTemplate 以记录请求详情
-     */
-    @Bean
-    public RestTemplateCustomizer restTemplateCustomizer() {
-        return restTemplate -> {
-            restTemplate.getInterceptors().add((request, body, execution) -> {
-                log.debug("=== RestTemplate HTTP Request ===");
-                log.debug("URI: {}", request.getURI());
-                log.debug("Method: {}", request.getMethod());
-                log.debug("Headers: {}", request.getHeaders());
-                log.debug("Body length: {}", body.length);
-                if (body.length > 0 && body.length < 1000) {
-                    log.debug("Body: {}", new String(body));
-                }
-                log.debug("=================================");
-                return execution.execute(request, body);
-            });
-        };
-    }
-
-    /**
-     * 自定义 RestClient.Builder 以拦截 Spring AI 的请求
-     */
-    @Bean
-    public RestClient.Builder restClientBuilder() {
-        return RestClient.builder()
-                .requestInterceptor((request, body, execution) -> {
-                    log.debug("=== RestClient HTTP Request ===");
-                    log.debug("URI: {}", request.getURI());
-                    log.debug("Method: {}", request.getMethod());
-                    log.debug("Headers: {}", request.getHeaders());
-                    log.debug("Body length: {}", body.length);
-                    if (body.length > 0 && body.length < 2000) {
-                        log.debug("Body: {}", new String(body));
-                    }
-                    log.debug("==================================");
-                    return execution.execute(request, body);
-                });
-    }
-
-    @Bean
-    public PromptTemplateService promptTemplateService() {
-        return new PromptTemplateService();
-    }
-
-    /**
-     * 文本模型 ChatClient (qwen-plus)
-     * 用于文本评估和语音情感分析
+     * 文本模型 ChatClient
      */
     @Bean
     public ChatClient textChatClient(ChatModel chatModel) {
@@ -80,12 +31,15 @@ public class AiServiceConfig {
     }
 
     /**
-     * ChatClient.Builder Bean
-     * 用于依赖注入到各个 Node
+     * 简历分析 ChatClient（带 Memory Advisor）
+     * 用于 Phase 2 流式对话
      */
     @Bean
-    public ChatClient.Builder chatClientBuilder(ChatModel chatModel) {
-        return ChatClient.builder(chatModel);
+    public ChatClient resumeChatClient(ChatModel chatModel, ChatMemory chatMemory) {
+        log.info("初始化简历分析 ChatClient（带 JDBC Memory Advisor）");
+        return ChatClient.builder(chatModel)
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .build();
     }
 
     /**

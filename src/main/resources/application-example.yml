@@ -34,6 +34,12 @@ spring:
         distance-type: COSINE_DISTANCE
         dimensions: 1024
         initialize-schema: true
+    # 聊天记忆配置 (JDBC)
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: true
 
 interview:
   graph:
@@ -64,3 +70,6 @@ interview:
 logging:
   level:
     root: INFO
+    # 查看 Spring AI HTTP 请求详情（开发调试时开启）
+    # org.springframework.ai: DEBUG
+    # org.springframework.web.client: DEBUG

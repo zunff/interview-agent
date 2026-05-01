@@ -39,7 +39,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class QuestionGenerationService {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
     private final PromptConfig promptConfig;
     private final InterviewKnowledgeService knowledgeService;
@@ -113,10 +113,9 @@ public class QuestionGenerationService {
                     .build();
             String userPrompt = promptTemplateService.getPrompt("question-generator-user", vars.asMap());
 
-            ChatClient chatClient = chatClientBuilder.build();
 
             // 总是使用列表解析
-            LlmQuestionListResultDto response = chatClient.prompt()
+            LlmQuestionListResultDto response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()

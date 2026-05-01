@@ -31,7 +31,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class BasicFollowUpGenNode {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
     private final PromptConfig promptConfig;
 
@@ -42,8 +42,7 @@ public class BasicFollowUpGenNode {
         GeneratedQuestion generatedQuestion = state.getCurrentGeneratedQuestion();
 
         try {
-            ChatClient chatClient = chatClientBuilder.build();
-            FollowUpQuestionResponseDto response = generateFollowUpQuestion(evaluation, generatedQuestion, state.formatFollowUpChain(), chatClient, state);
+            FollowUpQuestionResponseDto response = generateFollowUpQuestion(evaluation, generatedQuestion, state.formatFollowUpChain(), textChatClient, state);
             String followUpQuestion = response.getFollowUpQuestion();
             log.info("生成追问: {}", followUpQuestion);
 

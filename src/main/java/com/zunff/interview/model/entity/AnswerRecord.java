@@ -34,6 +34,5 @@ public class AnswerRecord {
     private String answerText;
 
     /** 时间戳 */
-    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime timestamp;
 }

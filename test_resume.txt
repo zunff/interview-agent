@@ -1,0 +1,10 @@
+
+张三
+Java开发工程师
+
+工作经历：
+2020-2023 阿里巴巴 - 高级Java开发工程师
+负责订单系统开发，使用Spring Boot、MySQL、Redis
+
+技能：
+Java, Spring Boot, MySQL, Redis, Kafka

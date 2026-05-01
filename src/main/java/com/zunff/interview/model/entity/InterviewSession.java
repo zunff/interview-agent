@@ -46,7 +46,6 @@ public class InterviewSession {
     private String status;
 
     /** 创建时间 */
-    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
     /** 结束时间 */

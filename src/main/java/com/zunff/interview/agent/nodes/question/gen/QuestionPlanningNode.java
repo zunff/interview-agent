@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class QuestionPlanningNode {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
     private final PromptConfig promptConfig;
 
@@ -72,9 +72,7 @@ public class QuestionPlanningNode {
             String systemPrompt = promptTemplateService.getPrompt("question-planning", promptVars);
             String userPrompt = promptTemplateService.getPrompt("question-planning-user", promptVars);
 
-            ChatClient chatClient = chatClientBuilder.build();
-
-            QuestionPlanResponseDto plan = chatClient.prompt()
+            QuestionPlanResponseDto plan = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()

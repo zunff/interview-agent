@@ -24,15 +24,15 @@ import java.util.concurrent.CompletableFuture;
 @Component
 public class JobAnalysisNode {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
     private final InterviewWebSocketHandler webSocketHandler;
 
     public JobAnalysisNode(
-            ChatClient.Builder chatClientBuilder,
+            ChatClient textChatClient,
             PromptTemplateService promptTemplateService,
             @Lazy InterviewWebSocketHandler webSocketHandler) {
-        this.chatClientBuilder = chatClientBuilder;
+        this.textChatClient = textChatClient;
         this.promptTemplateService = promptTemplateService;
         this.webSocketHandler = webSocketHandler;
     }
@@ -56,9 +56,7 @@ public class JobAnalysisNode {
         ));
 
         try {
-            ChatClient chatClient = chatClientBuilder.build();
-
-            JobAnalysisResponseDto response = chatClient.prompt()
+            JobAnalysisResponseDto response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()

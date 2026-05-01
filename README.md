@@ -1,6 +1,6 @@
-# AI 面试官系统
+# AI 面试官 & 简历分析系统
 
-基于 Spring AI + LangGraph4j 构建的多模态 AI 面试系统，支持实时视频分析、语音评估和智能追问。
+基于 Spring AI + LangGraph4j 构建的多模态 AI 面试系统 + AI 简历分析系统。面试模块支持实时视频分析、语音评估和智能追问；简历分析模块支持上传简历自动解析、多维度评分、报告生成，以及基于 ReAct Agent 的自由对话。
 
 > 前端仓库：[https://github.com/zunff/interview-agent-frontend](https://github.com/zunff/interview-agent-frontend)
 
@@ -25,10 +25,20 @@
 
 ## 核心功能
 
+### AI 面试官
+
 - **智能面试流程**: 根据简历和岗位自动生成针对性问题，支持技术基础、项目经验、业务理解、软技能等多维度考察
 - **多分支追问策略**: 根据回答质量动态选择追问策略（普通追问/低分深入/高分挑战）
 - **Omni 多模态综合评估**: 一次调用 Qwen-Omni 模型综合分析原始音频(WAV)、视频帧+时间戳、ASR转录文本，按权重评分（语义75% / 语音副语言15% / 视觉10%）。以原始音频为语义评估的主要依据，ASR文本仅作参考，消除同音词错误影响
 - **实时交互**: WebSocket 实时推送问题，TTS 语音合成通过 BinaryMessage 流式推送 Opus 音频，实时ASR转录（带时间戳缓存）
+
+### AI 简历分析
+
+- **两阶段架构**: 阶段一基于 LangGraph4j 有向图实现自动化简历评估（解析 → 公司调研 → 多维度评分 → 报告生成）；阶段二基于 Spring AI ReAct Agent 实现自由对话，可追问简历细节
+- **多维度评分**: 从技能匹配度、项目经验深度、教育背景、发展潜力四个维度并行评估，实时推送评分结果和雷达图数据
+- **公司背景调研**: 自动从简历中提取候选人履历中的公司名称，通过 Tavily 联网搜索公司背景，辅助评估经验含金量
+- **ReAct 自由对话**: 阶段二支持工具调用（文件解析、联网搜索），可针对简历内容自由追问
+- **SSE 实时推送**: 全流程通过 Server-Sent Events 推送进度、评分、报告和流式对话内容
 
 ## 整体架构
 
@@ -226,6 +236,89 @@ graph LR
 
 **降级保护**：检索失败或结果为空时，LLM 正常生成题目（无参考）
 
+## AI 简历分析 Agent
+
+系统在面试模块之外，新增了 AI 简历分析模块，采用 **两阶段架构**：阶段一使用 LangGraph4j 有向图实现自动化评估流水线，阶段二使用 Spring AI ReAct Agent 实现自由对话。
+
+```mermaid
+graph LR
+    UPLOAD["上传简历"] --> PHASE1["阶段一 · LangGraph4j 图<br/>解析→调研→评分→报告"]
+    PHASE1 --> SSE1["SSE 推送<br/>进度/评分/雷达图/报告"]
+    PHASE1 --> PHASE2["阶段二 · ReAct Agent<br/>自由对话"]
+    PHASE2 --> SSE2["SSE 推送<br/>流式文本/工具状态/PDF"]
+```
+
+### 阶段一：LangGraph4j 自动评估图
+
+```mermaid
+graph TD
+    START((START))
+
+    subgraph ResumeAnalysisGraph[简历分析图]
+        UPLOAD[UploadGuardNode<br/>文件校验] --> PARSE[ParseResumeNode<br/>简历解析]
+        PARSE --> COMPANY[CompanyResearchNode<br/>公司背景调研<br/>联网搜索]
+
+        COMPANY --> SKILL[SkillDimensionNode<br/>技能匹配度评估]
+        COMPANY --> EXP[ExpDimensionNode<br/>项目经验评估]
+        COMPANY --> BG[BgDimensionNode<br/>教育背景评估]
+        COMPANY --> POTENTIAL[PotentialDimensionNode<br/>发展潜力评估]
+
+        SKILL --> REPORT[ReportGenNode<br/>报告生成+雷达图]
+        EXP --> REPORT
+        BG --> REPORT
+        POTENTIAL --> REPORT
+
+        REPORT --> PERSIST[PersistAnalysisNode<br/>持久化结果]
+        PERSIST --> END((END))
+    end
+
+    START --> UPLOAD
+```
+
+**图执行流程**：
+
+1. **UploadGuardNode** — 校验上传文件（格式、大小），不合法则短路终止
+2. **ParseResumeNode** — 调用 FileParserTool 解析 PDF/DOCX/TXT 为纯文本
+4. **4 个并行评估节点** — 公司调研完成后扇出，并行执行：
+   - **SkillDimensionNode** — 技能匹配度（岗位技术栈 vs 简历技能）
+   - **ExpDimensionNode** — 项目经验深度（项目复杂度、成果、角色）
+   - **BgDimensionNode** — 教育背景（学历、学校、专业相关性）
+   - **PotentialDimensionNode** — 发展潜力（成长曲线、学习能力、跨领域能力）
+6. **PersistAnalysisNode** — 将分析结果持久化到数据库
+
+**状态管理**: `ResumeState`（`agent/resume/state/`）包含文件信息、解析文本、公司调研、四维评分、报告等 Channel，各节点返回增量更新。
+
+### 阶段二：Spring AI ReAct 对话 Agent
+
+阶段一完成后，用户可进入自由对话模式。系统使用 Spring AI 的 ReAct Agent 模式，Agent 可调用工具完成复杂任务。
+
+**工具集**:
+
+| 工具 | 说明 |
+|------|------|
+| `FileParserTool` | 解析上传文件（PDF/DOCX/TXT），提取纯文本 |
+| `WebSearchTool` | 调用 Tavily API 联网搜索，用于验证技术栈、查询行业信息 |
+
+**对话特性**:
+- **JDBC 持久化记忆**: 使用 `MessageWindowChatMemory`（最近 20 条消息），对话历史存入数据库，会话可恢复
+- **自动上下文注入**: 阶段一的分析报告自动注入 Agent 系统提示词，无需前端传递
+- **流式响应**: 通过 SSE `message` 事件推送增量文本，前端实时拼接显示
+
+### SSE 事件协议
+
+简历分析系统全程使用 SSE（Server-Sent Events）与前端通信，详细的事件格式和对接文档见 [SSE 通信文档](./docs/sse.md)。
+
+| 事件类型 | 阶段 | 说明 |
+|----------|------|------|
+| `progress` | 一 | 节点执行进度（running/completed/failed） |
+| `dimension_score` | 一 | 单维度评分完成，含分数和评语 |
+| `report` | 一 | 完整 Markdown 分析报告 |
+| `radar_chart` | 一 | ECharts 雷达图配置 JSON |
+| `message` | 二 | 对话增量文本片段 |
+| `tool_status` | 二 | 工具调用状态 |
+| `done` | 一/二 | 流结束标记 |
+| `error` | 一/二 | 错误信息 |
+
 ## 前后端交互
 
 系统采用 **REST API + WebSocket** 双通道通信：REST 处理核心流程控制，WebSocket 处理实时数据传输（视频帧缓存、实时ASR音频流转录）。
@@ -242,6 +335,20 @@ graph LR
 | `/api/info` | GET | 服务信息 |
 | `/api/test/chat-model` | GET | 测试 LLM 连接（ChatModel） |
 | `/api/test/chat-client` | GET | 测试 LLM 连接（ChatClient） |
+
+### 简历分析 API
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/chat/sessions` | POST | 创建简历分析会话 |
+| `/api/chat/sessions` | GET | 获取会话列表（分页） |
+| `/api/chat/sessions/{sessionId}` | GET | 获取会话信息 |
+| `/api/chat/sessions/{sessionId}` | DELETE | 结束会话 |
+| `/api/chat/sessions/{sessionId}/upload` | POST | 上传简历文件（SSE 流式返回分析进度和结果） |
+| `/api/chat/sessions/{sessionId}/message` | POST | 发送聊天消息（SSE 流式响应） |
+| `/api/chat/sessions/{sessionId}/analysis` | GET | 获取分析结果（雷达图数据） |
+
+> 简历分析系统完整的 SSE 事件协议和对接示例见 [SSE 通信文档](./docs/sse.md)。
 
 ### WebSocket
 
@@ -288,8 +395,12 @@ src/main/java/com/zunff/interview/
 ├── agent/
 │   ├── graph/                           # LangGraph4j 图定义
 │   │   ├── InterviewAgentGraph.java     # 主图（岗位分析 ‖ 自我介绍 → 人物画像 → 批量题目生成 → 技术轮 → 业务轮 → 报告）
-│   │   ├── InterviewRoundGraph.java     # 轮次子图（综合评估+多分支追问）
-│   │   └── BatchQuestionSubgraph.java   # 批量题目生成子图（并行生成4类题目）
+│   │   ├── InterviewRoundSubGraph.java  # 轮次子图（综合评估+多分支追问）
+│   │   ├── BatchQuestionSubgraph.java   # 批量题目生成子图（并行生成4类题目）
+│   │   └── ResumeAnalysisGraph.java     # 简历分析图（上传→解析→调研→并行评分→报告→持久化）
+│   ├── names/                           # 节点名称常量
+│   │   ├── NodeNames.java
+│   │   └── QuestionGenNodeNames.java
 │   ├── nodes/                           # 图节点
 │   │   ├── main/                        # 主图节点
 │   │   │   ├── InitInterviewNode.java
@@ -306,32 +417,61 @@ src/main/java/com/zunff/interview/
 │   │   │   ├── BasicFollowUpGenNode.java        # 普通追问生成
 │   │   │   ├── ChallengeFollowUpGenNode.java    # 挑战题生成
 │   │   │   └── DeepDiveFollowUpGenNode.java     # 深入追问生成
-│   │   └── question/                    # 批量题目生成节点
-│   │       └── gen/
-│   │           ├── QuestionPlanningNode.java    # 题目规划（协调话题+难度分配，避免重叠）
-│   │           ├── TechBasicGenNode.java      # 技术基础题生成
-│   │           ├── ProjectGenNode.java        # 项目经验题生成
-│   │           ├── BusinessGenNode.java       # 业务理解题生成
-│   │           ├── SoftSkillGenNode.java      # 软技能题生成
-│   │           ├── AggregateResultsNode.java  # 结果聚合+重新编号
-│   │           └── HandleSideEffectsNode.java # 副作用处理
-│   └── router/                          # 路由决策
-│       └── RoundRouter.java             # 子图路由（追问策略+轮次完成检查）
+│   │   ├── question/                    # 批量题目生成节点
+│   │   │   └── gen/
+│   │   │       ├── QuestionPlanningNode.java    # 题目规划（协调话题+难度分配，避免重叠）
+│   │   │       ├── TechBasicGenNode.java      # 技术基础题生成
+│   │   │       ├── ProjectGenNode.java        # 项目经验题生成
+│   │   │       ├── BusinessGenNode.java       # 业务理解题生成
+│   │   │       ├── SoftSkillGenNode.java      # 软技能题生成
+│   │   │       └── AggregateResultsNode.java  # 结果聚合+重新编号
+│   │   └── resume/                      # 简历分析图节点
+│   │       ├── UploadGuardNode.java     # 文件校验
+│   │       ├── ParseResumeNode.java     # 简历解析
+│   │       ├── CompanyResearchNode.java # 公司背景调研（联网搜索）
+│   │       ├── DimensionNodeHelper.java # 维度评估通用 helper
+│   │       ├── SkillDimensionNode.java  # 技能匹配度评估
+│   │       ├── ExpDimensionNode.java    # 项目经验评估
+│   │       ├── BgDimensionNode.java     # 教育背景评估
+│   │       ├── PotentialDimensionNode.java # 发展潜力评估
+│   │       ├── ReportGenNode.java       # 报告生成+雷达图
+│   │       └── PersistAnalysisNode.java # 持久化分析结果
+│   ├── state/                           # 图状态定义
+│   │   ├── InterviewState.java          # 面试状态
+│   │   ├── ResumeState.java             # 简历分析状态
+│   │   └── BatchQuestionGenState.java   # 批量题目生成状态
+│   ├── router/                          # 路由决策
+│   │   └── RoundRouter.java             # 子图路由（追问策略+轮次完成检查）
+│   └── CircuitBreakerHelper.java        # LLM 熔断器
+├── common/sse/                          # SSE 通信
+│   ├── SseHelper.java                   # SSE 事件发送工具
+│   ├── SseEventType.java                # 事件类型枚举
+│   └── SseEmitterRegistry.java          # SSE 连接注册表
 ├── config/                              # 配置类
+│   ├── ChatAgentConfig.java             # ReAct Agent 配置（工具注册、对话记忆）
+│   └── ResumeAnalysisConfig.java        # 简历分析图配置
 ├── controller/                          # REST 控制器
+│   ├── InterviewController.java         # 面试流程控制
+│   └── ReActChatController.java         # 简历分析聊天接口
+├── tool/                                # ReAct Agent 工具
+│   └── WebSearchTool.java               # Tavily 联网搜索
 ├── model/                               # 数据模型
-│   └── dto/analysis/
-│       ├── TranscriptEntry.java         # 转录条目（文本+时间戳）
-│       └── FrameWithTimestamp.java      # 视频帧（Base64+时间戳）
+│   ├── bo/analysis/                     # 分析业务对象
+│   │   ├── TranscriptEntry.java         # 转录条目（文本+时间戳）
+│   │   └── FrameWithTimestamp.java      # 视频帧（Base64+时间戳）
+│   ├── entity/                          # 数据库实体
+│   ├── dto/                             # LLM 请求/响应 DTO
+│   └── response/                        # API 响应模型
 ├── service/                             # 业务服务
+│   ├── ChatService.java                 # 简历分析会话服务
 │   └── extend/
 │       ├── MultimodalAnalysisService.java  # 多模态评估服务
 │       ├── OmniModalService.java        # Qwen-Omni API 封装
 │       ├── AudioStreamService.java      # 音频流（ASR转发+PCM缓存）
 │       └── VideoStreamService.java      # 视频帧缓存
-├── state/
-│   ├── InterviewState.java              # 面试状态定义
-│   └── BatchQuestionGenState.java       # 批量题目生成状态
+├── utils/                               # 工具类
+│   ├── FileParserUtils.java             # 文件解析（PDF/DOCX/TXT）
+│   └── AudioUtils.java                  # 音频处理
 └── websocket/                           # WebSocket 处理
 ```
 

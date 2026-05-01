@@ -27,7 +27,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class ProfileAnalysisNode {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
 
     public CompletableFuture<Map<String, Object>> execute(InterviewState state) {
@@ -66,9 +66,7 @@ public class ProfileAnalysisNode {
         ));
 
         try {
-            ChatClient chatClient = chatClientBuilder.build();
-
-            CandidateProfileResponseDto response = chatClient.prompt()
+            CandidateProfileResponseDto response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()

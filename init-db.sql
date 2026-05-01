@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_status ON interview_session(status);
 -- 回答记录表
 CREATE TABLE IF NOT EXISTS answer_record (
     id SERIAL PRIMARY KEY,
-    session_id VARCHAR(32) REFERENCES interview_session(session_id) ON DELETE CASCADE,
+    session_id VARCHAR(32),
     question_index INT,
     question TEXT,
     answer_text TEXT,
@@ -38,7 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_answer_question_index ON answer_record(session_id
 -- 评估记录表
 CREATE TABLE IF NOT EXISTS evaluation_record (
     id SERIAL PRIMARY KEY,
-    session_id VARCHAR(32) REFERENCES interview_session(session_id) ON DELETE CASCADE,
+    session_id VARCHAR(32),
     question_index INT,
     question TEXT,
     answer TEXT,
@@ -86,3 +86,70 @@ COMMENT ON TABLE evaluation_record IS '面试评估记录表';
 -- Spring AI 会自动创建 vector_store 表，此处仅作注释说明
 -- 表结构包含：id(UUID), content(TEXT), metadata(JSONB), embedding(vector(1024))
 -- 使用 text-embedding-v3 模型（1024维，与配置匹配）
+
+-- =====================================================
+-- 聊天会话表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS chat_session (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(32) UNIQUE NOT NULL,
+    resume_file_path VARCHAR(512),
+    resume_text TEXT,
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    end_time TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_session_id ON chat_session(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_session_status ON chat_session(status);
+
+COMMENT ON TABLE chat_session IS '聊天会话表';
+
+-- =====================================================
+-- 简历分析表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS resume_analysis (
+    id SERIAL PRIMARY KEY,
+    analysis_id VARCHAR(32) UNIQUE NOT NULL,
+    session_id VARCHAR(32),
+    file_name VARCHAR(255),
+    file_type VARCHAR(20),
+    resume_text TEXT,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    report_markdown TEXT,
+    radar_chart_data TEXT,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    end_time TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_resume_analysis_id ON resume_analysis(analysis_id);
+CREATE INDEX IF NOT EXISTS idx_resume_analysis_status ON resume_analysis(status);
+CREATE INDEX IF NOT EXISTS idx_resume_analysis_session_id ON resume_analysis(session_id);
+
+COMMENT ON TABLE resume_analysis IS '简历分析记录表';
+COMMENT ON COLUMN resume_analysis.session_id IS '关联聊天会话ID（应用层维护）';
+COMMENT ON COLUMN resume_analysis.radar_chart_data IS '雷达图数据JSON';
+
+-- =====================================================
+-- 公司研究缓存表
+-- =====================================================
+CREATE TABLE IF NOT EXISTS company (
+    id SERIAL PRIMARY KEY,
+    company_name VARCHAR(255) UNIQUE NOT NULL,
+    raw_search_result TEXT,
+    analyzed_result TEXT,
+    expires_at TIMESTAMP,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    hit_count INT DEFAULT 0
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_company_name ON company(company_name);
+CREATE INDEX IF NOT EXISTS idx_company_expires_at ON company(expires_at);
+
+COMMENT ON TABLE company IS '公司研究缓存表';
+COMMENT ON COLUMN company.company_name IS '公司名称（唯一键）';
+COMMENT ON COLUMN company.raw_search_result IS '原始搜索结果';
+COMMENT ON COLUMN company.analyzed_result IS 'LLM处理后的分析结果';
+COMMENT ON COLUMN company.expires_at IS '缓存过期时间';
+COMMENT ON COLUMN company.hit_count IS '缓存命中次数';

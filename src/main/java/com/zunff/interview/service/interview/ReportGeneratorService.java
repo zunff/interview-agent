@@ -19,7 +19,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class ReportGeneratorService {
 
-    private final ChatClient.Builder chatClientBuilder;
+    private final ChatClient textChatClient;
     private final PromptTemplateService promptTemplateService;
 
     /**
@@ -43,9 +43,8 @@ public class ReportGeneratorService {
         ));
 
         try {
-            ChatClient chatClient = chatClientBuilder.build();
 
-            QuestionAnalysisResultDto response = chatClient.prompt()
+            QuestionAnalysisResultDto response = textChatClient.prompt()
                     .system(systemPrompt)
                     .user(userPrompt)
                     .call()
