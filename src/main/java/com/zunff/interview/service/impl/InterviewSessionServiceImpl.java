@@ -2,6 +2,7 @@ package com.zunff.interview.service.impl;
 
 import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zunff.interview.mapper.InterviewSessionMapper;
 import com.zunff.interview.model.entity.InterviewSession;
@@ -70,15 +71,17 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
     @Override
     @Transactional
     public void endSession(String sessionId) {
-        InterviewSession session = getBySessionId(sessionId);
-        if (session != null) {
-            session.setStatus(InterviewSession.Status.FINISHED.name());
-            session.setEndTime(LocalDateTime.now());
-            updateById(session);
-            videoStreamService.clearSession(sessionId);
-            audioStreamService.clearSession(sessionId);
-            log.info("面试会话 {} 已结束", sessionId);
-        }
+        // 使用 update 强制设置状态，避免并发竞态
+        LambdaUpdateWrapper<InterviewSession> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(InterviewSession::getSessionId, sessionId)
+                .set(InterviewSession::getStatus, InterviewSession.Status.FINISHED.name())
+                .set(InterviewSession::getEndTime, LocalDateTime.now());
+
+        update(wrapper);
+
+        videoStreamService.clearSession(sessionId);
+        audioStreamService.clearSession(sessionId);
+        log.info("面试会话 {} 已结束", sessionId);
     }
 
     @Override
@@ -104,4 +107,5 @@ public class InterviewSessionServiceImpl extends ServiceImpl<InterviewSessionMap
             updateById(session);
         }
     }
+
 }

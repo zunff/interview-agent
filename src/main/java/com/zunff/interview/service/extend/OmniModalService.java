@@ -33,7 +33,6 @@ public class OmniModalService {
         this.apiKey = apiKey;
         this.model = model;
         this.baseUrl = StrUtil.removeSuffix(baseUrl, "/");
-        log.info("QwenOmniService 初始化: model={}, baseUrl={}", model, this.baseUrl);
     }
 
     /**

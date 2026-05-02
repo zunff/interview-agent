@@ -86,6 +86,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
 
         switch (type) {
             case "start_interview" -> handleStartInterview(session, data);
+            case "resume_interview" -> handleResumeInterview(session, data);
             case "video_frame", "audio_chunk", "audio_start", "answer_complete", "self_intro_complete" -> {
                 String interviewSessionId = resolveInterviewSessionId(session, data);
                 if (interviewSessionId == null) {
@@ -169,6 +170,46 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
             } catch (Exception e) {
                 log.error("异步启动面试失败，sessionId: {}", sessionId, e);
                 sendErrorMessage(sessionId, "面试启动失败: " + e.getMessage());
+            }
+        });
+    }
+
+    // ========== 面试恢复 ==========
+
+    private void handleResumeInterview(WebSocketSession wsSession, JSONObject data) {
+        String sessionId = data.getStr("sessionId");
+        if (sessionId == null || sessionId.isEmpty()) {
+            sendErrorMessage(wsSession, "sessionId 不能为空");
+            return;
+        }
+
+        log.info("收到 resume_interview 请求，sessionId: {}", sessionId);
+
+        InterviewSession session = sessionService.getBySessionId(sessionId);
+        if (session == null) {
+            sendErrorMessage(wsSession, "面试会话不存在: " + sessionId);
+            return;
+        }
+
+        String status = session.getStatus();
+        if (InterviewSession.Status.FINISHED.name().equals(status)) {
+            sendErrorMessage(wsSession, "面试已结束，无法恢复");
+            return;
+        }
+
+        // 重建 WebSocket 映射
+        wsToInterviewSession.put(wsSession.getId(), sessionId);
+        sessions.put(sessionId, wsSession);
+
+        log.info("WebSocket 映射已重建: wsSessionId={}, interviewSessionId={}", wsSession.getId(), sessionId);
+
+        // 异步恢复面试
+        virtualThreadExecutor.submit(() -> {
+            try {
+                interviewBusinessService.resumeInterview(sessionId);
+            } catch (Exception e) {
+                log.error("恢复面试失败，sessionId: {}", sessionId, e);
+                sendErrorMessage(sessionId, "恢复面试失败: " + e.getMessage());
             }
         });
     }
@@ -359,7 +400,7 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         ));
     }
 
-    public  <T> void sendMessage(String sessionId, WebSocketMessage<T> message) {
+    public <T> void sendMessage(String sessionId, WebSocketMessage<T> message) {
         WebSocketSession session = sessions.get(sessionId);
         if (session != null && session.isOpen()) {
             try {

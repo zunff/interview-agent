@@ -60,5 +60,7 @@ public class WebSocketMessage<T> {
         public static final String SELF_INTRO = "self_intro";
         /** 岗位分析完成信号 */
         public static final String JOB_ANALYSIS_COMPLETE = "job_analysis_complete";
+        /** 面试已恢复 **/
+        public static final String INTERVIEW_RESUMED = "interview_resumed";
     }
 }

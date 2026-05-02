@@ -153,3 +153,20 @@ COMMENT ON COLUMN company.raw_search_result IS '原始搜索结果';
 COMMENT ON COLUMN company.analyzed_result IS 'LLM处理后的分析结果';
 COMMENT ON COLUMN company.expires_at IS '缓存过期时间';
 COMMENT ON COLUMN company.hit_count IS '缓存命中次数';
+
+-- =====================================================
+-- 图状态 Checkpoint 表（支持断连重连）
+-- =====================================================
+CREATE TABLE IF NOT EXISTS graph_checkpoint (
+    id SERIAL PRIMARY KEY,
+    thread_id VARCHAR(64) NOT NULL,
+    checkpoint_id VARCHAR(128) NOT NULL,
+    node_id VARCHAR(128),
+    next_node_id VARCHAR(128),
+    state JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_checkpoint_thread ON graph_checkpoint(thread_id);
+CREATE INDEX IF NOT EXISTS idx_checkpoint_thread_id ON graph_checkpoint(thread_id, checkpoint_id);
+COMMENT ON TABLE graph_checkpoint IS '图状态检查点表（支持面试断连重连）';

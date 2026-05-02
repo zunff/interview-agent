@@ -56,5 +56,4 @@ spring-shell.log
 #cli
 .claude/
 CLAUDE.md
-src/test/resources/application.yml
 .trae

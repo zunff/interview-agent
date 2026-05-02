@@ -12,7 +12,7 @@ import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.bo.JobAnalysisResult;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.*;
-import org.bsc.langgraph4j.checkpoint.MemorySaver;
+import com.zunff.interview.agent.checkpoint.PostgresCheckpointSaver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -45,6 +45,7 @@ public class InterviewAgentGraph {
     private final InterviewRoundSubGraph interviewRoundSubGraph;
     private final GraphConfigProperties graphConfig;
     private final ExecutorService virtualThreadExecutor;
+    private final PostgresCheckpointSaver checkpointSaver;
 
     // 预编译的批量题目生成子图
     private CompiledGraph<BatchQuestionGenState> compiledBatchQuestionGraph;
@@ -59,7 +60,8 @@ public class InterviewAgentGraph {
             RoundTransitionNode roundTransitionNode,
             InterviewRoundSubGraph interviewRoundSubGraph,
             GraphConfigProperties graphConfig,
-            ExecutorService virtualThreadExecutor) {
+            ExecutorService virtualThreadExecutor,
+            PostgresCheckpointSaver checkpointSaver) {
         this.initInterviewNode = initInterviewNode;
         this.jobAnalysisNode = jobAnalysisNode;
         this.selfIntroNode = selfIntroNode;
@@ -70,6 +72,7 @@ public class InterviewAgentGraph {
         this.interviewRoundSubGraph = interviewRoundSubGraph;
         this.graphConfig = graphConfig;
         this.virtualThreadExecutor = virtualThreadExecutor;
+        this.checkpointSaver = checkpointSaver;
     }
 
     /**
@@ -125,7 +128,7 @@ public class InterviewAgentGraph {
 
                 // 主图统一编译
                 .compile(CompileConfig.builder()
-                        .checkpointSaver(new MemorySaver())
+                        .checkpointSaver(checkpointSaver)
                         .recursionLimit(graphConfig.getMainRecursionLimit())
                         .interruptsBefore(Set.of(NodeNames.PROFILE_ANALYSIS)) // 自我介绍需要等待回答
                         .interruptsAfter(Set.of(

@@ -216,6 +216,32 @@ sequenceDiagram
   4. 调用 Qwen-Omni 模型进行综合评估（转录文本 + 关键帧 + 音频，一次调用）
 - 分析完成后会推送 `new_question`（下一题或追问）或 `final_report`（面试结束）
 
+### resume_interview - 恢复断连面试
+
+**用途**：WebSocket 重连后恢复之前的面试流程
+
+**请求参数**：
+```json
+{
+  "type": "resume_interview",
+  "sessionId": "dce43fc34e0a4221"
+}
+```
+
+**字段说明**：
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `sessionId` | string | 是 | 之前面试的会话ID |
+
+**说明**：
+- 当 WebSocket 连接意外断开后，客户端重新连接并发送此消息恢复面试
+- 服务端从 `graph_checkpoint` 表加载最新 checkpoint 状态，恢复图执行
+- 根据 checkpoint 的 `nodeId` 和 `nextNodeId` 判断中断位置，决定恢复策略：
+  - 如果在 `ASK_QUESTION` 后中断（等待回答）：重新推送当前题目
+  - 如果在 `PROFILE_ANALYSIS` 前中断（等待自我介绍）：推送 `self_intro` 信号
+- 如果面试已结束（`FINISHED`），会返回错误
+- checkpoint 持久化到数据库，支持服务重启后恢复
+
 ## 服务端 → 客户端
 
 ### session_created - 会话创建成功
@@ -425,6 +451,34 @@ ws.onmessage = (event) => {
   "timestamp": 1699999999999
 }
 ```
+
+### interview_resumed - 面试已恢复
+
+**响应格式**：
+```json
+{
+  "type": "interview_resumed",
+  "payload": {
+    "sessionId": "dce43fc34e0a4221",
+    "currentRound": "TECHNICAL",
+    "interruptNode": "TECH_ASK_QUESTION"
+  },
+  "timestamp": 1699999999999
+}
+```
+
+**字段说明**：
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `sessionId` | string | 面试会话ID |
+| `currentRound` | string | 当前轮次（TECHNICAL/BUSINESS），从 checkpoint 推断 |
+| `interruptNode` | string | 中断时的图节点名，从 checkpoint 读取 |
+
+**说明**：
+- 收到 `resume_interview` 后返回，表示面试已成功恢复
+- 服务端从 `graph_checkpoint` 表加载最新 checkpoint，根据 `nodeId`/`nextNodeId` 推断中断位置
+- 紧接着会推送当前题目（`new_question`）或自我介绍信号（`self_intro`）
+- 前端收到后应恢复面试 UI 状态
 
 ## 评估流程说明
 

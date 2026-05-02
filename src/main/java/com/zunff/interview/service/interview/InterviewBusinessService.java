@@ -2,22 +2,29 @@ package com.zunff.interview.service.interview;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.zunff.interview.agent.checkpoint.PostgresCheckpointSaver;
 import com.zunff.interview.agent.names.NodeNames;
 import com.zunff.interview.agent.state.InterviewState;
 import com.zunff.interview.common.exception.BusinessException;
 import com.zunff.interview.common.response.PageResult;
+import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.entity.InterviewSession;
 import com.zunff.interview.model.request.SubmitAnswerRequest;
 import com.zunff.interview.model.response.InterviewHistoryResponse;
 import com.zunff.interview.model.response.ReportResponse;
 import com.zunff.interview.model.response.SessionResponse;
+import com.zunff.interview.model.websocket.QuestionMessage;
+import com.zunff.interview.model.websocket.WebSocketMessage;
 import com.zunff.interview.service.EvaluationRecordService;
 import com.zunff.interview.service.InterviewSessionService;
+import com.zunff.interview.websocket.InterviewWebSocketHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphInput;
 import org.bsc.langgraph4j.RunnableConfig;
+import org.bsc.langgraph4j.checkpoint.Checkpoint;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -35,16 +42,22 @@ public class InterviewBusinessService {
     private final CompiledGraph<InterviewState> interviewAgent;
     private final InterviewSessionService sessionService;
     private final EvaluationRecordService evaluationRecordService;
+    private final PostgresCheckpointSaver checkpointSaver;
+    private final InterviewWebSocketHandler webSocketHandler;
     private final ExecutorService virtualThreadExecutor;
 
     public InterviewBusinessService(
             CompiledGraph<InterviewState> interviewAgent,
             InterviewSessionService sessionService,
             EvaluationRecordService evaluationRecordService,
+            PostgresCheckpointSaver checkpointSaver,
+            @Lazy InterviewWebSocketHandler webSocketHandler,
             @Qualifier("virtualThreadExecutor") ExecutorService virtualThreadExecutor) {
         this.interviewAgent = interviewAgent;
         this.sessionService = sessionService;
         this.evaluationRecordService = evaluationRecordService;
+        this.checkpointSaver = checkpointSaver;
+        this.webSocketHandler = webSocketHandler;
         this.virtualThreadExecutor = virtualThreadExecutor;
     }
 
@@ -273,5 +286,142 @@ public class InterviewBusinessService {
             log.error("自我介绍恢复流程失败", e);
             throw new BusinessException(1004, "自我介绍处理失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 恢复断连的面试
+     * 从 DB 加载 checkpoint 恢复图执行
+     *
+     * @param sessionId 面试会话ID
+     */
+    public void resumeInterview(String sessionId) {
+        log.info("开始恢复面试，sessionId: {}", sessionId);
+
+        // 1. 验证会话存在
+        InterviewSession session = sessionService.getBySessionId(sessionId);
+        if (session == null) {
+            throw new BusinessException(1001, "面试会话不存在");
+        }
+
+        // 2. 推送恢复成功消息
+        webSocketHandler.sendMessage(sessionId, WebSocketMessage.of(
+                WebSocketMessage.Type.INTERVIEW_RESUMED,
+                Map.of("sessionId", sessionId)
+        ));
+
+        // 3. 从 checkpoint 获取当前状态
+        Optional<Checkpoint> checkpointOpt = checkpointSaver.getLatestCheckpoint(sessionId);
+        if (checkpointOpt.isEmpty()) {
+            log.warn("无可用 checkpoint，无法恢复: sessionId={}", sessionId);
+            sendSelfIntroSignal(sessionId);
+            sessionService.updateStatus(sessionId, InterviewSession.Status.IN_PROGRESS.name());
+            return;
+        }
+
+        Checkpoint checkpoint = checkpointOpt.get();
+        String nodeId = checkpoint.getNodeId();
+        String nextNodeId = checkpoint.getNextNodeId();
+
+        log.info("Checkpoint loaded: sessionId={}, nodeId={}, nextNodeId={}", sessionId, nodeId, nextNodeId);
+
+        // 4. 根据 checkpoint 判断恢复策略
+        // 情况1：在 PROFILE_ANALYSIS 前中断（自我介绍已完成，等待分析）
+        if (NodeNames.PROFILE_ANALYSIS.equals(nextNodeId)) {
+            log.info("图在 PROFILE_ANALYSIS 前中断，恢复执行画像分析: sessionId={}", sessionId);
+            resumeFromProfileAnalysis(sessionId, checkpoint);
+            sessionService.updateStatus(sessionId, InterviewSession.Status.IN_PROGRESS.name());
+            return;
+        }
+
+        // 情况2：在 askQuestion 后中断（等待回答）
+        // nodeId 格式："technicalRound-tech_askQuestion" 或 "businessRound-biz_askQuestion"
+        if (nodeId != null && nodeId.contains("_" + NodeNames.ASK_QUESTION)) {
+            log.info("图在 askQuestion 后中断，重推当前题目: sessionId={}", sessionId);
+            rePushCurrentQuestion(sessionId, checkpoint);
+            sessionService.updateStatus(sessionId, InterviewSession.Status.IN_PROGRESS.name());
+            return;
+        }
+
+        // 情况3：其他节点中断或新面试（直接进入自我介绍）
+        log.info("未知中断点，默认推送自我介绍信号: sessionId={}, nodeId={}, nextNodeId={}",
+                sessionId, nodeId, nextNodeId);
+        sendSelfIntroSignal(sessionId);
+        sessionService.updateStatus(sessionId, InterviewSession.Status.IN_PROGRESS.name());
+    }
+
+    /**
+     * 从 PROFILE_ANALYSIS 节点恢复执行
+     */
+    private void resumeFromProfileAnalysis(String sessionId, Checkpoint checkpoint) {
+        try {
+            // 构建 RunnableConfig
+            RunnableConfig config = RunnableConfig.builder()
+                    .threadId(sessionId)
+                    .addParallelNodeExecutor(NodeNames.INIT, virtualThreadExecutor)
+                    .build();
+
+            // 从 checkpoint 恢复图执行（LangGraph4j 会自动加载状态）
+            interviewAgent.invoke(GraphInput.resume(), config);
+
+            log.info("已从 PROFILE_ANALYSIS 恢复执行: sessionId={}", sessionId);
+
+        } catch (Exception e) {
+            log.error("PROFILE_ANALYSIS 恢复失败: sessionId={}", sessionId, e);
+            throw new BusinessException(1004, "画像分析恢复失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 从 checkpoint 重新推送当前题目
+     */
+    private void rePushCurrentQuestion(String sessionId, Checkpoint checkpoint) {
+        try {
+            // 从 checkpoint.state 中获取当前题目
+            Map<String, Object> state = checkpoint.getState();
+
+            // 获取当前生成的题目（根据轮次判断）
+            String currentQuestionKey = state.containsKey("currentGeneratedQuestion")
+                ? "currentGeneratedQuestion"
+                : "mainGeneratedQuestion";
+
+            Object questionObj = state.get(currentQuestionKey);
+            if (questionObj == null) {
+                log.warn("checkpoint 中无当前题目: sessionId={}", sessionId);
+                return;
+            }
+
+            // 将 state 中的题目对象转为 QuestionMessage
+            QuestionMessage questionMessage = convertToQuestionMessage(questionObj);
+            webSocketHandler.sendQuestion(sessionId, questionMessage);
+
+            log.info("已重推当前题目: sessionId={}, question={}", sessionId, questionMessage.getContent());
+        } catch (Exception e) {
+            log.error("重推当前题目失败: sessionId={}", sessionId, e);
+        }
+    }
+
+    /**
+     * 发送自我介绍阶段信号
+     */
+    private void sendSelfIntroSignal(String sessionId) {
+        webSocketHandler.sendMessage(sessionId, WebSocketMessage.of(
+                WebSocketMessage.Type.SELF_INTRO,
+                Map.of()
+        ));
+        log.info("已重推自我介绍信号: sessionId={}", sessionId);
+    }
+
+    /**
+     * 将 checkpoint 中的题目对象转换为 QuestionMessage
+     */
+    private QuestionMessage convertToQuestionMessage(Object questionObj) {
+        // checkpoint 存的就是 GeneratedQuestion，恢复后也是 GeneratedQuestion
+        GeneratedQuestion gq = (GeneratedQuestion) questionObj;
+        return QuestionMessage.builder()
+                .content(gq.getQuestion())
+                .questionType(gq.getQuestionType())
+                .questionIndex(gq.getQuestionIndex())
+                .isFollowUp(gq.getQuestionType() != null && gq.getQuestionType().contains("追问"))
+                .build();
     }
 }

@@ -38,4 +38,5 @@ public interface InterviewSessionService extends IService<InterviewSession> {
      * 保存最终报告
      */
     void saveReport(String sessionId, String report);
+
 }
