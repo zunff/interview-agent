@@ -16,6 +16,8 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -131,6 +133,7 @@ public class ReportGeneratorNode {
         String userPrompt = promptTemplateService.getPrompt("report-generator-user",
                 ReportUserPromptVars.builder()
                         .responseLanguage(promptConfig.getResponseLanguage())
+                        .currentDate(LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
                         .candidateProfile(candidateProfile)
                         .jobInfo(jobContext)
                         .technicalQuestionsDone(technicalQuestionsDone)

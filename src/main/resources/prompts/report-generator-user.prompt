@@ -1,6 +1,12 @@
 ## Response language
 Write all narrative sections in: $responseLanguage$
 
+## Current date
+$currentDate$
+
+## Data quality note
+Interview audio is ASR-transcribed; homophone errors are possible (e.g. "王明" / "王名"). Treat pronunciation-equivalent names as matching.
+
 ## Candidate Profile
 $candidateProfile$
 

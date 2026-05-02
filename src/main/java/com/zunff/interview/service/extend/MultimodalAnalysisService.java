@@ -5,6 +5,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.zunff.interview.config.PromptConfig;
 import com.zunff.interview.model.bo.EvaluationBO;
+import com.zunff.interview.model.bo.FollowUpChainEntity;
 import com.zunff.interview.model.bo.GeneratedQuestion;
 import com.zunff.interview.model.bo.analysis.FrameWithTimestamp;
 import com.zunff.interview.model.bo.analysis.TranscriptEntry;
@@ -198,11 +199,13 @@ public class MultimodalAnalysisService {
             EvaluationBO evaluation,
             GeneratedQuestion generatedQuestion,
             int followUpCount,
-            int maxFollowUps) {
+            int maxFollowUps,
+            List<FollowUpChainEntity> followUpChain) {
 
         log.info("开始LLM路由决策，当前追问次数: {}/{}", followUpCount, maxFollowUps);
 
-        FollowUpRoutePromptVars vars = buildFollowUpRoutePromptVars(evaluation, generatedQuestion, followUpCount, maxFollowUps);
+        FollowUpRoutePromptVars vars = buildFollowUpRoutePromptVars(
+                evaluation, generatedQuestion, followUpCount, maxFollowUps, followUpChain);
         Map<String, Object> promptVars = vars.asMap();
 
         try {
@@ -229,7 +232,8 @@ public class MultimodalAnalysisService {
             EvaluationBO evaluation,
             GeneratedQuestion generatedQuestion,
             int followUpCount,
-            int maxFollowUps) {
+            int maxFollowUps,
+            List<FollowUpChainEntity> followUpChain) {
 
         int remainingFollowUps = maxFollowUps - followUpCount;
 
@@ -251,6 +255,9 @@ public class MultimodalAnalysisService {
                     : "No specific keywords";
             questionIntent = generatedQuestion.getReason() != null ? generatedQuestion.getReason() : "No specific intention stated";
         }
+
+        // 构建追问历史字符串（最近2次）
+        String followUpHistory = buildFollowUpHistory(followUpChain);
 
         return FollowUpRoutePromptVars.builder()
                 .responseLanguage(promptConfig.getResponseLanguage())
@@ -274,7 +281,45 @@ public class MultimodalAnalysisService {
                 .followUpCount(followUpCount)
                 .maxFollowUps(maxFollowUps)
                 .remainingFollowUps(remainingFollowUps)
+                .followUpHistory(followUpHistory)
                 .build();
+    }
+
+    /**
+     * 构建追问历史字符串（最近2次）
+     */
+    private String buildFollowUpHistory(List<FollowUpChainEntity> followUpChain) {
+        if (followUpChain == null || followUpChain.isEmpty()) {
+            return "No previous follow-ups";
+        }
+
+        // 取最近2次追问
+        int start = Math.max(0, followUpChain.size() - 2);
+        StringBuilder history = new StringBuilder();
+
+        for (int i = start; i < followUpChain.size(); i++) {
+            FollowUpChainEntity entity = followUpChain.get(i);
+            int index = i - start + 1;
+
+            history.append(String.format("Follow-up %d:\n", index));
+            history.append(String.format("  Score: %d\n",
+                    entity.getOverallScore() != null ? entity.getOverallScore() : 0));
+
+            if (i > start) {
+                // 计算分数变化
+                FollowUpChainEntity prevEntity = followUpChain.get(i - 1);
+                int prevScore = prevEntity.getOverallScore() != null ? prevEntity.getOverallScore() : 0;
+                int currentScore = entity.getOverallScore() != null ? entity.getOverallScore() : 0;
+                int change = currentScore - prevScore;
+                history.append(String.format("  Score change: %+d\n", change));
+            }
+
+            if (i == followUpChain.size() - 1) {
+                history.append("\n");
+            }
+        }
+
+        return history.toString().trim();
     }
 
     // ========== 解析方法 ==========

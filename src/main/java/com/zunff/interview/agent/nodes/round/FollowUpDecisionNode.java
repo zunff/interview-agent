@@ -60,7 +60,8 @@ public class FollowUpDecisionNode {
                     evaluation,
                     generatedQuestion,
                     followUpCount,
-                    maxFollowUps
+                    maxFollowUps,
+                    state.followUpChain()
             );
 
             Map<String, Object> updates = new HashMap<>();
@@ -102,49 +103,87 @@ public class FollowUpDecisionNode {
         };
         int score = Math.max(0, Math.min(100, rawScore + difficultyOffset));
 
-        // 1. 已达追问上限
+        // 1. 已达追问上限 → NEXT_QUESTION
         if (used >= max) {
             return RouteDecision.NEXT_QUESTION;
         }
 
-        // 2. 低分且有弱点 → 深度挖掘
-        if (score < 50 && hasWeakness && remaining >= 2) {
+        // 2. 优化：低分（<60分）且有弱点 → DEEP_DIVE
+        if (score < 60 && hasWeakness && remaining >= 2) {
             return RouteDecision.DEEP_DIVE;
         }
 
-        // 3. 极高分、无弱点、有预算 → 挑战模式
-        int challengeThreshold = difficulty == Difficulty.EASY ? 85 : 90;
-        if (score > challengeThreshold && !hasWeakness && used == 0 && remaining >= 2) {
+        // 3. 优化：高分（>75分）且无弱点 → CHALLENGE_MODE（放宽条件，移除used==0限制）
+        if (score > 75 && !hasWeakness && remaining >= 1) {
             return RouteDecision.CHALLENGE_MODE;
         }
 
-        // 4. 表现好的标准题（无弱点）→ 下一题
-        if (score >= 75 && !hasWeakness) {
+        // 4. 优化：表现优秀（>=80分）且无弱点 → NEXT_QUESTION
+        if (score >= 80 && !hasWeakness) {
             return RouteDecision.NEXT_QUESTION;
         }
 
-        // 5. 中等偏上分数（70-84）且只有内容弱点、无模态异常 → 交给 LLM 精细决策
-        //    避免所有 70-80 分的评估都走 FOLLOW_UP 导致追问类型单一
-        if (score >= 70 && hasWeakness && !concern) {
-            return null;
+        // 5. 新增：追问质量未改善 → NEXT_QUESTION
+        if (!shouldContinueFollowUp(eval, state)) {
+            log.info("追问质量未改善，进入下一题");
+            return RouteDecision.NEXT_QUESTION;
         }
 
-        // 6. 仅剩最后一次追问额度
-        if (remaining <= 1) {
-            if (concern) {
-                return RouteDecision.FOLLOW_UP;
-            }
-            return (score >= 70 && !hasWeakness)
-                    ? RouteDecision.NEXT_QUESTION
-                    : RouteDecision.FOLLOW_UP;
-        }
-
-        // 7. 有余量且有弱点或模态异常 → 追问
-        if (hasWeakness || concern) {
+        // 6. 仅剩1次追问时，有模态异常 → FOLLOW_UP
+        if (remaining == 1 && concern) {
             return RouteDecision.FOLLOW_UP;
         }
 
-        // 8. 其余交给 LLM 精细决策
+        // 7. 仅剩1次追问时，分数>=70且无弱点 → NEXT_QUESTION
+        if (remaining == 1 && score >= 70 && !hasWeakness) {
+            return RouteDecision.NEXT_QUESTION;
+        }
+
+        // 8. 优化：中等分数（60-80）且有弱点 → 交给 LLM 精细决策（扩大范围）
+        if (score >= 60 && score <= 80 && hasWeakness && !concern) {
+            return null;
+        }
+
+        // 9. 低分且无弱点 → LLM 决策（可能需要 deepDive）
+        if (score < 60 && !hasWeakness) {
+            return null;
+        }
+
+        // 10. 有弱点且分数不太低 → 交给 LLM 决策（避免直接 followUp）
+        if (hasWeakness && score >= 60) {
+            return null;
+        }
+
+        // 11. 有模态异常 → FOLLOW_UP（仅模态异常场景）
+        if (concern) {
+            return RouteDecision.FOLLOW_UP;
+        }
+
+        // 12. 其他 → LLM 精细决策
         return null;
+    }
+
+    /**
+     * 新增：检查是否应该继续追问（基于质量改善评估）
+     */
+    private boolean shouldContinueFollowUp(EvaluationBO eval, InterviewState state) {
+        // 获取追问历史
+        var chain = state.followUpChain();
+        if (chain == null || chain.size() < 2) {
+            return true; // 首次追问或数据不足，继续
+        }
+
+        // 检查最近2次追问的分数趋势
+        int recentScore = eval.getOverallScore();
+        int prevScore = chain.get(chain.size() - 1).getOverallScore();
+
+        // 如果连续2次分数未提升（提升<5分），则停止追问
+        if (recentScore - prevScore < 5) {
+            log.info("连续追问质量未改善: 前次={}, 当前={}, 提升={}",
+                    prevScore, recentScore, recentScore - prevScore);
+            return false;
+        }
+
+        return true;
     }
 }

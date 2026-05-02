@@ -33,6 +33,7 @@ public class FollowUpRoutePromptVars {
     private int followUpCount;
     private int maxFollowUps;
     private int remainingFollowUps;
+    private String followUpHistory; // 新增：追问历史（最近2次评估）
 
     public Map<String, Object> asMap() {
         return BeanUtil.beanToMap(this);

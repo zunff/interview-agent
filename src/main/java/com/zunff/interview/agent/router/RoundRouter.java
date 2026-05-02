@@ -32,7 +32,14 @@ public class RoundRouter {
             decision = RouteDecision.NEXT_QUESTION.getValue();
         }
 
-        // 2. 轮次完成检查
+        // 2. 新增：追问质量检查（防止低质量追问）
+        if (isFollowUpDecision(decision) && shouldStopForQuality(state)) {
+            log.info("[{}] 追问质量未改善，强制进入下一题",
+                    state.currentRoundEnum().getDisplayName());
+            decision = RouteDecision.NEXT_QUESTION.getValue();
+        }
+
+        // 3. 轮次完成检查
         if (RouteDecision.NEXT_QUESTION.getValue().equals(decision)) {
             if (isCurrentRoundComplete(state)) {
                 log.info("[{}] 当前轮次题目已全部完成",
@@ -61,5 +68,22 @@ public class RoundRouter {
         return state.isTechnicalRound()
                 ? state.isTechnicalRoundComplete()
                 : state.isBusinessRoundComplete();
+    }
+
+    /**
+     * 新增：检查追问质量是否未改善（应该停止追问）
+     */
+    private boolean shouldStopForQuality(InterviewState state) {
+        var chain = state.followUpChain();
+        if (chain == null || chain.size() < 2) {
+            return false; // 数据不足，不强制停止
+        }
+
+        // 检查最近2次追问是否改善了质量
+        int recentScore = chain.get(chain.size() - 1).getOverallScore();
+        int prevScore = chain.get(chain.size() - 2).getOverallScore();
+
+        // 如果连续2次未改善（提升<5分），停止追问
+        return recentScore - prevScore < 5;
     }
 }

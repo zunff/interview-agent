@@ -13,6 +13,7 @@ import java.util.Map;
 @Builder
 public class ReportUserPromptVars {
     private String responseLanguage;
+    private String currentDate;
     private String candidateProfile;
     private String jobInfo;
     private int technicalQuestionsDone;
